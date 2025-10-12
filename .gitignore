@@ -151,17 +151,23 @@ secrets.json
 *_api_key.txt
 
 # ============================================================================
-# OPTIONAL: Documentation files you might not want to share initially
+# PRIVATE: Internal development files (keep private)
 # ============================================================================
 
-# Uncomment any of these if you want to keep them private:
-# IMPLEMENTATION_PLAN.md
-# PROBE_CONFIG_REFACTOR_PLAN.md
-# PARAMETER_CATEGORIZATION.md
-# REFACTOR_CHECKLIST.md
-# REFACTOR_SUMMARY.md
-# pseudo.md
-# README_RECOMMENDATIONS.md
+# Development planning and internal docs
+IMPLEMENTATION_PLAN.md
+PROBE_CONFIG_REFACTOR_PLAN.md
+PARAMETER_CATEGORIZATION.md
+REFACTOR_CHECKLIST.md
+REFACTOR_SUMMARY.md
+pseudo.md
+README_RECOMMENDATIONS.md
+GITHUB_UPLOAD_CHECKLIST.md
+BADGES_GUIDE.md
+VARIABLE_REFERENCE.md
+UPLOAD_SUCCESS.md
+UPLOAD_SUMMARY.txt
+GITHUB_UPLOAD_STEPS.md
 
 # ============================================================================
 # LARGE DATA FILES (If you have any)
