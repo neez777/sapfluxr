@@ -1,0 +1,35 @@
+# Sap Flow Analysis Configuration - Pine Wood Properties
+# Generated on: 2025-09-24
+# Typical properties for Pine species
+
+metadata:
+  config_name: Pine Wood Properties
+  description: Typical wood properties for Pine species
+  created_date: '2025-09-24'
+  version: '1.0'
+
+wood_property:
+  thermal_diffusivity: 0.00145    # cm²/s, will be estimated from density and moisture
+  thermal_conductivity: 0.22   # W/(m·K), will be estimated if null
+  volumetric_heat_capacity: 963700  # J/(m³·K), will be estimated if null
+  dry_density: 450            # kg/m³, typical for pine
+  basic_density: 380          # kg/m³, oven-dry mass / green volume
+  moisture_content: 35        # %, softwoods often higher moisture content
+  species: Pinus spp.         # species identification
+  wood_type: softwood         # softwood classification
+  temperature: 15             # °C, often cooler climates
+  comments: Typical values for Pine species - may vary significantly by species and site
+
+# Tree-specific measurements (optional - can override per tree in R)
+tree_measurements:
+  dbh: null                   # cm, diameter at breast height
+  bark_thickness: null        # cm, bark thickness
+  sapwood_depth: null         # cm, sapwood depth (often wider in pine)
+  sapwood_area: null          # cm², conducting sapwood area
+  heartwood_radius: null      # cm, heartwood radius
+
+# Quality thresholds (species-specific defaults, can override in R)
+quality_thresholds:
+  max_velocity_cm_hr: 180     # cm/hr, upper bound for pine species
+  min_velocity_cm_hr: -50     # cm/hr, lower bound (allows reverse flow)
+  temperature_range: [-15, 45]  # °C, cooler climate species, wider range

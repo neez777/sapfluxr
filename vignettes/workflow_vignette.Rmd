@@ -1,0 +1,687 @@
+---
+title: "Complete Data Processing Workflows"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Complete Data Processing Workflows}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 5
+)
+```
+
+## Introduction
+
+This vignette provides complete, real-world workflows for different research scenarios. Each workflow includes data import, quality control, method selection, analysis, and export steps.
+
+```{r setup}
+library(sapFluxR)
+library(dplyr)
+library(ggplot2)
+```
+
+## Workflow 1: Single Tree Study
+
+### Scenario: Individual tree monitoring with one sensor
+
+This is the simplest scenario - monitoring sap flux in a single tree to understand its water use patterns.
+
+```{r, eval=FALSE}
+# Step 1: Import and validate data
+sap_data <- read_sap_data("tree_01_data.txt", validate_data = TRUE)
+
+# Quick data overview
+cat("Data period:", range(sap_data$measurements$datetime), "\n")
+cat("Number of pulses:", length(unique(sap_data$measurements$pulse_id)), "\n")
+cat("Sensors available:", paste(names(sap_data$measurements)[3:6], collapse = ", "), "\n")
+
+# Step 2: Check data quality
+quality_assessment <- assess_data_quality(sap_data)
+cat("Overall quality score:", quality_assessment$overall_score, "/100\n")
+
+if (quality_assessment$overall_score < 70) {
+  print("Quality issues detected:")
+  print(quality_assessment$issues)
+}
+
+# Step 3: Calculate velocities using multiple methods for comparison
+vh_results <- calc_heat_pulse_velocity(
+  sap_data,
+  methods = c("HRM", "MHR", "DMA", "Tmax_Klu")
+)
+
+# Step 4: Quality filtering
+clean_results <- filter_velocity_results(
+  vh_results,
+  quality_flags = "good",
+  velocity_range = c(-5, 100)  # Adjust based on your species
+)
+
+cat("Retention rate:", round(nrow(clean_results)/nrow(vh_results)*100, 1), "%\n")
+
+# Step 5: Method comparison and selection
+method_comparison <- compare_hpv_methods(clean_results)
+print(method_comparison$correlation_matrix)
+
+# Choose best performing method (highest correlation, reasonable values)
+best_method <- "DMA"  # Usually a good default choice
+final_results <- clean_results %>% filter(method == best_method)
+
+# Step 6: Basic analysis
+daily_stats <- final_results %>%
+  mutate(date = as.Date(datetime)) %>%
+  group_by(date) %>%
+  summarise(
+    daily_max = max(Vh_cm_hr, na.rm = TRUE),
+    daily_mean = mean(Vh_cm_hr, na.rm = TRUE),
+    nighttime_mean = mean(Vh_cm_hr[hour(datetime) %in% 0:6], na.rm = TRUE),
+    daytime_max = max(Vh_cm_hr[hour(datetime) %in% 8:18], na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+print("Daily sap flux summary:")
+print(summary(daily_stats))
+
+# Step 7: Export results
+export_velocity_results(final_results, "tree_01_velocities.csv")
+export_velocity_results(daily_stats, "tree_01_daily_summary.csv")
+
+# Step 8: Basic visualization
+plot_velocity_diagnostics(final_results, plot_type = "time_series")
+```
+
+## Workflow 2: Multi-Tree Comparative Study
+
+### Scenario: Comparing sap flux between multiple trees/species
+
+```{r, eval=FALSE}
+# Step 1: Batch import multiple files
+data_files <- list.files("data/", pattern = "tree_.*\\.txt$", full.names = TRUE)
+tree_ids <- str_extract(basename(data_files), "tree_\\d+")
+
+# Import all files
+all_data <- map2(data_files, tree_ids, function(file, id) {
+  sap_data <- read_sap_data(file, validate_data = TRUE)
+  sap_data$tree_id <- id
+  return(sap_data)
+})
+
+names(all_data) <- tree_ids
+
+# Step 2: Quality assessment for all trees
+quality_summary <- map_dfr(all_data, function(data) {
+  quality <- assess_data_quality(data)
+  data.frame(
+    tree_id = data$tree_id,
+    quality_score = quality$overall_score,
+    major_issues = length(quality$issues)
+  )
+})
+
+print("Quality assessment by tree:")
+print(quality_summary)
+
+# Identify problematic trees
+problematic_trees <- quality_summary %>%
+  filter(quality_score < 60 | major_issues > 2)
+
+if (nrow(problematic_trees) > 0) {
+  cat("Trees requiring attention:", paste(problematic_trees$tree_id, collapse = ", "), "\n")
+}
+
+# Step 3: Process all trees with consistent methods
+process_tree <- function(sap_data) {
+  vh_results <- calc_heat_pulse_velocity(
+    sap_data,
+    methods = c("HRM", "DMA")  # Use consistent methods across trees
+  )
+
+  # Apply consistent quality filters
+  clean_results <- filter_velocity_results(
+    vh_results,
+    quality_flags = "good",
+    velocity_range = c(-5, 150)
+  )
+
+  # Add tree identifier
+  clean_results$tree_id <- sap_data$tree_id
+  return(clean_results)
+}
+
+all_results <- map_dfr(all_data, process_tree)
+
+# Step 4: Cross-tree analysis
+# Compare method performance across trees
+method_performance <- all_results %>%
+  group_by(tree_id, method) %>%
+  summarise(
+    n_measurements = n(),
+    mean_velocity = mean(Vh_cm_hr, na.rm = TRUE),
+    success_rate = n_measurements / (n_measurements + sum(is.na(Vh_cm_hr))),
+    .groups = 'drop'
+  )
+
+print("Method performance by tree:")
+print(method_performance)
+
+# Select best method for each tree (or use consistent method)
+best_results <- all_results %>%
+  filter(method == "DMA") %>%  # Use DMA for consistency
+  select(datetime, tree_id, Vh_cm_hr, quality_flag)
+
+# Step 5: Comparative statistics
+tree_comparison <- best_results %>%
+  group_by(tree_id) %>%
+  summarise(
+    mean_velocity = mean(Vh_cm_hr, na.rm = TRUE),
+    max_velocity = max(Vh_cm_hr, na.rm = TRUE),
+    velocity_cv = sd(Vh_cm_hr, na.rm = TRUE) / mean_velocity,
+    n_measurements = n(),
+    .groups = 'drop'
+  ) %>%
+  arrange(desc(mean_velocity))
+
+print("Tree comparison summary:")
+print(tree_comparison)
+
+# Step 6: Statistical testing (if appropriate)
+# Example: Compare mean velocities between groups
+if (length(unique(best_results$tree_id)) > 2) {
+  # ANOVA to test for differences between trees
+  velocity_anova <- aov(Vh_cm_hr ~ tree_id, data = best_results)
+  print("ANOVA results:")
+  print(summary(velocity_anova))
+
+  # Post-hoc comparisons if significant
+  if (summary(velocity_anova)[[1]][["Pr(>F)"]][1] < 0.05) {
+    post_hoc <- TukeyHSD(velocity_anova)
+    print("Post-hoc comparisons:")
+    print(post_hoc)
+  }
+}
+
+# Step 7: Export comparative results
+export_velocity_results(all_results, "multi_tree_all_results.csv")
+write.csv(tree_comparison, "tree_comparison_summary.csv", row.names = FALSE)
+```
+
+## Workflow 3: Seasonal Analysis
+
+### Scenario: Long-term monitoring with seasonal patterns
+
+```{r, eval=FALSE}
+# Step 1: Import long-term dataset
+sap_data <- read_sap_data("long_term_monitoring.txt", validate_data = TRUE)
+
+# Add temporal variables
+sap_data$measurements <- sap_data$measurements %>%
+  mutate(
+    date = as.Date(datetime),
+    month = month(datetime),
+    season = case_when(
+      month %in% c(12, 1, 2) ~ "Winter",
+      month %in% c(3, 4, 5) ~ "Spring",
+      month %in% c(6, 7, 8) ~ "Summer",
+      month %in% c(9, 10, 11) ~ "Fall"
+    ),
+    hour = hour(datetime),
+    doy = yday(datetime)  # Day of year
+  )
+
+# Step 2: Seasonal quality assessment
+seasonal_quality <- sap_data$measurements %>%
+  group_by(season) %>%
+  summarise(
+    n_pulses = n_distinct(pulse_id),
+    completeness = mean(!is.na(do)),
+    temperature_range = max(do, na.rm = TRUE) - min(do, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+print("Data quality by season:")
+print(seasonal_quality)
+
+# Step 3: Season-specific method optimization
+# Different seasons might need different approaches
+calc_seasonal_velocities <- function(data, season_name) {
+  cat("Processing", season_name, "data...\n")
+
+  # Adjust methods based on season
+  methods <- if (season_name %in% c("Spring", "Summer")) {
+    c("DMA", "Tmax_Klu")  # High flows expected
+  } else {
+    c("HRM", "DMA")  # Lower flows, need reverse flow detection
+  }
+
+  vh_results <- calc_heat_pulse_velocity(
+    data,
+    methods = methods
+  )
+
+  # Season-specific quality filtering
+  velocity_range <- if (season_name %in% c("Spring", "Summer")) {
+    c(-10, 200)  # Allow higher flows
+  } else {
+    c(-10, 100)  # More conservative range
+  }
+
+  clean_results <- filter_velocity_results(
+    vh_results,
+    quality_flags = "good",
+    velocity_range = velocity_range
+  )
+
+  clean_results$season <- season_name
+  return(clean_results)
+}
+
+# Process each season
+seasonal_data <- sap_data$measurements %>%
+  group_split(season)
+
+season_names <- map_chr(seasonal_data, ~ unique(.x$season))
+names(seasonal_data) <- season_names
+
+# Create temporary sap_data objects for each season
+seasonal_sap_data <- map(seasonal_data, function(season_measurements) {
+  temp_data <- sap_data
+  temp_data$measurements <- season_measurements
+  return(temp_data)
+})
+
+# Calculate velocities for each season
+seasonal_results <- map2_dfr(seasonal_sap_data, season_names, calc_seasonal_velocities)
+
+# Step 4: Seasonal analysis
+seasonal_summary <- seasonal_results %>%
+  group_by(season, method) %>%
+  summarise(
+    n_measurements = n(),
+    mean_velocity = mean(Vh_cm_hr, na.rm = TRUE),
+    median_velocity = median(Vh_cm_hr, na.rm = TRUE),
+    max_velocity = max(Vh_cm_hr, na.rm = TRUE),
+    velocity_cv = sd(Vh_cm_hr, na.rm = TRUE) / mean_velocity,
+    negative_flow_pct = mean(Vh_cm_hr < 0, na.rm = TRUE) * 100,
+    .groups = 'drop'
+  )
+
+print("Seasonal velocity summary:")
+print(seasonal_summary)
+
+# Step 5: Daily pattern analysis by season
+daily_patterns <- seasonal_results %>%
+  filter(method == "DMA") %>%  # Use consistent method
+  mutate(hour = hour(datetime)) %>%
+  group_by(season, hour) %>%
+  summarise(
+    mean_velocity = mean(Vh_cm_hr, na.rm = TRUE),
+    se_velocity = sd(Vh_cm_hr, na.rm = TRUE) / sqrt(n()),
+    .groups = 'drop'
+  )
+
+# Step 6: Phenological analysis
+# Calculate key dates and thresholds
+phenology_analysis <- seasonal_results %>%
+  filter(method == "DMA") %>%
+  mutate(
+    date = as.Date(datetime),
+    doy = yday(datetime)
+  ) %>%
+  group_by(date) %>%
+  summarise(
+    daily_max = max(Vh_cm_hr, na.rm = TRUE),
+    daily_mean = mean(Vh_cm_hr, na.rm = TRUE),
+    doy = first(doy),
+    .groups = 'drop'
+  ) %>%
+  filter(is.finite(daily_max))
+
+# Find key phenological dates
+growing_season_start <- phenology_analysis %>%
+  filter(daily_max > 10) %>%  # Threshold for significant flow
+  slice_min(doy, n = 1) %>%
+  pull(doy)
+
+peak_flow_date <- phenology_analysis %>%
+  slice_max(daily_max, n = 1) %>%
+  pull(doy)
+
+cat("Growing season start (DOY):", growing_season_start, "\n")
+cat("Peak flow date (DOY):", peak_flow_date, "\n")
+
+# Step 7: Export seasonal results
+export_velocity_results(seasonal_results, "seasonal_velocity_results.csv")
+write.csv(seasonal_summary, "seasonal_summary.csv", row.names = FALSE)
+write.csv(daily_patterns, "daily_patterns_by_season.csv", row.names = FALSE)
+write.csv(phenology_analysis, "phenology_analysis.csv", row.names = FALSE)
+```
+
+## Workflow 4: High-Frequency Analysis
+
+### Scenario: Sub-daily patterns and rapid response studies
+
+```{r, eval=FALSE}
+# Step 1: Import high-frequency data
+sap_data <- read_sap_data("high_frequency_data.txt", validate_data = TRUE)
+
+# Check measurement frequency
+time_intervals <- sap_data$measurements %>%
+  arrange(datetime) %>%
+  mutate(time_diff = as.numeric(difftime(datetime, lag(datetime), units = "mins"))) %>%
+  filter(!is.na(time_diff))
+
+cat("Measurement interval (minutes):")
+print(summary(time_intervals$time_diff))
+
+# Step 2: High-frequency specific quality control
+# More stringent quality control for high-frequency data
+hf_quality_check <- function(sap_data) {
+  measurements <- sap_data$measurements
+
+  # Check for rapid temperature changes (possible artifacts)
+  temp_changes <- measurements %>%
+    arrange(datetime) %>%
+    mutate(
+      do_change = abs(do - lag(do)),
+      di_change = abs(di - lag(di)),
+      uo_change = abs(uo - lag(uo)),
+      ui_change = abs(ui - lag(ui))
+    )
+
+  # Flag extreme changes (>1°C between consecutive measurements)
+  extreme_changes <- temp_changes %>%
+    filter(do_change > 1 | di_change > 1 | uo_change > 1 | ui_change > 1)
+
+  if (nrow(extreme_changes) > 0) {
+    warning("Detected ", nrow(extreme_changes), " measurements with extreme temperature changes")
+  }
+
+  return(extreme_changes)
+}
+
+extreme_changes <- hf_quality_check(sap_data)
+
+# Step 3: Calculate velocities with optimised parameters
+# For high-frequency data, might need shorter analysis windows
+hf_parameters <- list(
+  HRM_start = 40,     # Shorter window
+  HRM_end = 80,
+  pre_pulse = 20      # Shorter pre-pulse if measurement frequency allows
+)
+
+vh_results <- calc_heat_pulse_velocity(
+  sap_data,
+  methods = c("HRM", "MHR", "DMA"),
+  parameters = hf_parameters
+)
+
+# Step 4: High-frequency quality filtering
+# More conservative filtering for high-frequency analysis
+hf_clean_results <- filter_velocity_results(
+  vh_results,
+  quality_flags = "good",
+  velocity_range = c(-10, 150),
+  remove_outliers = TRUE,  # Remove statistical outliers
+  outlier_method = "iqr"   # Use IQR method
+)
+
+# Additional smoothing for high-frequency noise
+hf_clean_results <- hf_clean_results %>%
+  arrange(datetime) %>%
+  mutate(
+    Vh_smoothed = stats::filter(Vh_cm_hr, rep(1/3, 3), sides = 2)  # 3-point moving average
+  )
+
+# Step 5: Sub-daily pattern analysis
+# Analyze patterns within days
+subdaily_patterns <- hf_clean_results %>%
+  filter(method == "DMA") %>%
+  mutate(
+    date = as.Date(datetime),
+    hour = hour(datetime),
+    minute = minute(datetime),
+    time_of_day = hour + minute/60
+  ) %>%
+  group_by(date, hour) %>%
+  summarise(
+    hourly_mean = mean(Vh_cm_hr, na.rm = TRUE),
+    hourly_max = max(Vh_cm_hr, na.rm = TRUE),
+    hourly_cv = sd(Vh_cm_hr, na.rm = TRUE) / hourly_mean,
+    n_measurements = n(),
+    .groups = 'drop'
+  )
+
+# Step 6: Response to environmental conditions
+# If you have environmental data, analyze rapid responses
+# This is a template - adapt based on available environmental data
+if (exists("environmental_data")) {  # Placeholder
+  response_analysis <- hf_clean_results %>%
+    filter(method == "DMA") %>%
+    # Join with environmental data (temperature, VPD, solar radiation, etc.)
+    # Calculate time lags and correlations
+    # Identify threshold responses
+
+  print("Environmental response analysis completed")
+}
+
+# Step 7: Diurnal pattern characterization
+# Fit smooth curves to daily patterns
+daily_curves <- subdaily_patterns %>%
+  group_by(date) %>%
+  do({
+    if (nrow(.) > 6) {  # Need sufficient points for curve fitting
+      # Fit smooth curve (loess) to hourly data
+      smooth_fit <- loess(hourly_mean ~ hour, data = ., span = 0.3)
+      predicted_values <- predict(smooth_fit, newdata = data.frame(hour = 0:23))
+
+      data.frame(
+        date = first(.$date),
+        hour = 0:23,
+        predicted_velocity = predicted_values,
+        daily_max = max(predicted_values, na.rm = TRUE),
+        time_to_peak = which.max(predicted_values),
+        daily_amplitude = max(predicted_values, na.rm = TRUE) - min(predicted_values, na.rm = TRUE)
+      )
+    } else {
+      data.frame()  # Return empty if insufficient data
+    }
+  })
+
+# Step 8: Export high-frequency results
+export_velocity_results(hf_clean_results, "high_frequency_results.csv")
+write.csv(subdaily_patterns, "hourly_patterns.csv", row.names = FALSE)
+write.csv(daily_curves, "daily_curve_analysis.csv", row.names = FALSE)
+
+# Create high-frequency visualization
+plot_velocity_diagnostics(
+  hf_clean_results %>% filter(method == "DMA"),
+  plot_type = "high_frequency_time_series"
+)
+```
+
+## Workflow 5: Automated Quality Control Pipeline
+
+### Scenario: Production-ready pipeline for ongoing monitoring
+
+```{r, eval=FALSE}
+# Step 1: Set up automated pipeline function
+process_sap_flow_pipeline <- function(data_file, output_dir = "processed_data") {
+
+  # Create output directory
+  if (!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE)
+
+  # Generate unique run ID
+  run_id <- format(Sys.time(), "%Y%m%d_%H%M%S")
+
+  cat("=== Sap Flow Processing Pipeline ===\n")
+  cat("Run ID:", run_id, "\n")
+  cat("Processing file:", basename(data_file), "\n")
+
+  # Step 1: Import and validate
+  cat("\n1. Importing and validating data...\n")
+  sap_data <- read_sap_data(data_file, validate_data = TRUE)
+
+  if (!sap_data$validation$valid) {
+    cat("WARNING: Validation issues detected:\n")
+    for (issue in sap_data$validation$issues) {
+      cat("  -", issue, "\n")
+    }
+  }
+
+  # Step 2: Comprehensive quality assessment
+  cat("\n2. Assessing data quality...\n")
+  quality_assessment <- assess_data_quality(sap_data, detailed = TRUE)
+
+  cat("Overall quality score:", quality_assessment$overall_score, "/100\n")
+
+  # Step 3: Automatic method selection
+  cat("\n3. Selecting optimal methods...\n")
+  probe_config <- detect_probe_config(sap_data)
+  recommendations <- recommend_methods(sap_data, probe_config, quality_assessment)
+
+  selected_methods <- recommendations$recommended_methods[1:3]  # Top 3 methods
+  cat("Selected methods:", paste(selected_methods, collapse = ", "), "\n")
+
+  # Step 4: Calculate velocities
+  cat("\n4. Calculating heat pulse velocities...\n")
+  vh_results <- calc_heat_pulse_velocity(
+    sap_data,
+    methods = selected_methods,
+    parameters = recommendations$recommended_parameters
+  )
+
+  # Step 5: Quality control and filtering
+  cat("\n5. Applying quality control...\n")
+  initial_count <- nrow(vh_results)
+
+  clean_results <- filter_velocity_results(
+    vh_results,
+    quality_flags = "good",
+    velocity_range = c(-20, 300),  # Conservative range
+    remove_outliers = TRUE
+  )
+
+  final_count <- nrow(clean_results)
+  retention_rate <- round(final_count / initial_count * 100, 1)
+  cat("Retention rate:", retention_rate, "%\n")
+
+  # Step 6: Generate summary statistics
+  cat("\n6. Generating summary statistics...\n")
+  summary_stats <- calculate_enhanced_statistics(clean_results)
+
+  # Step 7: Create processing report
+  processing_report <- list(
+    run_info = list(
+      run_id = run_id,
+      file_processed = basename(data_file),
+      processing_time = Sys.time(),
+      sapfluxr_version = packageVersion("sapFluxR")
+    ),
+    data_overview = list(
+      total_pulses = length(unique(sap_data$measurements$pulse_id)),
+      time_span = range(sap_data$measurements$datetime),
+      measurement_frequency = median(diff(as.numeric(sap_data$measurements$datetime)))
+    ),
+    quality_assessment = quality_assessment,
+    method_selection = list(
+      selected_methods = selected_methods,
+      rationale = recommendations$rationale
+    ),
+    processing_results = list(
+      initial_measurements = initial_count,
+      final_measurements = final_count,
+      retention_rate = retention_rate,
+      success_by_method = table(clean_results$method)
+    ),
+    summary_statistics = summary_stats
+  )
+
+  # Step 8: Export results
+  cat("\n7. Exporting results...\n")
+
+  base_name <- tools::file_path_sans_ext(basename(data_file))
+
+  # Export velocity results
+  velocity_file <- file.path(output_dir, paste0(base_name, "_velocities_", run_id, ".csv"))
+  export_velocity_results(clean_results, velocity_file, include_quality_summary = TRUE)
+
+  # Export summary statistics
+  stats_file <- file.path(output_dir, paste0(base_name, "_summary_", run_id, ".csv"))
+  write.csv(summary_stats, stats_file, row.names = FALSE)
+
+  # Export processing report
+  report_file <- file.path(output_dir, paste0(base_name, "_report_", run_id, ".json"))
+  jsonlite::write_json(processing_report, report_file, pretty = TRUE)
+
+  # Generate diagnostic plots
+  plot_file <- file.path(output_dir, paste0(base_name, "_diagnostics_", run_id, ".png"))
+  png(plot_file, width = 1200, height = 800, res = 120)
+  plot_velocity_diagnostics(clean_results, plot_type = "comprehensive")
+  dev.off()
+
+  cat("\nProcessing complete!\n")
+  cat("Files exported:\n")
+  cat("  - Velocities:", basename(velocity_file), "\n")
+  cat("  - Summary:", basename(stats_file), "\n")
+  cat("  - Report:", basename(report_file), "\n")
+  cat("  - Plots:", basename(plot_file), "\n")
+
+  return(processing_report)
+}
+
+# Step 2: Run automated pipeline
+result <- process_sap_flow_pipeline("your_data_file.txt")
+
+# Step 3: Batch processing multiple files
+data_files <- list.files("raw_data/", pattern = "\\.txt$", full.names = TRUE)
+
+batch_results <- map(data_files, safely(process_sap_flow_pipeline))
+
+# Check for processing errors
+errors <- map_lgl(batch_results, ~ !is.null(.x$error))
+if (any(errors)) {
+  cat("Processing errors occurred for", sum(errors), "files:\n")
+  error_files <- data_files[errors]
+  for (file in error_files) {
+    cat("  -", basename(file), "\n")
+  }
+}
+
+cat("\nBatch processing completed for", length(data_files), "files\n")
+cat("Successful:", sum(!errors), "files\n")
+cat("Failed:", sum(errors), "files\n")
+```
+
+## Summary
+
+These workflows provide templates for common sapFluxR use cases:
+
+1. **Single Tree**: Basic monitoring and analysis
+2. **Multi-Tree**: Comparative studies across individuals
+3. **Seasonal**: Long-term patterns and phenology
+4. **High-Frequency**: Sub-daily dynamics and rapid responses
+5. **Automated Pipeline**: Production-ready processing system
+
+### Key Principles Applied
+
+- **Always validate data quality first**
+- **Use appropriate methods for your data characteristics**
+- **Apply consistent processing across comparisons**
+- **Document processing decisions and parameters**
+- **Export both raw results and summary statistics**
+- **Generate diagnostic plots for quality control**
+
+### Next Steps
+
+- Adapt these workflows to your specific research questions
+- Integrate with environmental data for response analysis
+- Develop custom quality control criteria for your setup
+- Consider automated scheduling for operational monitoring
+
+For more detailed guidance on specific aspects, see the "Method Selection" and "Quality Control" vignettes.

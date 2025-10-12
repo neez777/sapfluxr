@@ -1,0 +1,511 @@
+---
+title: "Quality Control and Troubleshooting"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Quality Control and Troubleshooting}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 5
+)
+```
+
+## Introduction
+
+Quality control is critical for reliable sap flow measurements. This vignette shows how to use sapFluxR's comprehensive quality assessment tools to identify problems, understand their causes, and apply appropriate solutions.
+
+```{r setup}
+library(sapFluxR)
+```
+
+## The Quality Control Workflow
+
+### Step 1: Automatic Quality Assessment
+
+sapFluxR performs quality checks at multiple stages:
+
+```{r, eval=FALSE}
+# Import with validation
+sap_data <- read_sap_data("your_data.txt", validate_data = TRUE)
+
+# Check import validation
+print(sap_data$validation$summary)
+
+# If there are issues, examine them
+if (!sap_data$validation$valid) {
+  print(sap_data$validation$issues)
+}
+```
+
+### Step 2: Comprehensive Data Quality Assessment
+
+```{r, eval=FALSE}
+# Get detailed quality assessment
+quality_assessment <- assess_data_quality(sap_data)
+
+print(paste("Overall Quality Score:", quality_assessment$overall_score, "/100"))
+print("Component Scores:")
+print(quality_assessment$component_scores)
+
+# Review specific issues
+if (length(quality_assessment$issues) > 0) {
+  print("Issues Found:")
+  for (issue in quality_assessment$issues) {
+    print(paste("-", issue))
+  }
+}
+```
+
+### Step 3: Velocity Quality Checking
+
+```{r, eval=FALSE}
+# Calculate velocities
+vh_results <- calc_heat_pulse_velocity(
+  sap_data,
+  methods = c("HRM", "MHR", "DMA")
+)
+
+# Automatic quality flagging is included
+table(vh_results$quality_flag)
+
+# Filter for high-quality results only
+high_quality <- filter_velocity_results(
+  vh_results,
+  quality_flags = "good"
+)
+```
+
+## Understanding Quality Issues
+
+### Data Import Issues
+
+#### Problem: Format Detection Failure
+```{r, eval=FALSE}
+# Symptom: Error during read_sap_data()
+# Solution: Specify format explicitly
+sap_data <- read_sap_data("problematic_file.txt", format = "ict_legacy")
+
+# Or check file structure manually
+file_preview <- readLines("problematic_file.txt", n = 10)
+print(file_preview)
+```
+
+#### Problem: Missing Required Columns
+```{r, eval=FALSE}
+# Check what columns were detected
+print(names(sap_data$measurements))
+
+# Expected columns for different formats:
+# ICT Current: datetime, do, di, uo, ui, pulse_id
+# CSV: datetime, pulse_id, do, di, uo, ui, batt_volt, batt_current
+# Legacy: varies by specific format
+```
+
+### Temperature Data Quality Issues
+
+#### Problem: Constant Temperature Values (Sensor Failure)
+```{r, eval=FALSE}
+# Check for constant values
+temp_stats <- sap_data$measurements %>%
+  group_by(pulse_id) %>%
+  summarise(
+    do_range = max(do, na.rm = TRUE) - min(do, na.rm = TRUE),
+    di_range = max(di, na.rm = TRUE) - min(di, na.rm = TRUE),
+    uo_range = max(uo, na.rm = TRUE) - min(uo, na.rm = TRUE),
+    ui_range = max(ui, na.rm = TRUE) - min(ui, na.rm = TRUE)
+  )
+
+# Flag pulses with suspiciously small temperature changes
+constant_sensors <- temp_stats %>%
+  filter(do_range < 0.01 | di_range < 0.01 | uo_range < 0.01 | ui_range < 0.01)
+
+if (nrow(constant_sensors) > 0) {
+  print("Possible sensor failure detected in these pulses:")
+  print(constant_sensors$pulse_id)
+}
+```
+
+#### Problem: Excessive Baseline Differences
+```{r, eval=FALSE}
+# Check baseline temperature differences
+baselines <- sap_data$measurements %>%
+  group_by(pulse_id) %>%
+  slice_head(n = 30) %>%  # First 30 seconds = pre-pulse period
+  summarise(
+    do_baseline = mean(do, na.rm = TRUE),
+    di_baseline = mean(di, na.rm = TRUE),
+    uo_baseline = mean(uo, na.rm = TRUE),
+    ui_baseline = mean(ui, na.rm = TRUE)
+  ) %>%
+  mutate(
+    downstream_diff = abs(do_baseline - di_baseline),
+    upstream_diff = abs(uo_baseline - ui_baseline)
+  )
+
+# Flag large baseline differences (suggests misaligned sensors)
+large_diffs <- baselines %>%
+  filter(downstream_diff > 1.0 | upstream_diff > 1.0)
+
+if (nrow(large_diffs) > 0) {
+  print("Possible sensor alignment issues:")
+  print(large_diffs[c("pulse_id", "downstream_diff", "upstream_diff")])
+}
+```
+
+### Battery and Power Issues
+
+```{r, eval=FALSE}
+# Check battery performance
+if ("diagnostics" %in% names(sap_data)) {
+  battery_stats <- sap_data$diagnostics %>%
+    summarise(
+      mean_voltage = mean(battery_voltage, na.rm = TRUE),
+      min_voltage = min(battery_voltage, na.rm = TRUE),
+      voltage_range = max(battery_voltage, na.rm = TRUE) - min_voltage,
+      low_battery_count = sum(battery_voltage < 3.6, na.rm = TRUE)
+    )
+
+  print("Battery Status:")
+  print(battery_stats)
+
+  # Warning thresholds
+  if (battery_stats$min_voltage < 3.6) {
+    warning("Low battery detected! Minimum voltage: ", battery_stats$min_voltage)
+  }
+
+  if (battery_stats$voltage_range > 0.5) {
+    warning("Large battery voltage variation: ", battery_stats$voltage_range)
+  }
+}
+```
+
+## Velocity Quality Issues
+
+### Problem: Unrealistic High Velocities
+```{r, eval=FALSE}
+# Check for extremely high velocities
+high_velocities <- vh_results %>%
+  filter(Vh_cm_hr > 200) %>%
+  select(datetime, pulse_id, method, Vh_cm_hr, quality_flag)
+
+if (nrow(high_velocities) > 0) {
+  print("Extremely high velocities detected:")
+  print(high_velocities)
+
+  # Possible causes:
+  # 1. Wrong thermal diffusivity
+  # 2. Incorrect probe spacing
+  # 3. Sensor placement in high-conductivity tissue
+  # 4. Temperature measurement errors
+}
+
+# Solution: Use T-max methods for high flows
+high_flow_corrected <- calc_heat_pulse_velocity(
+  sap_data,
+  methods = c("Tmax_Klu", "DMA"),
+  parameters = list(diffusivity = 0.0025)  # Double-check this value
+)
+```
+
+### Problem: Excessive Negative Velocities
+```{r, eval=FALSE}
+# Check for negative velocities
+negative_velocities <- vh_results %>%
+  filter(Vh_cm_hr < -10) %>%
+  group_by(method) %>%
+  summarise(
+    count = n(),
+    mean_negative = mean(Vh_cm_hr),
+    .groups = 'drop'
+  )
+
+print("Negative velocity summary:")
+print(negative_velocities)
+
+# If only HRM shows negatives: likely real reverse flow
+# If all methods show negatives: check setup
+# If excessive negatives: check probe alignment
+```
+
+### Problem: Method Disagreement
+```{r, eval=FALSE}
+# Compare methods for consistency
+method_correlations <- calc_method_correlations(vh_results)
+print(method_correlations)
+
+# Calculate method differences
+method_comparison <- vh_results %>%
+  select(datetime, pulse_id, method, Vh_cm_hr) %>%
+  pivot_wider(names_from = method, values_from = Vh_cm_hr) %>%
+  mutate(
+    HRM_MHR_diff = abs(HRM - MHR),
+    HRM_DMA_diff = abs(HRM - DMA)
+  ) %>%
+  filter(!is.na(HRM_MHR_diff))
+
+# Flag large disagreements
+large_disagreements <- method_comparison %>%
+  filter(HRM_MHR_diff > 20 | HRM_DMA_diff > 20)
+
+if (nrow(large_disagreements) > 0) {
+  print("Large method disagreements found:")
+  print(large_disagreements[c("pulse_id", "HRM", "MHR", "DMA")])
+}
+```
+
+## Diagnostic Plotting
+
+### Temperature Trace Diagnostics
+```{r, eval=FALSE}
+# Plot temperature traces for problematic pulses
+plot_velocity_diagnostics(vh_results, plot_type = "temperature_traces")
+
+# For specific pulses
+plot_pulse_diagnostics(sap_data, pulse_ids = c(1, 5, 10))
+```
+
+### Method Comparison Plots
+```{r, eval=FALSE}
+# Compare methods visually
+plot_velocity_diagnostics(vh_results, plot_type = "method_comparison")
+
+# Time series comparison
+plot_velocity_diagnostics(vh_results, plot_type = "time_series")
+```
+
+### Quality Flag Distribution
+```{r, eval=FALSE}
+# Visualise quality issues
+plot_quality_summary(vh_results)
+
+# Quality by time
+plot_velocity_diagnostics(vh_results, plot_type = "quality_timeline")
+```
+
+## Parameter Optimization
+
+### Thermal Diffusivity Sensitivity Analysis
+```{r, eval=FALSE}
+# Test range of thermal diffusivity values
+diffusivity_values <- seq(0.002, 0.003, by = 0.0002)
+
+sensitivity_results <- map_dfr(diffusivity_values, function(d) {
+  results <- calc_heat_pulse_velocity(
+    sap_data,
+    methods = "HRM",
+    parameters = list(diffusivity = d)
+  )
+
+  results %>%
+    summarise(
+      diffusivity = d,
+      mean_velocity = mean(Vh_cm_hr, na.rm = TRUE),
+      median_velocity = median(Vh_cm_hr, na.rm = TRUE),
+      good_quality_pct = mean(quality_flag == "good", na.rm = TRUE) * 100
+    )
+})
+
+print(sensitivity_results)
+```
+
+### Probe Spacing Verification
+```{r, eval=FALSE}
+# If you suspect incorrect probe spacing
+spacing_values <- seq(0.4, 0.6, by = 0.05)
+
+spacing_results <- map_dfr(spacing_values, function(x) {
+  results <- calc_heat_pulse_velocity(
+    sap_data,
+    methods = "HRM",
+    parameters = list(x = x)
+  )
+
+  data.frame(
+    spacing = x,
+    mean_velocity = mean(results$Vh_cm_hr, na.rm = TRUE),
+    reasonable_range = mean(results$Vh_cm_hr > 0 & results$Vh_cm_hr < 100, na.rm = TRUE)
+  )
+})
+
+print(spacing_results)
+```
+
+## Quality Control Filters
+
+### Basic Quality Filtering
+```{r, eval=FALSE}
+# Remove obviously bad data
+clean_results <- filter_velocity_results(
+  vh_results,
+  quality_flags = "good",
+  velocity_range = c(-10, 200),  # Reasonable biological range
+  remove_infinite = TRUE,
+  remove_missing = TRUE
+)
+
+# Check filtering impact
+cat("Original measurements:", nrow(vh_results), "\n")
+cat("After filtering:", nrow(clean_results), "\n")
+cat("Retention rate:", round(nrow(clean_results)/nrow(vh_results)*100, 1), "%\n")
+```
+
+### Advanced Quality Filtering
+```{r, eval=FALSE}
+# Multiple criteria filtering
+strict_clean <- vh_results %>%
+  filter(
+    quality_flag == "good",
+    Vh_cm_hr >= -10,
+    Vh_cm_hr <= 200,
+    !is.infinite(Vh_cm_hr),
+    !is.na(Vh_cm_hr)
+  ) %>%
+  # Remove outliers (beyond 3 standard deviations)
+  group_by(method) %>%
+  mutate(
+    z_score = abs((Vh_cm_hr - mean(Vh_cm_hr, na.rm = TRUE)) / sd(Vh_cm_hr, na.rm = TRUE))
+  ) %>%
+  filter(z_score <= 3) %>%
+  ungroup()
+```
+
+## Troubleshooting Common Problems
+
+### Issue: Low Success Rate (<50%)
+**Possible Causes:**
+1. Poor sensor contact with sapwood
+2. Incorrect thermal properties
+3. Probe spacing errors
+4. Data logger issues
+
+**Solutions:**
+```{r, eval=FALSE}
+# 1. Check raw temperature data quality
+plot_temperature_diagnostics(sap_data)
+
+# 2. Try different calculation parameters
+alternative_params <- list(
+  diffusivity = 0.003,  # Try different value
+  x = 0.6,              # Check probe spacing
+  HRM_start = 40,       # Adjust sampling window
+  HRM_end = 120
+)
+
+alternative_results <- calc_heat_pulse_velocity(
+  sap_data,
+  methods = "HRM",
+  parameters = alternative_params
+)
+
+# 3. Use more robust methods
+robust_results <- calc_heat_pulse_velocity(
+  sap_data,
+  methods = c("MHR", "DMA")  # More noise-tolerant
+)
+```
+
+### Issue: Negative Velocities During Day
+**Possible Causes:**
+1. Probe misalignment (downstream/upstream swapped)
+2. Sensors in non-conducting tissue
+3. Very low flows being detected as reverse
+
+**Solutions:**
+```{r, eval=FALSE}
+# Check if pattern makes sense
+daily_pattern <- vh_results %>%
+  mutate(hour = hour(datetime)) %>%
+  group_by(hour) %>%
+  summarise(
+    mean_velocity = mean(Vh_cm_hr, na.rm = TRUE),
+    negative_pct = mean(Vh_cm_hr < 0, na.rm = TRUE) * 100
+  )
+
+# Should see low/negative at night, positive during day
+print(daily_pattern)
+
+# If reversed pattern, check probe installation
+```
+
+### Issue: Erratic Results
+**Possible Causes:**
+1. Temperature measurement noise
+2. Poor thermal contact
+3. Battery issues
+4. Electrical interference
+
+**Solutions:**
+```{r, eval=FALSE}
+# 1. Use smoothing or robust methods
+smooth_results <- calc_heat_pulse_velocity(
+  sap_data,
+  methods = "MHR",  # More robust to noise
+  parameters = list(
+    HRM_start = 80,   # Later window (more stable)
+    HRM_end = 120
+  )
+)
+
+# 2. Check for systematic patterns in noise
+noise_analysis <- sap_data$measurements %>%
+  group_by(pulse_id) %>%
+  summarise(
+    do_noise = sd(diff(do), na.rm = TRUE),
+    di_noise = sd(diff(di), na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+print("Temperature measurement noise levels:")
+print(summary(noise_analysis))
+```
+
+## Quality Reporting
+
+### Generate Quality Report
+```{r, eval=FALSE}
+# Comprehensive quality summary
+quality_report <- create_quality_report(sap_data, vh_results)
+
+# Export quality report
+export_quality_report(quality_report, "quality_report.html")
+```
+
+### Data Quality Metrics
+```{r, eval=FALSE}
+# Calculate key quality metrics
+quality_metrics <- list(
+  data_completeness = sum(!is.na(sap_data$measurements$do)) / nrow(sap_data$measurements),
+  velocity_success_rate = mean(vh_results$quality_flag == "good", na.rm = TRUE),
+  method_consistency = cor(
+    vh_results$Vh_cm_hr[vh_results$method == "HRM"],
+    vh_results$Vh_cm_hr[vh_results$method == "MHR"],
+    use = "complete.obs"
+  ),
+  reasonable_range_pct = mean(
+    vh_results$Vh_cm_hr >= -10 & vh_results$Vh_cm_hr <= 100, na.rm = TRUE
+  )
+)
+
+print("Data Quality Metrics:")
+print(quality_metrics)
+```
+
+## Best Practices for Quality Control
+
+1. **Always validate data immediately after import**
+2. **Use multiple methods to cross-validate results**
+3. **Check battery status regularly**
+4. **Monitor temperature baseline stability**
+5. **Apply appropriate filters based on your research context**
+6. **Document quality issues and solutions**
+7. **Regular calibration checks with known standards**
+
+## Next Steps
+
+For specific guidance on interpreting results and comparing methods, see the "Method Selection" vignette. For advanced processing workflows, see the "Advanced Analysis" vignette.

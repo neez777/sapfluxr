@@ -1,0 +1,502 @@
+---
+title: "Interpreting Results and Understanding Output"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Interpreting Results and Understanding Output}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 5
+)
+```
+
+## Introduction
+
+Understanding what your sapFluxR results mean is crucial for proper interpretation and application. This vignette explains how to read outputs, what different values indicate, and how to translate heat pulse velocities into meaningful biological insights.
+
+```{r setup}
+library(sapFluxR)
+library(dplyr)
+library(ggplot2)
+```
+
+## Understanding Heat Pulse Velocity Results
+
+### Basic Output Structure
+
+When you run `calc_heat_pulse_velocity()`, you get a data frame with these key columns:
+
+```{r, eval=FALSE}
+# Example calculation
+vh_results <- calc_heat_pulse_velocity(sap_data, methods = c("HRM", "MHR", "DMA"))
+
+# Examine structure
+print(colnames(vh_results))
+print(head(vh_results))
+```
+
+**Key Columns Explained:**
+
+- **`datetime`**: Timestamp of the measurement
+- **`pulse_id`**: Unique identifier for each heat pulse cycle
+- **`method`**: Calculation method used (HRM, MHR, DMA, etc.)
+- **`sensor_position`**: "inner" or "outer" sensor pair
+- **`Vh_cm_hr`**: Heat pulse velocity in cm/hour
+- **`quality_flag`**: Data quality indicator
+
+### What Heat Pulse Velocity Represents
+
+Heat pulse velocity (Vh) is **not** the same as sap flux density or tree water use:
+
+- **Vh** = velocity of heat pulse through sapwood (cm/hr)
+- **Sap flux density** = actual water movement rate (kg/m²/hr or L/m²/hr)
+- **Tree water use** = total water uptake by the whole tree (L/day or kg/day)
+
+The relationship: **Sap Flux Density = Vh × Wood Density × Specific Heat**
+
+## Interpreting Velocity Values
+
+### Typical Ranges by Context
+
+```{r, eval=FALSE}
+# Examine your velocity ranges
+velocity_summary <- vh_results %>%
+  group_by(method) %>%
+  summarise(
+    min_vh = min(Vh_cm_hr, na.rm = TRUE),
+    q25_vh = quantile(Vh_cm_hr, 0.25, na.rm = TRUE),
+    median_vh = median(Vh_cm_hr, na.rm = TRUE),
+    mean_vh = mean(Vh_cm_hr, na.rm = TRUE),
+    q75_vh = quantile(Vh_cm_hr, 0.75, na.rm = TRUE),
+    max_vh = max(Vh_cm_hr, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+print("Velocity distribution by method:")
+print(velocity_summary)
+```
+
+**Typical Biological Ranges:**
+
+| Velocity Range | Likely Conditions | Examples |
+|----------------|-------------------|-----------|
+| **< 0 cm/hr** | Reverse flow, nighttime refilling | Night hours, drought recovery |
+| **0-5 cm/hr** | Very low flow, dormant season | Winter, early spring, late evening |
+| **5-20 cm/hr** | Moderate flow, normal conditions | Cloudy days, moderate transpiration |
+| **20-50 cm/hr** | High flow, active transpiration | Sunny days, peak growing season |
+| **50-100 cm/hr** | Very high flow, peak conditions | Ring-porous species, optimal conditions |
+| **> 100 cm/hr** | Extremely high flow or potential error | Check data quality, may need T-max methods |
+
+### Species-Specific Considerations
+
+```{r, eval=FALSE}
+# Compare your results to expectations
+species_expectations <- function(species_type, vh_results) {
+
+  daily_max <- vh_results %>%
+    mutate(hour = lubridate::hour(datetime)) %>%
+    filter(hour >= 12, hour <= 15) %>%  # Peak hours
+    summarise(typical_max = median(Vh_cm_hr, na.rm = TRUE))
+
+  interpretation <- switch(species_type,
+    "conifer" = {
+      if (daily_max$typical_max < 30) "Normal for conifers"
+      else if (daily_max$typical_max > 60) "Unusually high - check setup"
+      else "Higher than typical for conifers"
+    },
+    "diffuse_porous" = {
+      if (daily_max$typical_max < 50) "Normal for diffuse-porous species"
+      else if (daily_max$typical_max > 100) "Very high - check setup"
+      else "Good values for diffuse-porous"
+    },
+    "ring_porous" = {
+      if (daily_max$typical_max < 80) "Lower than typical for ring-porous"
+      else if (daily_max$typical_max > 200) "Extremely high - verify setup"
+      else "Normal for ring-porous species"
+    }
+  )
+
+  cat("Species type:", species_type, "\n")
+  cat("Typical daytime maximum:", round(daily_max$typical_max, 1), "cm/hr\n")
+  cat("Interpretation:", interpretation, "\n")
+}
+
+# Use for your species
+species_expectations("diffuse_porous", vh_results)
+```
+
+## Understanding Daily Patterns
+
+### Normal Diurnal Patterns
+
+```{r, eval=FALSE}
+# Analyze daily patterns
+daily_pattern <- vh_results %>%
+  filter(method == "DMA") %>%  # Use consistent method
+  mutate(hour = lubridate::hour(datetime)) %>%
+  group_by(hour) %>%
+  summarise(
+    mean_vh = mean(Vh_cm_hr, na.rm = TRUE),
+    median_vh = median(Vh_cm_hr, na.rm = TRUE),
+    q25_vh = quantile(Vh_cm_hr, 0.25, na.rm = TRUE),
+    q75_vh = quantile(Vh_cm_hr, 0.75, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+# Plot daily pattern
+ggplot(daily_pattern, aes(x = hour, y = mean_vh)) +
+  geom_ribbon(aes(ymin = q25_vh, ymax = q75_vh), alpha = 0.3) +
+  geom_line(size = 1) +
+  labs(x = "Hour of Day", y = "Heat Pulse Velocity (cm/hr)",
+       title = "Average Daily Pattern") +
+  theme_minimal()
+```
+
+**Interpreting Daily Patterns:**
+
+- **Early morning (4-8 AM)**: Should show low/negative velocities (nighttime refilling)
+- **Mid-morning (8-12 PM)**: Rapid increase as transpiration begins
+- **Midday (12-15 PM)**: Peak velocities during maximum transpiration
+- **Afternoon (15-18 PM)**: Gradual decline as conditions moderate
+- **Evening (18-24 PM)**: Continued decline, approaching zero
+
+**Red Flags in Daily Patterns:**
+```{r, eval=FALSE}
+# Check for unusual patterns
+pattern_check <- daily_pattern %>%
+  mutate(
+    night_flow = mean_vh[hour %in% 0:6],
+    peak_flow = max(mean_vh[hour %in% 10:16]),
+    evening_flow = mean_vh[hour %in% 18:23]
+  )
+
+# Warning signs:
+# 1. High nighttime flows (>20% of peak)
+# 2. Multiple peaks during day
+# 3. Peak flow in morning or evening
+# 4. No clear daily pattern
+```
+
+## Quality Indicators and Flags
+
+### Understanding Quality Flags
+
+```{r, eval=FALSE}
+# Examine quality flag distribution
+quality_summary <- table(vh_results$quality_flag)
+print("Quality flag distribution:")
+print(quality_summary)
+
+# Calculate success rates
+success_rate <- prop.table(quality_summary)["good"] * 100
+cat("Overall success rate:", round(success_rate, 1), "%\n")
+
+# Quality by method
+method_quality <- vh_results %>%
+  group_by(method) %>%
+  summarise(
+    total = n(),
+    good = sum(quality_flag == "good", na.rm = TRUE),
+    success_rate = good / total * 100,
+    .groups = 'drop'
+  )
+
+print("Quality by method:")
+print(method_quality)
+```
+
+**Quality Flag Meanings:**
+
+- **"good"**: Passed all quality checks, reliable values
+- **"high_velocity"**: Extremely high values (>200 cm/hr) - may be real or error
+- **"negative_flow"**: Negative velocities detected - may be reverse flow or error
+- **"infinite"**: Mathematical infinity - calculation error
+- **"missing"**: Missing or invalid input data
+
+### Acceptable Success Rates
+
+| Success Rate | Interpretation | Action Needed |
+|--------------|----------------|---------------|
+| **>80%** | Excellent data quality | Proceed with analysis |
+| **60-80%** | Good data quality | Minor optimization may help |
+| **40-60%** | Fair data quality | Check setup and parameters |
+| **20-40%** | Poor data quality | Major issues need addressing |
+| **<20%** | Very poor data quality | Fundamental problems exist |
+
+## Method Comparison and Selection
+
+### Comparing Methods
+
+```{r, eval=FALSE}
+# Calculate correlations between methods
+method_correlations <- vh_results %>%
+  select(datetime, pulse_id, method, Vh_cm_hr) %>%
+  pivot_wider(names_from = method, values_from = Vh_cm_hr) %>%
+  select(-datetime, -pulse_id) %>%
+  cor(use = "complete.obs")
+
+print("Method correlations:")
+print(round(method_correlations, 3))
+
+# Calculate method differences
+method_differences <- vh_results %>%
+  select(datetime, pulse_id, method, Vh_cm_hr) %>%
+  pivot_wider(names_from = method, values_from = Vh_cm_hr) %>%
+  mutate(
+    HRM_MHR_diff = HRM - MHR,
+    HRM_DMA_diff = HRM - DMA,
+    MHR_DMA_diff = MHR - DMA
+  )
+
+print("Method difference summary:")
+print(summary(method_differences[c("HRM_MHR_diff", "HRM_DMA_diff", "MHR_DMA_diff")]))
+```
+
+**Interpreting Method Comparisons:**
+
+- **High correlation (>0.9)**: Methods agree well, any can be used
+- **Moderate correlation (0.7-0.9)**: Methods generally agree, some differences expected
+- **Low correlation (<0.7)**: Methods disagree substantially, investigate causes
+
+**Common Method Differences:**
+- **HRM vs MHR**: HRM typically lower at high flows, can detect reverse flow
+- **HRM vs T-max**: T-max typically higher at very high flows
+- **DMA vs others**: Should closely match the method it selects automatically
+
+## Converting to Sap Flux Density
+
+### From Velocity to Flux Density
+
+Heat pulse velocity must be converted to sap flux density for meaningful interpretation:
+
+```{r, eval=FALSE}
+# Convert to sap flux density
+# You need species-specific parameters
+wood_density <- 0.4      # g/cm³ (varies by species)
+wood_specific_heat <- 1.2 # J/g/°C (varies by moisture content)
+
+sap_flux_results <- vh_results %>%
+  filter(method == "DMA", quality_flag == "good") %>%
+  mutate(
+    # Convert to sap flux density (kg/m²/hr)
+    sap_flux_density = Vh_cm_hr * wood_density * wood_specific_heat / 100
+  )
+
+# Calculate daily water use per unit sapwood area
+daily_flux <- sap_flux_results %>%
+  mutate(date = as.Date(datetime)) %>%
+  group_by(date) %>%
+  summarise(
+    daily_flux_sum = sum(sap_flux_density, na.rm = TRUE) / 24,  # kg/m²/day
+    daily_max_flux = max(sap_flux_density, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+print("Daily sap flux summary (kg/m²/day):")
+print(summary(daily_flux$daily_flux_sum))
+```
+
+### Scaling to Tree Water Use
+
+```{r, eval=FALSE}
+# Scale to whole-tree water use
+# You need tree-specific measurements
+sapwood_area <- 0.012  # m² (measured or estimated)
+tree_circumference <- 0.85  # m
+bark_thickness <- 0.02  # m
+
+# Calculate total tree water use
+tree_water_use <- daily_flux %>%
+  mutate(
+    tree_water_use_kg_day = daily_flux_sum * sapwood_area,
+    tree_water_use_L_day = tree_water_use_kg_day  # 1 kg water ≈ 1 L
+  )
+
+print("Tree water use summary:")
+print(summary(tree_water_use$tree_water_use_L_day))
+
+# Check if values are reasonable
+mean_daily_use <- mean(tree_water_use$tree_water_use_L_day, na.rm = TRUE)
+cat("Mean daily water use:", round(mean_daily_use, 1), "L/day\n")
+
+# Rough check against tree size
+estimated_use_per_cm_dbh <- mean_daily_use / (tree_circumference * 100 / pi)  # Assume DBH from circumference
+cat("Water use per cm DBH:", round(estimated_use_per_cm_dbh, 2), "L/day/cm\n")
+
+# Typical values: 0.1-1.0 L/day/cm DBH depending on species and conditions
+```
+
+## Environmental Relationships
+
+### Relating to Environmental Drivers
+
+```{r, eval=FALSE}
+# If you have environmental data, analyze relationships
+# This is a template - adapt to your environmental variables
+
+environmental_analysis <- function(vh_data, env_data) {
+
+  # Merge sap flux with environmental data
+  combined_data <- merge(vh_data, env_data, by = "datetime")
+
+  # Calculate correlations with environmental drivers
+  correlations <- combined_data %>%
+    select(Vh_cm_hr, temperature, humidity, solar_radiation, vpd) %>%
+    cor(use = "complete.obs")
+
+  print("Environmental correlations:")
+  print(correlations["Vh_cm_hr", ])
+
+  # Identify threshold responses
+  # Example: VPD thresholds
+  vpd_response <- combined_data %>%
+    mutate(vpd_class = cut(vpd, breaks = c(0, 0.5, 1.0, 1.5, 2.0, Inf),
+                          labels = c("Low", "Moderate", "High", "Very High", "Extreme"))) %>%
+    group_by(vpd_class) %>%
+    summarise(
+      mean_vh = mean(Vh_cm_hr, na.rm = TRUE),
+      max_vh = max(Vh_cm_hr, na.rm = TRUE),
+      .groups = 'drop'
+    )
+
+  print("VPD response:")
+  print(vpd_response)
+}
+
+# Example usage (when environmental data available)
+# environmental_analysis(sap_flux_results, environmental_data)
+```
+
+## Seasonal and Long-term Patterns
+
+### Interpreting Seasonal Changes
+
+```{r, eval=FALSE}
+# Analyze seasonal patterns
+seasonal_analysis <- vh_results %>%
+  filter(method == "DMA", quality_flag == "good") %>%
+  mutate(
+    date = as.Date(datetime),
+    month = lubridate::month(datetime),
+    season = case_when(
+      month %in% c(12, 1, 2) ~ "Winter",
+      month %in% c(3, 4, 5) ~ "Spring",
+      month %in% c(6, 7, 8) ~ "Summer",
+      month %in% c(9, 10, 11) ~ "Fall"
+    )
+  ) %>%
+  group_by(date, season) %>%
+  summarise(
+    daily_max = max(Vh_cm_hr, na.rm = TRUE),
+    daily_mean = mean(Vh_cm_hr, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+seasonal_summary <- seasonal_analysis %>%
+  group_by(season) %>%
+  summarise(
+    mean_daily_max = mean(daily_max, na.rm = TRUE),
+    mean_daily_mean = mean(daily_mean, na.rm = TRUE),
+    cv_daily_max = sd(daily_max, na.rm = TRUE) / mean_daily_max,
+    .groups = 'drop'
+  )
+
+print("Seasonal velocity patterns:")
+print(seasonal_summary)
+```
+
+**Expected Seasonal Patterns:**
+- **Spring**: Increasing velocities as trees leaf out
+- **Summer**: Peak velocities during active growth
+- **Fall**: Declining velocities as leaves senesce
+- **Winter**: Minimal velocities in deciduous species
+
+## Troubleshooting Unusual Results
+
+### Common Issues and Interpretations
+
+#### Issue 1: Constant High Velocities
+```{r, eval=FALSE}
+# Check for unrealistic constant values
+constant_check <- vh_results %>%
+  mutate(date = as.Date(datetime)) %>%
+  group_by(date) %>%
+  summarise(
+    daily_range = max(Vh_cm_hr, na.rm = TRUE) - min(Vh_cm_hr, na.rm = TRUE),
+    daily_cv = sd(Vh_cm_hr, na.rm = TRUE) / mean(Vh_cm_hr, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+low_variation_days <- constant_check %>%
+  filter(daily_range < 5 | daily_cv < 0.1)
+
+if (nrow(low_variation_days) > 0) {
+  cat("Days with suspiciously low variation:\n")
+  print(low_variation_days)
+  cat("Possible causes:\n")
+  cat("- Sensor in non-functional sapwood\n")
+  cat("- Probe placement in resin ducts\n")
+  cat("- Incorrect thermal properties\n")
+}
+```
+
+#### Issue 2: No Clear Daily Pattern
+```{r, eval=FALSE}
+# Check for absence of diurnal pattern
+hourly_cv <- vh_results %>%
+  mutate(hour = lubridate::hour(datetime)) %>%
+  group_by(hour) %>%
+  summarise(hourly_mean = mean(Vh_cm_hr, na.rm = TRUE), .groups = 'drop') %>%
+  summarise(pattern_strength = sd(hourly_mean) / mean(hourly_mean))
+
+if (hourly_cv$pattern_strength < 0.3) {
+  cat("Weak diurnal pattern detected (CV =", round(hourly_cv$pattern_strength, 3), ")\n")
+  cat("Possible causes:\n")
+  cat("- Sensors in heartwood or non-conducting tissue\n")
+  cat("- Drought stress (stomatal closure)\n")
+  cat("- Measurement period during dormancy\n")
+  cat("- Equipment malfunction\n")
+}
+```
+
+## Summary and Best Practices
+
+### Key Interpretation Guidelines
+
+1. **Always consider biological context** - velocity values must make sense for your species and conditions
+
+2. **Compare multiple methods** - disagreement indicates potential problems
+
+3. **Check quality flags** - don't ignore quality control outputs
+
+4. **Examine daily patterns** - should show clear diurnal cycles during active periods
+
+5. **Convert to meaningful units** - heat pulse velocity alone has limited biological meaning
+
+6. **Validate against expectations** - compare to literature values for similar species/conditions
+
+### Reporting Results
+
+When reporting sapFluxR results:
+
+- **Specify method used** and rationale for selection
+- **Report quality control measures** and success rates
+- **Include key parameters** (thermal diffusivity, probe spacing)
+- **Convert to sap flux density** for biological interpretation
+- **Provide uncertainty estimates** based on method comparisons
+- **Document any data filtering** or quality control decisions
+
+### Next Steps
+
+- **Environmental correlations**: Link sap flux to driving variables
+- **Scaling analyses**: Convert to stand or ecosystem level water use
+- **Model validation**: Use results to parameterize or validate process models
+- **Comparative studies**: Compare across species, sites, or treatments
+
+For more detailed analysis techniques, see the "Advanced Analysis" and "Complete Workflows" vignettes.

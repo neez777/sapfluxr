@@ -1,0 +1,348 @@
+---
+title: "Choosing Heat Pulse Velocity Methods"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Choosing Heat Pulse Velocity Methods}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 5
+)
+```
+
+## Introduction
+
+With seven different heat pulse velocity methods available in sapFluxR, choosing the right one can seem overwhelming. This vignette provides practical guidance on when to use each method and how to interpret their results.
+
+```{r setup}
+library(sapFluxR)
+```
+
+## Quick Method Selection Guide
+
+### **Start Here: The Dual Method Approach (DMA)**
+
+For most users, **DMA** is the best starting point:
+
+```{r, eval=FALSE}
+# Simple, automatic method selection
+vh_results <- calc_heat_pulse_velocity(
+  sap_data,
+  methods = "DMA"
+)
+```
+
+DMA automatically switches between HRM and T-max methods based on flow conditions, making it ideal when you don't know what to expect from your data.
+
+## Understanding Each Method
+
+### Heat Ratio Method (HRM)
+**Best for: Low flows, reverse flows, nighttime measurements**
+
+```{r, eval=FALSE}
+# Use HRM when you suspect low or reverse flows
+vh_hrm <- calc_heat_pulse_velocity(
+  sap_data,
+  methods = "HRM",
+  parameters = list(
+    HRM_start = 60,  # Start sampling window
+    HRM_end = 100    # End sampling window
+  )
+)
+```
+
+**When to use:**
+- Nighttime data (typically low flow)
+- Species known for low sap flux rates
+- Need to detect reverse flow (water moving down)
+- Diffuse-porous species
+
+**Advantages:** Can detect reverse flow, accurate for low velocities
+**Limitations:** Sensitive to noise at high flows
+
+### Maximum Heat Ratio (MHR)
+**Best for: Moderate flows, noisy data**
+
+```{r, eval=FALSE}
+# MHR is more robust to noise
+vh_mhr <- calc_heat_pulse_velocity(
+  sap_data,
+  methods = "MHR"
+)
+```
+
+**When to use:**
+- Data with temperature measurement noise
+- Moderate sap flow rates
+- When HRM gives inconsistent results
+- As a backup method to HRM
+
+**Advantages:** More robust to noise, simpler calculation
+**Limitations:** Cannot detect reverse flow reliably
+
+### T-max Methods (Cohen & Kluitenberg)
+**Best for: High flows, peak daytime measurements**
+
+```{r, eval=FALSE}
+# For high-flow conditions
+vh_tmax <- calc_heat_pulse_velocity(
+  sap_data,
+  methods = c("Tmax_Coh", "Tmax_Klu"),
+  parameters = list(
+    tp_1 = 2  # Heat pulse duration for Kluitenberg method
+  )
+)
+```
+
+**When to use:**
+- Peak daytime flows
+- Ring-porous species (high conductivity)
+- When temperature ratios approach 1 (HRM becomes unreliable)
+- Fast-growing species with high water demand
+
+**Tmax_Coh vs Tmax_Klu:**
+- **Cohen**: Original method, simpler
+- **Kluitenberg**: Adjusted for finite heat pulse duration, more accurate for short pulses
+
+### Enhanced Methods (HRMXa/HRMXb)
+**Best for: When you need maximum accuracy with HRM**
+
+```{r, eval=FALSE}
+# Enhanced HRM variants
+vh_enhanced <- calc_heat_pulse_velocity(
+  sap_data,
+  methods = c("HRMXa", "HRMXb"),
+  parameters = list(
+    L = 0.5,  # Lower sampling window proportion
+    H = 0.8   # Upper sampling window proportion
+  )
+)
+```
+
+**When to use:**
+- High-precision research applications
+- When standard HRM shows systematic bias
+- Comparing with literature using these methods
+
+## Method Selection Decision Tree
+
+```
+1. Do you know your expected flow rates?
+   ├─ No → Start with DMA (automatic selection)
+   └─ Yes → Continue to step 2
+
+2. Are flows primarily low (<10 cm/hr)?
+   ├─ Yes → Use HRM
+   └─ No → Continue to step 3
+
+3. Are flows primarily high (>50 cm/hr)?
+   ├─ Yes → Use Tmax_Klu or Tmax_Coh
+   └─ No → Continue to step 4
+
+4. Do you need reverse flow detection?
+   ├─ Yes → Use HRM
+   └─ No → Use MHR or DMA
+
+5. Is your data noisy?
+   ├─ Yes → Use MHR or DMA
+   └─ No → Use HRM for precision
+```
+
+## Practical Examples
+
+### Example 1: Unknown Flow Conditions
+
+```{r, eval=FALSE}
+# Start with multiple methods to explore your data
+results <- calc_heat_pulse_velocity(
+  sap_data,
+  methods = c("HRM", "MHR", "DMA", "Tmax_Klu")
+)
+
+# Compare methods
+method_comparison <- compare_hpv_methods(results)
+print(method_comparison$summary_stats)
+```
+
+### Example 2: Species-Specific Selection
+
+```{r, eval=FALSE}
+# For diffuse-porous species (oak, birch, maple)
+oak_results <- calc_heat_pulse_velocity(
+  oak_data,
+  methods = c("HRM", "DMA")  # Good for moderate flows
+)
+
+# For ring-porous species (elm, ash)
+ash_results <- calc_heat_pulse_velocity(
+  ash_data,
+  methods = c("Tmax_Klu", "DMA")  # Good for high conductivity
+)
+
+# For conifers (typically lower flows)
+pine_results <- calc_heat_pulse_velocity(
+  pine_data,
+  methods = c("HRM", "MHR")  # Good for low to moderate flows
+)
+```
+
+### Example 3: Seasonal Method Optimization
+
+```{r, eval=FALSE}
+# Process by season with appropriate methods
+spring_data <- filter(sap_data, month %in% c(4, 5, 6))
+summer_data <- filter(sap_data, month %in% c(7, 8, 9))
+
+# Spring: moderate flows, use balanced approach
+spring_results <- calc_heat_pulse_velocity(
+  spring_data,
+  methods = c("DMA", "MHR")
+)
+
+# Summer: potentially high flows
+summer_results <- calc_heat_pulse_velocity(
+  summer_data,
+  methods = c("DMA", "Tmax_Klu")
+)
+```
+
+## Interpreting Method Comparisons
+
+### Understanding Differences Between Methods
+
+```{r, eval=FALSE}
+# Calculate statistics for each method
+stats <- calc_velocity_stats(results, group_by = "method")
+
+# Look for:
+# 1. Mean differences between methods
+# 2. Correlation between methods
+# 3. Which method gives most reasonable values
+
+# Check correlations
+correlations <- calc_method_correlations(results)
+print(correlations)
+```
+
+### Quality Assessment
+
+```{r, eval=FALSE}
+# Check which method has best quality flags
+quality_summary <- results %>%
+  group_by(method) %>%
+  summarise(
+    total_measurements = n(),
+    good_quality = sum(quality_flag == "good", na.rm = TRUE),
+    success_rate = good_quality / total_measurements
+  )
+
+print(quality_summary)
+```
+
+## Method-Specific Parameters
+
+### Optimizing HRM Parameters
+
+```{r, eval=FALSE}
+# Test different sampling windows
+hrm_short <- calc_heat_pulse_velocity(sap_data, methods = "HRM",
+                                     parameters = list(HRM_start = 40, HRM_end = 80))
+
+hrm_long <- calc_heat_pulse_velocity(sap_data, methods = "HRM",
+                                    parameters = list(HRM_start = 60, HRM_end = 120))
+
+# Compare results to find optimal window
+```
+
+### Thermal Diffusivity Sensitivity
+
+```{r, eval=FALSE}
+# Test sensitivity to thermal diffusivity
+diffusivities <- c(0.002, 0.0025, 0.003)
+
+results_list <- map(diffusivities, ~{
+  calc_heat_pulse_velocity(
+    sap_data,
+    methods = "HRM",
+    parameters = list(diffusivity = .x)
+  )
+})
+
+# Analyze sensitivity
+```
+
+## Recommendations by Research Context
+
+### **Ecological Studies**
+- Primary: DMA (automatic, robust)
+- Backup: HRM (for reverse flow detection)
+
+### **Agricultural Applications**
+- Primary: MHR or DMA (robust to field conditions)
+- Validation: Compare with Tmax during peak flow
+
+### **Physiological Research**
+- Primary: HRM (precise, detects full flow range)
+- Enhanced: HRMXa/HRMXb for maximum accuracy
+- Validation: Multiple methods for verification
+
+### **Long-term Monitoring**
+- Primary: DMA (automatic adaptation to conditions)
+- Quality control: Regular method comparison
+
+## Common Pitfalls and Solutions
+
+### Problem 1: Inconsistent Results Between Methods
+```{r, eval=FALSE}
+# Solution: Check data quality first
+validation <- validate_sap_data(sap_data)
+if (!validation$valid) {
+  print(validation$issues)
+}
+
+# Then check probe configuration
+config <- detect_probe_config(sap_data)
+print(config$recommended_methods)
+```
+
+### Problem 2: High Negative Velocities
+```{r, eval=FALSE}
+# This might indicate:
+# 1. Actual reverse flow (use HRM)
+# 2. Probe alignment issues
+# 3. Thermal properties mismatch
+
+# Check with multiple methods
+reverse_check <- calc_heat_pulse_velocity(
+  sap_data,
+  methods = c("HRM", "MHR", "DMA")
+)
+
+# If only HRM shows negatives, likely real reverse flow
+# If all methods show negatives, check probe setup
+```
+
+### Problem 3: Very High Velocities (>100 cm/hr)
+```{r, eval=FALSE}
+# Switch to T-max methods
+high_flow_results <- calc_heat_pulse_velocity(
+  sap_data,
+  methods = c("Tmax_Klu", "DMA")
+)
+```
+
+## Summary and Next Steps
+
+1. **Start simple**: Use DMA for automatic method selection
+2. **Validate**: Check data quality and probe configuration
+3. **Compare**: Run multiple methods to understand your data
+4. **Optimise**: Fine-tune parameters based on your specific conditions
+5. **Document**: Record which methods work best for your setup
+
+For more advanced analysis, see the "Advanced Workflow" and "Troubleshooting" vignettes.

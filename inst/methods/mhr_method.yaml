@@ -1,0 +1,140 @@
+# Maximum Heat Ratio Method (MHR) - YAML Configuration
+# Lopez et al. (2021) Plant Soil 469:503-523
+
+method:
+  name: "MHR"
+  full_name: "Maximum Heat Ratio Method"
+  description: "Calculates velocity from maximum temperature increases"
+  reference: "Lopez et al. (2021) Plant Soil 469:503-523"
+  category: "ratio_based"
+
+# Input variables required for this method
+inputs:
+  required:
+    - name: "delatT_do"
+      description: "Temperature difference downstream outer"
+      type: "numeric_vector"
+    - name: "delatT_di"
+      description: "Temperature difference downstream inner"
+      type: "numeric_vector"
+    - name: "delatT_uo"
+      description: "Temperature difference upstream outer"
+      type: "numeric_vector"
+    - name: "delatT_ui"
+      description: "Temperature difference upstream inner"
+      type: "numeric_vector"
+    - name: "diffusivity"
+      description: "Thermal diffusivity of sapwood (cm²/s)"
+      type: "numeric_scalar"
+      default: 0.0025
+    - name: "x"
+      description: "Distance from heat source (cm)"
+      type: "numeric_scalar"
+      default: 0.5
+
+# Output variables this method produces
+outputs:
+  - name: "Vh_outer"
+    description: "Heat pulse velocity for outer sensors (cm/hr)"
+    type: "numeric_scalar"
+  - name: "Vh_inner"
+    description: "Heat pulse velocity for inner sensors (cm/hr)"
+    type: "numeric_scalar"
+
+# Calculation steps
+calculation:
+  steps:
+    - name: "validate_inputs"
+      description: "Validate all temperature differences are available"
+      expression: |
+        if (all(is.na(delatT_do)) || all(is.na(delatT_di)) ||
+            all(is.na(delatT_uo)) || all(is.na(delatT_ui))) {
+          warning("All temperature differences are NA")
+          Vh_outer <- NA_real_
+          Vh_inner <- NA_real_
+          return(list(outer = Vh_outer, inner = Vh_inner))
+        }
+
+    - name: "find_maximum_temperatures"
+      description: "Find maximum temperature increases"
+      expression: |
+        dTdo_max <- max(delatT_do, na.rm = TRUE)
+        dTdi_max <- max(delatT_di, na.rm = TRUE)
+        dTuo_max <- max(delatT_uo, na.rm = TRUE)
+        dTui_max <- max(delatT_ui, na.rm = TRUE)
+
+    - name: "validate_maximums"
+      description: "Check for valid maximum temperatures"
+      expression: |
+        if (any(c(dTdo_max, dTdi_max, dTuo_max, dTui_max) <= 0) ||
+            any(!is.finite(c(dTdo_max, dTdi_max, dTuo_max, dTui_max)))) {
+          warning("Invalid maximum temperature increases for MHR")
+          Vh_outer <- NA_real_
+          Vh_inner <- NA_real_
+          return(list(outer = Vh_outer, inner = Vh_inner))
+        }
+
+    - name: "calculate_ratios"
+      description: "Calculate maximum temperature ratios"
+      expression: |
+        dTdo_max_dTuo_max <- dTdo_max / dTuo_max
+        dTdi_max_dTui_max <- dTdi_max / dTui_max
+
+    - name: "calculate_velocities"
+      description: "Calculate MHR velocities using logarithmic formula"
+      expression: |
+        if (dTdo_max_dTuo_max <= 0) {
+          warning("Non-positive outer sensor temperature ratio for MHR")
+          Vh_outer <- NA_real_
+        } else {
+          Vh_outer <- (diffusivity / x) * log(dTdo_max_dTuo_max) * 3600
+        }
+
+        if (dTdi_max_dTui_max <= 0) {
+          warning("Non-positive inner sensor temperature ratio for MHR")
+          Vh_inner <- NA_real_
+        } else {
+          Vh_inner <- (diffusivity / x) * log(dTdi_max_dTui_max) * 3600
+        }
+
+# Method-specific parameters
+parameters:
+  - name: "diffusivity"
+    description: "Thermal diffusivity of sapwood"
+    type: "numeric"
+    range: [0, 0.01]
+    default: 0.0025
+    units: "cm²/s"
+  - name: "x"
+    description: "Distance from heat source"
+    type: "numeric"
+    range: [0, 2]
+    default: 0.5
+    units: "cm"
+
+# Quality assessment criteria
+quality_criteria:
+  - name: "valid_maximum_temperatures"
+    description: "Maximum temperatures are positive and finite"
+    check: "all(c(dTdo_max, dTdi_max, dTuo_max, dTui_max) > 0) && all(is.finite(c(dTdo_max, dTdi_max, dTuo_max, dTui_max)))"
+    severity: "error"
+  - name: "positive_ratios"
+    description: "Temperature ratios are positive"
+    check: "dTdo_max_dTuo_max > 0 && dTdi_max_dTui_max > 0"
+    severity: "error"
+  - name: "velocity_range"
+    description: "Calculated velocity is within reasonable range"
+    check: "abs(Vh_outer) < 200 && abs(Vh_inner) < 200"
+    severity: "warning"
+
+# Method limitations and applicability
+limitations:
+  - "Requires clear temperature maximums"
+  - "Sensitive to noise in temperature measurements"
+  - "May be unreliable with multiple peaks"
+  - "Assumes single maximum per pulse"
+
+applicability:
+  velocity_range: [5, 100]  # cm/hr
+  probe_configurations: ["symmetrical", "asymmetrical"]
+  best_for: ["moderate_to_high_velocities", "clear_peaks"]

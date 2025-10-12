@@ -1,0 +1,211 @@
+# sapFluxR Vignette Roadmap
+
+## Overview
+
+The sapFluxR package now includes a comprehensive set of vignettes to help users at every stage of sap flow analysis. This roadmap helps you choose which vignette(s) to use based on your needs and experience level.
+
+## Quick Start Guide
+
+### **New to sapFluxR?**
+Start here: **"Getting Started with sapFluxR"** (existing vignette)
+- Basic import, calculation, and export workflow
+- Essential concepts and terminology
+- Simple examples with default settings
+
+### **Confused about methods?**
+Next: **"Choosing Heat Pulse Velocity Methods"**
+- Decision tree for method selection
+- When to use HRM vs MHR vs T-max vs DMA
+- Species-specific recommendations
+- Parameter optimization guidance
+
+### **Having data quality issues?**
+See: **"Quality Control and Troubleshooting"**
+- Comprehensive quality assessment tools
+- Common problems and their solutions
+- Diagnostic plotting and interpretation
+- Parameter optimization strategies
+
+### **Need complete analysis workflows?**
+Use: **"Complete Data Processing Workflows"**
+- End-to-end analysis for different scenarios
+- Single tree, multi-tree, seasonal, and high-frequency studies
+- Automated processing pipelines
+- Batch processing examples
+
+### **Don't understand your results?**
+Check: **"Interpreting Results and Understanding Output"**
+- What heat pulse velocity values mean biologically
+- Converting to sap flux density and tree water use
+- Understanding quality flags and success rates
+- Relating results to environmental conditions
+
+## Vignette Descriptions
+
+### 1. Getting Started with sapFluxR *(existing)*
+**Purpose**: Introduction to basic package functionality
+**Contents**:
+- Package installation and setup
+- Basic import → calculate → export workflow
+- Core function overview
+- Simple examples with default parameters
+
+**When to use**: First time using the package, need a quick overview
+
+### 2. Choosing Heat Pulse Velocity Methods *(new)*
+**Purpose**: Navigate the complexity of method selection
+**Contents**:
+- Decision tree for method selection
+- Detailed explanation of each method (HRM, MHR, T-max, DMA, etc.)
+- Species-specific recommendations
+- Seasonal optimisation strategies
+- Common pitfalls and solutions
+
+**When to use**: Unsure which calculation method to use, getting inconsistent results between methods, want to optimise accuracy
+
+### 3. Quality Control and Troubleshooting *(new)*
+**Purpose**: Diagnose and solve data quality issues
+**Contents**:
+- Comprehensive quality assessment workflow
+- Understanding and interpreting quality flags
+- Common problems: sensor failure, alignment issues, battery problems
+- Diagnostic plotting and analysis
+- Parameter sensitivity testing
+- Data filtering strategies
+
+**When to use**: Low success rates, strange velocity values, sensor problems, need to optimise data quality
+
+### 4. Complete Data Processing Workflows *(new)*
+**Purpose**: Real-world analysis pipelines for different research scenarios
+**Contents**:
+- **Workflow 1**: Single tree monitoring
+- **Workflow 2**: Multi-tree comparative studies
+- **Workflow 3**: Seasonal/long-term analysis
+- **Workflow 4**: High-frequency sub-daily analysis
+- **Workflow 5**: Automated processing pipeline
+- Batch processing examples
+- Integration with environmental data
+
+**When to use**: Need complete analysis framework, working with multiple files/trees, long-term studies, operational monitoring
+
+### 5. Interpreting Results and Understanding Output *(new)*
+**Purpose**: Understand what your results mean biologically
+**Contents**:
+- Heat pulse velocity vs sap flux density vs tree water use
+- Typical velocity ranges by species and conditions
+- Daily pattern interpretation
+- Quality assessment and success rate guidelines
+- Converting velocities to meaningful biological units
+- Environmental relationships and threshold responses
+- Troubleshooting unusual results
+
+**When to use**: Don't understand what velocity values mean, need to convert to sap flux, results seem unrealistic, preparing for publication
+
+## User Journey Maps
+
+### Research Student/New User
+```
+Getting Started → Method Selection → Quality Control → Interpretation
+```
+*Focus on understanding concepts and getting reliable basic results*
+
+### Experienced Researcher
+```
+Method Selection → Complete Workflows → Interpretation
+```
+*Focus on optimizing methods and scaling analysis*
+
+### Operational/Monitoring
+```
+Complete Workflows (Automated Pipeline) → Quality Control → Interpretation
+```
+*Focus on robust, repeatable processing systems*
+
+### Troubleshoot Problems
+```
+Quality Control → Method Selection → Getting Started (review basics)
+```
+*Focus on diagnosing and solving specific issues*
+
+## Common User Questions and Vignette Solutions
+
+| Question | Primary Vignette | Supporting Vignettes |
+|----------|------------------|---------------------|
+| "How do I get started?" | Getting Started | Method Selection |
+| "Which method should I use?" | Method Selection | Quality Control |
+| "My success rate is low" | Quality Control | Method Selection |
+| "Results seem unrealistic" | Interpretation | Quality Control |
+| "How do I process many files?" | Complete Workflows | Quality Control |
+| "What do these numbers mean?" | Interpretation | Getting Started |
+| "How do I compare between trees?" | Complete Workflows | Method Selection |
+| "How do I publish these results?" | Interpretation | Complete Workflows |
+| "Setting up monitoring system" | Complete Workflows (Pipeline) | Quality Control |
+
+## Integration with Package Features
+
+### Vignettes utilize these sapFluxR strengths:
+- **Automatic format detection** → Getting Started, Complete Workflows
+- **Multiple calculation methods** → Method Selection, Quality Control
+- **Quality control system** → Quality Control, Complete Workflows
+- **Diagnostic plotting** → Quality Control, Interpretation
+- **Batch processing capabilities** → Complete Workflows
+- **Comprehensive validation** → Quality Control, Getting Started
+
+### Advanced features covered:
+- `assess_data_quality()` → Quality Control
+- `recommend_methods()` → Method Selection
+- `filter_velocity_results()` → Quality Control, Complete Workflows
+- `compare_hpv_methods()` → Method Selection, Interpretation
+- `export_velocity_results()` → All workflows
+- Diagnostic plotting functions → Quality Control, Interpretation
+
+## Best Practices Across Vignettes
+
+### Consistent Recommendations:
+1. **Always validate data quality first**
+2. **Use multiple methods for comparison**
+3. **Apply appropriate quality control filters**
+4. **Document processing decisions**
+5. **Convert velocities to meaningful biological units**
+6. **Check results against biological expectations**
+
+### Common Workflows Referenced:
+1. Import → Validate → Assess Quality → Select Methods → Calculate → Filter → Analyze → Export
+2. Batch processing with consistent parameters
+3. Method comparison and validation
+4. Quality control at multiple stages
+5. Results interpretation and biological context
+
+## Future Vignette Ideas
+
+Based on user feedback, consider adding:
+- **"Advanced Statistical Analysis"** - Time series analysis, modelling, uncertainty quantification
+- **"Integration with Environmental Data"** - Linking sap flow to weather, soil, remote sensing
+- **"Scaling and Modelling"** - Stand-level estimates, process model integration
+- **"Species-Specific Guides"** - Detailed guidance for major species/groups
+- **"Field Installation and Maintenance"** - Hardware setup, troubleshooting sensors
+
+## Getting Help
+
+### If vignettes don't solve your issue:
+1. Check function documentation (`?function_name`)
+2. Review package NEWS.md for recent changes
+3. Search GitHub issues
+4. Post new issue with reproducible example
+
+### When reporting problems:
+- Specify which vignette(s) you followed
+- Include data quality assessment results
+- Provide method comparison results
+- Share relevant diagnostic plots
+
+## Contributing
+
+These vignettes represent common use cases, but every research situation is unique. If you develop useful modifications or entirely new workflows:
+
+1. Document your approach thoroughly
+2. Consider sharing as a case study
+3. Contribute back to the package community
+4. Help improve existing vignettes based on your experience
+
+The sapFluxR vignette ecosystem is designed to grow with user needs and experiences.

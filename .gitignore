@@ -1,0 +1,176 @@
+# ============================================================================
+# .gitignore for sapFluxR Package
+# Standard R package .gitignore with some custom additions
+# ============================================================================
+
+# ============================================================================
+# R PACKAGE BUILD ARTIFACTS (Keep ignored)
+# ============================================================================
+
+# R history and session data
+.Rhistory
+.Rapp.history
+.RData
+.Ruserdata
+
+# RStudio files
+.Rproj.user/
+
+# R data files from sessions
+*.RData
+*.rda
+*.rds
+
+# Package build outputs
+*.tar.gz
+*.zip
+*.tgz
+sapFluxR.Rcheck/
+*.Rcheck/
+
+# Compiled objects
+*.o
+*.so
+*.dll
+*.dylib
+
+# R documentation (if using roxygen2, these are auto-generated)
+# man/*.Rd  # Uncomment if you regenerate docs each time
+
+# Vignette outputs
+vignettes/*.html
+vignettes/*.pdf
+vignettes/*_cache/
+vignettes/*_files/
+vignettes/*.R
+
+# pkgdown site
+docs/
+_pkgdown.yml
+
+# knitr and R markdown temporary files
+*.utf8.md
+*.knit.md
+*_cache/
+*_files/
+
+# Translation temp files
+po/*~
+
+# Temporary files
+*~
+*.swp
+*.swo
+*-Ex.R
+
+# OAuth2 token
+.httr-oauth
+.secrets
+
+# ============================================================================
+# OPERATING SYSTEM FILES (Keep ignored)
+# ============================================================================
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+
+# Linux
+.directory
+.Trash-*
+
+# ============================================================================
+# IDE FILES (Keep ignored)
+# ============================================================================
+
+# Visual Studio Code
+.vscode/
+*.code-workspace
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+
+# Emacs
+\#*\#
+.\#*
+
+# JetBrains
+.idea/
+*.iml
+
+# ============================================================================
+# PERSONAL DEVELOPMENT FILES (Customize as needed)
+# ============================================================================
+
+# Archive and development directories
+.archive/
+.claude/
+.dev/
+
+# Test output files
+test_output.txt
+test_full_output.txt
+test_progressr.R
+
+# Personal temporary files
+_ul
+
+# ============================================================================
+# SENSITIVE FILES (Always keep ignored)
+# ============================================================================
+
+# Credentials and secrets
+*.key
+*.pem
+*.p12
+credentials.json
+secrets.json
+.env
+.env.local
+*_token.txt
+*_api_key.txt
+
+# ============================================================================
+# OPTIONAL: Documentation files you might not want to share initially
+# ============================================================================
+
+# Uncomment any of these if you want to keep them private:
+# IMPLEMENTATION_PLAN.md
+# PROBE_CONFIG_REFACTOR_PLAN.md
+# PARAMETER_CATEGORIZATION.md
+# REFACTOR_CHECKLIST.md
+# REFACTOR_SUMMARY.md
+# pseudo.md
+# README_RECOMMENDATIONS.md
+
+# ============================================================================
+# LARGE DATA FILES (If you have any)
+# ============================================================================
+
+# Add specific data files you don't want to upload
+# data-raw/large_file.csv
+# examples/big_dataset.txt
+
+# ============================================================================
+# END OF .gitignore
+# ============================================================================

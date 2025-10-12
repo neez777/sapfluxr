@@ -1,0 +1,123 @@
+# Simple Ratio Method - Example YAML Configuration
+# This is a basic example method for demonstration purposes
+
+method:
+  name: "SIMPLE_RATIO"
+  full_name: "Simple Temperature Ratio Method"
+  description: "Basic velocity calculation from maximum temperature ratio"
+  reference: "Example Method for YAML System Demonstration"
+  category: "ratio_based"
+
+# Input variables required for this method
+inputs:
+  required:
+    - name: "delatT_do"
+      description: "Temperature difference downstream outer"
+      type: "numeric_vector"
+    - name: "delatT_uo"
+      description: "Temperature difference upstream outer"
+      type: "numeric_vector"
+    - name: "diffusivity"
+      description: "Thermal diffusivity of sapwood (cm²/s)"
+      type: "numeric_scalar"
+      default: 0.0025
+    - name: "x"
+      description: "Distance from heat source (cm)"
+      type: "numeric_scalar"
+      default: 0.5
+
+# Output variables this method produces
+outputs:
+  - name: "Vh_outer"
+    description: "Heat pulse velocity for outer sensors (cm/hr)"
+    type: "numeric_scalar"
+  - name: "Vh_inner"
+    description: "Heat pulse velocity for inner sensors (cm/hr)"
+    type: "numeric_scalar"
+
+# Calculation steps
+calculation:
+  steps:
+    - name: "validate_inputs"
+      description: "Check that inputs are valid"
+      expression: |
+        if (all(is.na(delatT_do)) || all(is.na(delatT_uo))) {
+          warning("All temperature differences are NA")
+          Vh_outer <- NA_real_
+          Vh_inner <- NA_real_
+          return(list(outer = Vh_outer, inner = Vh_inner))
+        }
+
+    - name: "calculate_maximums"
+      description: "Find maximum temperature differences"
+      expression: |
+        max_do <- max(delatT_do, na.rm = TRUE)
+        max_uo <- max(delatT_uo, na.rm = TRUE)
+
+        # For inner sensors, we'll use a simplified approach
+        # In a real method, you'd have delatT_di and delatT_ui
+        max_di <- max_do * 0.8  # Simulate inner sensor response
+        max_ui <- max_uo * 0.8
+
+    - name: "calculate_velocity"
+      description: "Calculate velocity from temperature ratio"
+      expression: |
+        # Calculate outer sensor velocity
+        if (max_do <= 0 || max_uo <= 0) {
+          warning("Non-positive maximum temperatures for outer sensors")
+          Vh_outer <- NA_real_
+        } else {
+          ratio_outer <- max_do / max_uo
+          Vh_outer <- (diffusivity / x) * log(ratio_outer) * 3600
+        }
+
+        # Calculate inner sensor velocity
+        if (max_di <= 0 || max_ui <= 0) {
+          warning("Non-positive maximum temperatures for inner sensors")
+          Vh_inner <- NA_real_
+        } else {
+          ratio_inner <- max_di / max_ui
+          Vh_inner <- (diffusivity / x) * log(ratio_inner) * 3600
+        }
+
+# Method-specific parameters
+parameters:
+  - name: "diffusivity"
+    description: "Thermal diffusivity of sapwood"
+    type: "numeric"
+    range: [0, 0.01]
+    default: 0.0025
+    units: "cm²/s"
+  - name: "x"
+    description: "Distance from heat source"
+    type: "numeric"
+    range: [0, 2]
+    default: 0.5
+    units: "cm"
+
+# Quality assessment criteria
+quality_criteria:
+  - name: "valid_maximums"
+    description: "Maximum temperatures are positive"
+    check: "max_do > 0 && max_uo > 0"
+    severity: "error"
+  - name: "velocity_range"
+    description: "Velocity is within reasonable range"
+    check: "abs(Vh_outer) < 200 && abs(Vh_inner) < 200"
+    severity: "warning"
+  - name: "finite_results"
+    description: "Results are finite numbers"
+    check: "is.finite(Vh_outer) && is.finite(Vh_inner)"
+    severity: "error"
+
+# Method limitations and applicability
+limitations:
+  - "Requires clear temperature peaks"
+  - "Sensitive to measurement noise"
+  - "Assumes constant thermal properties"
+  - "Simplified inner sensor calculation"
+
+applicability:
+  velocity_range: [5, 100]  # cm/hr
+  probe_configurations: ["symmetrical", "asymmetrical"]
+  best_for: ["moderate_velocities", "low_noise_conditions", "demonstration"]

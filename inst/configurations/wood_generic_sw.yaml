@@ -1,0 +1,36 @@
+# Sap Flow Analysis Configuration - Wood Property Defaults
+# Generated on: 2025-09-24
+# Edit this file to customize your default wood parameters
+
+metadata:
+  config_name: Typical Softwood Properties
+  description: Default wood properties for temperate softwood species
+  created_date: '2025-09-24'
+  version: '1.0'
+  default: true
+
+wood_property:
+  thermal_diffusivity: 0.0025    # cm²/s, will be estimated from density and moisture if null
+  thermal_conductivity: null   # W/(m·K), will be estimated if null
+  volumetric_heat_capacity: null  # J/(m³·K), will be estimated if null
+  dry_density: 400            # kg/m³, oven-dry density
+  basic_density: 350          # kg/m³, oven-dry mass / green volume
+  moisture_content: 30        # %, moisture content on dry weight basis
+  species: unknown            # species identification
+  wood_type: softwood         # softwood/hardwood classification
+  temperature: 20             # °C, wood temperature during measurement
+  comments: Typical values for temperate softwood species
+
+# Tree-specific measurements (optional - can override per tree in R)
+tree_measurements:
+  dbh: null                   # cm, diameter at breast height
+  bark_thickness: null        # cm, bark thickness
+  sapwood_depth: null         # cm, sapwood depth
+  sapwood_area: null          # cm², conducting sapwood area
+  heartwood_radius: null      # cm, heartwood radius
+
+# Quality thresholds (species-specific defaults, can override in R)
+quality_thresholds:
+  max_velocity_cm_hr: 200     # cm/hr, upper bound for this species
+  min_velocity_cm_hr: -50     # cm/hr, lower bound (allows reverse flow)
+  temperature_range: [-10, 60]  # °C, acceptable temperature range

@@ -1,0 +1,322 @@
+---
+title: "Getting Started with sapFluxR"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting Started with sapFluxR}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 5
+)
+```
+
+## Introduction
+
+The **sapFluxR** package provides comprehensive tools for importing, processing, and analyzing sap flow data from ICT SFM1x sensors. This vignette will guide you through the basic workflow from data import to velocity calculation and analysis.
+
+```{r setup}
+library(sapFluxR)
+```
+
+## Basic Workflow
+
+### 1. Import Sap Flow Data
+
+The first step is importing your sap flow data. The package supports multiple formats and can automatically detect the format:
+
+```{r, eval=FALSE}
+# Automatic format detection (recommended)
+sap_data <- read_sap_data("path/to/your/data.txt")
+
+# Or specify format explicitly
+sap_data <- read_sap_data("path/to/your/data.txt", format = "ict_current")
+```
+
+The imported data includes:
+- **Diagnostics**: Battery and power information for each measurement cycle
+- **Measurements**: Temperature readings from the four sensors (do, di, uo, ui)
+- **Metadata**: File information and import parameters
+
+```{r, eval=FALSE}
+print(sap_data)
+```
+
+### 2. Data Validation
+
+Data validation is performed automatically during import, but you can also run it separately:
+
+```{r, eval=FALSE}
+validation <- validate_sap_data(sap_data)
+print(validation$summary)
+
+if (!validation$valid) {
+  print(validation$issues)
+}
+```
+
+### 3. Calculate Heat Pulse Velocities
+
+The core functionality is calculating heat pulse velocities using various methods:
+
+```{r, eval=FALSE}
+# Calculate using multiple methods
+vh_results <- calc_heat_pulse_velocity(
+  sap_data,
+  methods = c("HRM", "MHR", "DMA")
+)
+
+print(vh_results)
+```
+
+Available methods include:
+- **HRM**: Heat Ratio Method (best for low flows)
+- **MHR**: Maximum Heat Ratio (good for moderate flows)
+- **HRMXa/b**: Modified HRM variants
+- **Tmax_Coh**: T-max Cohen method (high flows)
+- **Tmax_Klu**: T-max Kluitenberg method (high flows, adjusted)
+- **DMA**: Dual Method Approach (automatic method switching)
+
+### 4. Customize Parameters
+
+You can customize calculation parameters for your specific sensor setup:
+
+```{r, eval=FALSE}
+# Custom parameters
+params <- list(
+  diffusivity = 0.0025,  # Thermal diffusivity (cm²/s)
+  x = 0.5,               # Distance from heat source (cm)
+  pre_pulse = 30,        # Pre-pulse period (sec)
+  HRM_start = 60,        # HRM analysis window start (sec)
+  HRM_end = 100,         # HRM analysis window end (sec)
+  L = 0.5,               # HRMX lower bound proportion
+  H = 0.8,               # HRMX upper bound proportion
+  tp_1 = 2               # Heat pulse duration (sec)
+)
+
+vh_results <- calc_heat_pulse_velocity(
+  sap_data,
+  methods = c("HRM", "MHR"),
+  parameters = params
+)
+```
+
+## Data Analysis
+
+### Summary Statistics
+
+Calculate summary statistics for your velocity results:
+
+```{r, eval=FALSE}
+# Overall statistics
+stats <- calc_velocity_stats(vh_results)
+print(stats)
+
+# Statistics by method
+stats_by_method <- calc_velocity_stats(vh_results, group_by = "method")
+print(stats_by_method)
+
+# Statistics by sensor position
+stats_by_position <- calc_velocity_stats(vh_results, group_by = "sensor_position")
+print(stats_by_position)
+```
+
+### Quality Control and Filtering
+
+Filter results based on quality flags and value ranges:
+
+```{r, eval=FALSE}
+# Keep only high-quality results
+clean_results <- filter_velocity_results(
+  vh_results,
+  quality_flags = "OK",
+  velocity_range = c(-10, 200)
+)
+
+# Filter by specific methods
+hrm_results <- filter_velocity_results(
+  vh_results,
+  methods = c("HRM"),
+  sensor_positions = "outer"
+)
+```
+
+Quality flags include:
+- **OK**: Normal results
+- **HIGH_VELOCITY**: Extremely high velocities (>200 cm/hr)
+- **NEGATIVE_FLOW**: Strong reverse flow (<-50 cm/hr)
+- **INFINITE**: Mathematical issues (infinite values)
+- **MISSING**: Missing or invalid data
+
+### Diagnostic Plots
+
+Create diagnostic plots to assess data quality:
+
+```{r, eval=FALSE}
+# Compare methods
+plot_velocity_diagnostics(vh_results, "methods_comparison")
+
+# Quality flag distribution
+plot_velocity_diagnostics(vh_results, "quality_flags")
+
+# Time series plot
+plot_velocity_diagnostics(vh_results, "time_series")
+
+# Histogram of velocities
+plot_velocity_diagnostics(vh_results, "histogram")
+```
+
+## Working with Different Data Formats
+
+### ICT Current Format (JSON-like)
+
+This is the current format used by ICT SFM1x sensors:
+
+```
+[{"date":"2024-11-15T10:00:00Z","bv":4.11,"bc":200.00,"bt":30.68,"ep":1,"ev":22.76,"ec":85.80,
+{"do":18.781,"di":18.588,"uo":18.818,"ui":18.652},
+{"do":18.781,"di":18.588,"uo":18.817,"ui":18.652}}]
+```
+
+### CSV Format
+
+For data exported to CSV format:
+
+```{r, eval=FALSE}
+sap_data <- read_sap_data("data.csv", format = "csv")
+```
+
+### Format Detection
+
+The package auto-detects formats during import via `read_sap_data(...)`. Supported formats include `ict_current`, `ict_legacy`, and `csv`.
+
+## Advanced Features
+
+### Unit Conversion
+
+Convert between different velocity units:
+
+```{r, eval=FALSE}
+# Convert cm/hr to mm/hr
+vh_mm_hr <- convert_velocity_units(vh_results$Vh_cm_hr,
+                                   from = "cm_hr",
+                                   to = "mm_hr")
+
+# Convert cm/hr to m/day
+vh_m_day <- convert_velocity_units(vh_results$Vh_cm_hr,
+                                   from = "cm_hr",
+                                   to = "m_day")
+```
+
+### Batch Processing
+
+Process multiple files at once:
+
+```{r, eval=FALSE}
+# Get list of data files
+files <- list.files("data/", pattern = "\\.txt$", full.names = TRUE)
+
+# Process all files
+results_list <- lapply(files, function(file) {
+  sap_data <- read_sap_data(file)
+  vh_results <- calc_heat_pulse_velocity(sap_data, methods = c("HRM", "DMA"))
+  vh_results$file <- basename(file)  # Add file identifier
+  return(vh_results)
+})
+
+# Combine all results
+all_results <- do.call(rbind, results_list)
+```
+
+### Export Results
+
+Export your processed data:
+
+```{r, eval=FALSE}
+# Basic export
+export_velocity_results(vh_results, "sap_velocities.csv")
+
+# Export with quality summary
+export_velocity_results(
+  vh_results,
+  "velocities_with_summary.csv",
+  include_quality_summary = TRUE
+)
+
+# Export filtered results
+export_velocity_results(
+  clean_results,
+  "clean_velocities.csv",
+  filter_results = TRUE,
+  quality_flags = "OK"
+)
+```
+
+## Understanding Heat Pulse Methods
+
+### Heat Ratio Method (HRM)
+
+Best for low flows and can detect reverse flow. Uses the ratio of downstream to upstream temperature increases:
+
+$$V_h = \frac{D}{x} \ln\left(\frac{\Delta T_d}{\Delta T_u}\right) \times 3600$$
+
+Where:
+- $D$ = thermal diffusivity (cm²/s)
+- $x$ = distance from heat source (cm)
+- $\Delta T_d$, $\Delta T_u$ = temperature increases downstream and upstream
+
+### Maximum Heat Ratio (MHR)
+
+Uses maximum temperature increases instead of time-averaged ratios:
+
+$$V_h = \frac{D}{x} \ln\left(\frac{\Delta T_{d,max}}{\Delta T_{u,max}}\right) \times 3600$$
+
+### T-max Methods
+
+Based on the time to reach maximum temperature after heat pulse:
+
+$$V_h = \sqrt{\frac{x^2 - 4Dt_m}{t_m^2}}$$
+
+Where $t_m$ is the time to maximum temperature.
+
+### Dual Method Approach (DMA)
+
+Automatically switches between HRM and T-max based on Péclet number:
+- If $\beta \leq 1$: use HRM
+- If $\beta > 1$: use T-max
+
+Where $\beta = \ln(\Delta T_{d,max} / \Delta T_{u,max})$
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Import Errors**: Check file format and path
+2. **Validation Failures**: Review data quality and sensor connections
+3. **Calculation Errors**: Verify thermal diffusivity and probe spacing parameters
+4. **Extreme Values**: Check for sensor malfunctions or environmental conditions
+
+### Getting Help
+
+```{r, eval=FALSE}
+# Check package status
+check_package_status()
+
+# Get help for specific functions
+?read_sap_data
+?calc_heat_pulse_velocity
+```
+
+For more help, see the package documentation or visit our GitHub repository.
+
+## References
+
+- Burgess, S. S. O., et al. (2001). An improved heat pulse method to measure low and reverse rates of sap flow in woody plants. *Tree Physiology*, 21(9), 589-598.
+- Cohen, Y., et al. (1981). Calibrated heat pulse method for determining water uptake rates in cotton. *Plant, Cell & Environment*, 4(5), 391-397.
+- Kluitenberg, G. J., & Ham, J. M. (2004). Improved theory for calculating sap flow with the heat pulse method. *Agricultural and Forest Meteorology*, 126(1-2), 169-173.
+- López, R., et al. (2021). A new heat pulse method to estimate transpiration from potted plants. *Plant and Soil*, 469(1-2), 503-523.

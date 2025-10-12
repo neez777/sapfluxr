@@ -1,0 +1,148 @@
+# Heat Ratio Method (HRM) - YAML Configuration
+# Burgess et al. (2001) Tree Physiology 21:589-598
+
+method:
+  name: "HRM"
+  full_name: "Heat Ratio Method"
+  description: "Calculates velocity from temperature ratio during sampling window"
+  reference: "Burgess et al. (2001) Tree Physiology 21:589-598"
+  category: "ratio_based"
+
+# Input variables required for this method
+inputs:
+  required:
+    - name: "dTratio_douo"
+      description: "Temperature ratio downstream outer / upstream outer"
+      type: "numeric_vector"
+    - name: "dTratio_diui"
+      description: "Temperature ratio downstream inner / upstream inner"
+      type: "numeric_vector"
+    - name: "HRM_period"
+      description: "Logical vector defining sampling window"
+      type: "logical_vector"
+    - name: "diffusivity"
+      description: "Thermal diffusivity of sapwood (cm²/s)"
+      type: "numeric_scalar"
+      default: 0.0025
+    - name: "x"
+      description: "Distance from heat source (cm)"
+      type: "numeric_scalar"
+      default: 0.5
+
+# Output variables this method produces
+outputs:
+  - name: "Vh_outer"
+    description: "Heat pulse velocity for outer sensors (cm/hr)"
+    type: "numeric_scalar"
+  - name: "Vh_inner"
+    description: "Heat pulse velocity for inner sensors (cm/hr)"
+    type: "numeric_scalar"
+
+# Calculation steps
+calculation:
+  steps:
+    - name: "validate_inputs"
+      description: "Validate HRM_period is logical and lengths match"
+      expression: |
+        if (!is.logical(HRM_period)) {
+          stop("HRM_period must be a logical vector")
+        }
+        if (length(HRM_period) != length(dTratio_douo) ||
+            length(HRM_period) != length(dTratio_diui)) {
+          stop("HRM_period length must match temperature ratio vector lengths")
+        }
+
+    - name: "check_sampling_period"
+      description: "Check if there are valid HRM sampling periods"
+      expression: |
+        hrm_indices <- which(HRM_period)
+        if (length(hrm_indices) == 0) {
+          warning("No valid HRM sampling period")
+          Vh_outer <- NA_real_
+          Vh_inner <- NA_real_
+          return(list(outer = Vh_outer, inner = Vh_inner))
+        }
+
+    - name: "extract_ratios_for_window"
+      description: "Get ratios for HRM period"
+      expression: |
+        hrm_ratios_outer <- dTratio_douo[HRM_period]
+        hrm_ratios_inner <- dTratio_diui[HRM_period]
+
+    - name: "validate_ratio_data"
+      description: "Check for valid ratio data"
+      expression: |
+        valid_outer <- !is.na(hrm_ratios_outer) & is.finite(hrm_ratios_outer) & hrm_ratios_outer > 0
+        valid_inner <- !is.na(hrm_ratios_inner) & is.finite(hrm_ratios_inner) & hrm_ratios_inner > 0
+
+        if (sum(valid_outer) == 0) {
+          warning("All temperature ratios are NA for outer sensors in HRM period")
+          dTratio_HRM_douo_mean <- NA_real_
+        } else {
+          dTratio_HRM_douo_mean <- mean(hrm_ratios_outer[valid_outer], na.rm = TRUE)
+        }
+
+        if (sum(valid_inner) == 0) {
+          warning("All temperature ratios are NA for inner sensors in HRM period")
+          dTratio_HRM_diui_mean <- NA_real_
+        } else {
+          dTratio_HRM_diui_mean <- mean(hrm_ratios_inner[valid_inner], na.rm = TRUE)
+        }
+
+    - name: "calculate_velocities"
+      description: "Calculate HRM velocities using logarithmic formula"
+      expression: |
+        # Calculate velocities
+        if (is.na(dTratio_HRM_douo_mean) || dTratio_HRM_douo_mean <= 0) {
+          Vh_outer <- NA_real_
+        } else {
+          Vh_outer <- diffusivity / x * log(dTratio_HRM_douo_mean) * 3600
+        }
+
+        if (is.na(dTratio_HRM_diui_mean) || dTratio_HRM_diui_mean <= 0) {
+          Vh_inner <- NA_real_
+        } else {
+          Vh_inner <- diffusivity / x * log(dTratio_HRM_diui_mean) * 3600
+        }
+
+# Method-specific parameters and their validation
+parameters:
+  - name: "diffusivity"
+    description: "Thermal diffusivity of sapwood"
+    type: "numeric"
+    range: [0, 0.01]
+    default: 0.0025
+    units: "cm²/s"
+  - name: "x"
+    description: "Distance from heat source"
+    type: "numeric"
+    range: [0, 2]
+    default: 0.5
+    units: "cm"
+
+# Quality assessment criteria
+quality_criteria:
+  - name: "valid_sampling_window"
+    description: "HRM sampling window contains valid data"
+    check: "length(hrm_indices) > 0"
+    severity: "error"
+  - name: "positive_temperature_ratios"
+    description: "Temperature ratios are positive"
+    check: "all(hrm_ratios_outer > 0, na.rm = TRUE) && all(hrm_ratios_inner > 0, na.rm = TRUE)"
+    severity: "warning"
+  - name: "velocity_range"
+    description: "Calculated velocity is within reasonable range"
+    check: "abs(Vh_outer) < 200 && abs(Vh_inner) < 200"
+    severity: "warning"
+
+# Method limitations and applicability
+limitations:
+  - "Requires stable sampling window after heat pulse"
+  - "Less accurate at very low velocities"
+  - "Sensitive to temperature measurement noise"
+  - "Assumes constant thermal diffusivity"
+
+applicability:
+  velocity_range: [-10, 50]  # cm/hr
+  probe_configurations: ["symmetrical"]
+  best_for: ["low_to_moderate_velocities", "stable_conditions"]

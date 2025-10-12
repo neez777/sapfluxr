@@ -1,0 +1,132 @@
+flowchart TD
+    %% Step 1: Raw Data Processing
+    A[Raw Temperature Files<br/>SFM1x Logger Data] --> B[Extract Raw Temperatures<br/>Needle Temperature Mode]
+    B --> C[Process Raw Temperatures<br/>Apply Algorithm Choice]
+    C --> C1[HRM Algorithm]
+    C --> C2[MHR Algorithm] 
+    C --> C3[HRMx Algorithm]
+    C --> C4[T-max Algorithm]
+    C --> C5[DMA Algorithm]
+    
+    C1 --> D[Raw Heat Pulse Velocity<br/>Vh cm/h]
+    C2 --> D
+    C3 --> D
+    C4 --> D
+    C5 --> D
+    
+    %% Optional Interpolation
+    D --> E{Data Quality<br/>Check Required?}
+    E -->|Good Quality| F[Step 2: Filter & Smooth]
+    E -->|Poor Quality/Missing| E1[Data Interpolation<br/>Correct erroneous data]
+    E1 --> E2[Substitute alternate algorithm data<br/>e.g. MHR for erroneous HRM]
+    E1 --> E3[Fill missing data gaps<br/>Sensor failure compensation]
+    E2 --> F
+    E3 --> F
+    
+    %% Step 2: Filtering and Smoothing
+    F[Filter and Smooth Raw Data<br/>Vh cm/h] --> F1[Apply Data Filters<br/>Remove spikes & outliers]
+    F --> F2[Range Check<br/>Typical: -10 to +30 cm/h]
+    F1 --> G[Apply Smoothing Algorithm]
+    F2 --> G
+    G --> G1[Single point interpolation<br/>Average of adjacent points]
+    G --> G2[Leave consecutive gaps<br/>as missing data]
+    G --> G3[Optional: Curve fitting<br/>for larger gaps]
+    
+    G1 --> H[Step 3: Spacing Correction<br/>Probe Misalignment]
+    G2 --> H
+    G3 --> H
+    
+    %% Step 3: Probe Spacing Correction  
+    H --> H1[Determine Zero Offset<br/>Visual assessment of diurnal traces]
+    H1 --> H2[Identify minimum Vh<br/>Pre-dawn, zero flow conditions]
+    H2 --> H3[Apply Correction Equation<br/>Vh = a*Vh + b]
+    H3 --> H4[Use lookup table<br/>Coefficients for -10 to +10 cm/h]
+    H4 --> H5{Zero Offset<br/>Acceptable?}
+    H5 -->|±5 cm/h| I[Step 4: Wound Correction<br/>Vh cm/h corrected for spacing]
+    H5 -->|±5-10 cm/h| H6[Treat with Caution<br/>Major misalignment]
+    H5 -->|\>±10 cm/h| H7[Discard Data<br/>Uncorrectable misalignment]
+    H6 --> I
+    
+    %% Step 4: Wound Correction (Always Applied for SFM1x)
+    I --> I1[Measure Initial Wound Diameter<br/>Wi cm at start]
+    I --> I2[Measure Final Wound Diameter<br/>Wf cm at end]
+    I1 --> J[Calculate Daily Wound Increment<br/>r = Wf-Wi/N cm/day]
+    I2 --> J
+    J --> J1[Calculate Daily Wound Diameter<br/>W = Wi + n*r]
+    J1 --> J2[Apply SFM1x Wound Correction<br/>Vc = 6.9192*W + 0.5382*Vh]
+    J2 --> K[Step 5: Convert HPV to SFD<br/>Vc cm/h → Jv cm³/cm²/h]
+    
+    %% Step 5: Sap Flux Density Conversion
+    K --> K1[Apply Conversion Equation<br/>Jv = Vh * Y * Z]
+    K1 --> K2[Thermal Diffusivity Correction<br/>Y coefficient]
+    K1 --> K3[SFD Conversion Factor<br/>Z coefficient] 
+    K2 --> L[Sap Flux Density<br/>Jv cm³/cm²/h]
+    K3 --> L
+    
+    %% Step 6: Determine Sap Flux for Rings
+    L --> M[Step 6: Determine Sap Flux<br/>Q = As * Jv]
+    M --> M1{Sapwood Depth<br/>Classification}
+    
+    %% Sapwood depth scenarios
+    M1 -->|< 10mm| M2[Single Outer Ring<br/>Qo = Aso*Vso]
+    M1 -->|10-20mm| M3[Outer + Inner Rings<br/>Qo = Aso*Vso<br/>Qi = Asi*Vso/2]
+    M1 -->|20-25mm| M4[Outer + Inner Rings<br/>Qo = Aso*Vso<br/>Qi = Asi*Vsi]
+    M1 -->|\> 25mm| M5[Outer + Inner + Innermost<br/>Qo = Aso*Vso<br/>Qi = Asi*Vsi<br/>Qim = Asim*Vsi/2]
+    
+    M2 --> N[Step 7: Total Sap Flux<br/>Qp cm³/h]
+    M3 --> N
+    M4 --> N
+    M5 --> N
+    
+    %% Step 7: Total Plant Sap Flux
+    N --> N1[Sum All Ring Fluxes<br/>Qp = Qo + Qi + Qim]
+    
+    %% Step 8: Mean Sap Flux Density
+    N1 --> O[Step 8: Mean SFD<br/>Sapwood-area-weighted]
+    O --> O1[Calculate Qps<br/>Qps = Qp/As cm³/h/cm²]
+    O1 --> O2[Total Sapwood Area<br/>As = Ao + Ai + Aim]
+    O --> O3[Optional: Normalise<br/>Qpsn = Qps/Qps_max]
+    O --> O4[Optional: Per Leaf Area<br/>Qpl = Qp/Al cm³/h/m²]
+    
+    %% Step 9: Daily Totals
+    O1 --> P[Step 9: Daily Integration<br/>24-hour totals]
+    O2 --> P
+    O3 --> P
+    O4 --> P
+    
+    P --> P1[Daily Mean SFD<br/>Jvm cm³/cm²/day]
+    P --> P2[Daily Total Sap Flux<br/>Qp cm³/day or L/day]
+    P1 --> P3[For half-hourly data<br/>Sum 48 measurements ÷ 2]
+    P2 --> P3
+    P --> P4[Optional: Daily Normalisation<br/>Relative to period maximum]
+
+    %% Final Output
+    P1 --> Q[Final Output<br/>Processed Sap Flow Data]
+    P2 --> Q
+    P3 --> Q
+    P4 --> Q
+    
+    %% Styling
+    classDef step1 fill:#e3f2fd,stroke:#0277bd,stroke-width:2px
+    classDef step2 fill:#f1f8e9,stroke:#33691e,stroke-width:2px  
+    classDef step3 fill:#fff3e0,stroke:#ef6c00,stroke-width:2px
+    classDef step4 fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    classDef step5 fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef step6 fill:#e8f5e8,stroke:#2e7d32,stroke-width:2px
+    classDef step7 fill:#fff8e1,stroke:#f57f17,stroke-width:2px
+    classDef step8 fill:#e1f5fe,stroke:#0288d1,stroke-width:2px
+    classDef step9 fill:#fafafa,stroke:#424242,stroke-width:2px
+    classDef decision fill:#ffebee,stroke:#d32f2f,stroke-width:2px
+    classDef output fill:#e8f5e8,stroke:#1b5e20,stroke-width:3px
+    
+    class A,B,C,C1,C2,C3,C4,C5,D step1
+    class F,F1,F2,G,G1,G2,G3 step2
+    class H,H1,H2,H3,H4,H6,H7 step3
+    class I,I1,I2,J,J1,J2 step4
+    class K,K1,K2,K3,L step5
+    class M,M2,M3,M4,M5 step6
+    class N,N1 step7
+    class O,O1,O2,O3,O4 step8
+    class P,P1,P2,P3,P4 step9
+    class E,H5,M1 decision
+    class Q output

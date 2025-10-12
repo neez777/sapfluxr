@@ -1,0 +1,325 @@
+flowchart TD
+    %% ===================================================================
+    %% sapFluxR Package - Detailed Function and Data Flow Diagram
+    %% Shows complete function pathways, configuration options, and data flow
+    %% ===================================================================
+
+    %% Entry Points - Data Import
+    START[Start: Raw Data Files]
+
+    %% Stage 1: Data Import (Multiple Entry Points)
+    START --> IMPORT{Data Source Type?}
+    IMPORT -->|Single File| READ[read_sap_data<br/>Auto-detect format]
+    IMPORT -->|Multiple Files| READMULTI[read_multiple_sap_data<br/>Batch import]
+    IMPORT -->|Custom Format| READCUSTOM[Custom parser<br/>read_ict_current/legacy/csv]
+
+    %% Format Detection & Validation
+    READ --> DETECT[detect_format<br/>ICT Current/Legacy/CSV]
+    DETECT --> PARSE[Parse data<br/>diagnostics + measurements]
+    READMULTI --> PARSEMULTI[Parse multiple<br/>combine_multiple_sap_data]
+    READCUSTOM --> PARSE
+
+    PARSE --> VALIDATE[validate_sap_data<br/>Structure, ranges, temporal]
+    PARSEMULTI --> VALIDATE
+
+    VALIDATE --> SAPDATA[(sap_data object<br/>diagnostics, measurements,<br/>metadata, validation)]
+
+    %% ===================================================================
+    %% Configuration Pathways (Parallel to main pipeline)
+    %% ===================================================================
+
+    %% Probe Configuration Branch
+    CONFIG_START[Configuration Options]
+
+    CONFIG_START --> PROBE_PATH{Probe Configuration}
+    PROBE_PATH -->|Auto-detect| DETECT_PROBE[detect_probe_config<br/>Analyze sensor positions]
+    PROBE_PATH -->|Load from name| LOAD_PROBE[load_probe_config<br/>symmetric/asymmetric/...]
+    PROBE_PATH -->|Custom| CUSTOM_PROBE[create_custom_probe_config<br/>Define positions & methods]
+    PROBE_PATH -->|List available| LIST_PROBE[list_available_probe_configs<br/>Show options]
+
+    DETECT_PROBE --> PROBE_OBJ[(ProbeConfiguration<br/>sensor positions,<br/>compatible methods,<br/>priorities)]
+    LOAD_PROBE --> PROBE_OBJ
+    CUSTOM_PROBE --> PROBE_OBJ
+
+    %% Wood Properties Branch
+    CONFIG_START --> WOOD_PATH{Wood Properties}
+    WOOD_PATH -->|Load preset| LOAD_WOOD[load_wood_properties<br/>eucalyptus/pine/generic]
+    WOOD_PATH -->|Custom YAML| CUSTOM_WOOD_YAML[load_wood_properties<br/>custom YAML file]
+    WOOD_PATH -->|Create custom| CREATE_WOOD[create_custom_wood_properties<br/>Define all parameters]
+    WOOD_PATH -->|List available| LIST_WOOD[list_available_wood_properties<br/>Show options]
+    WOOD_PATH -->|Use defaults| DEFAULT_WOOD[get_default_wood_properties<br/>Generic softwood]
+
+    LOAD_WOOD --> WOOD_OBJ[(WoodProperties<br/>thermal diffusivity,<br/>density, moisture,<br/>tree measurements)]
+    CUSTOM_WOOD_YAML --> WOOD_OBJ
+    CREATE_WOOD --> WOOD_OBJ
+    DEFAULT_WOOD --> WOOD_OBJ
+
+    %% ===================================================================
+    %% Main Processing Pipeline Decision Point
+    %% ===================================================================
+
+    SAPDATA --> PIPELINE_CHOICE{Processing Approach?}
+
+    %% Option 1: Unified Pipeline (Recommended)
+    PIPELINE_CHOICE -->|Unified Pipeline<br/>Recommended| PROCESS[process_sap_data<br/>Complete automated workflow]
+
+    PROBE_OBJ --> PROCESS
+    WOOD_OBJ --> PROCESS
+
+    PROCESS --> ASSESS_QUALITY[assess_data_quality<br/>Signal quality, SNR,<br/>temporal patterns]
+
+    ASSESS_QUALITY --> QUALITY_RESULT{Quality<br/>Assessment}
+    QUALITY_RESULT -->|Excellent/Good| RECOMMEND[recommend_methods<br/>Based on config + quality]
+    QUALITY_RESULT -->|Fair| RECOMMEND_CAUTION[recommend_methods<br/>+ Quality warnings]
+    QUALITY_RESULT -->|Poor| QUALITY_WARN[Generate quality warnings<br/>Suggest data inspection]
+
+    RECOMMEND --> METHOD_LIST[Recommended method list<br/>with reasoning]
+    RECOMMEND_CAUTION --> METHOD_LIST
+    QUALITY_WARN --> METHOD_LIST
+
+    METHOD_LIST --> CALC_HPV_MAIN
+
+    %% Option 2: Manual Step-by-Step
+    PIPELINE_CHOICE -->|Manual Step-by-Step<br/>Advanced users| MANUAL_START[Manual workflow]
+
+    PROBE_OBJ --> MANUAL_START
+    WOOD_OBJ --> MANUAL_START
+
+    MANUAL_START --> MANUAL_ASSESS[assess_data_quality<br/>Optional]
+    MANUAL_ASSESS --> MANUAL_METHOD{Method Selection}
+
+    MANUAL_METHOD -->|Auto-select| DETECT_OPTIMAL[detect_optimal_method<br/>Analyze temperature data]
+    MANUAL_METHOD -->|Specify methods| USER_METHODS[User-specified<br/>method list]
+    MANUAL_METHOD -->|Try all| ALL_METHODS[All compatible<br/>methods]
+
+    DETECT_OPTIMAL --> CALC_HPV_MAIN
+    USER_METHODS --> CALC_HPV_MAIN
+    ALL_METHODS --> CALC_HPV_MAIN
+
+    %% Option 3: Advanced/Research
+    PIPELINE_CHOICE -->|Advanced/Research| ADVANCED_START[Advanced workflow]
+
+    ADVANCED_START --> UNIFIED_HPV[calc_unified_hpv<br/>Multi-method with auto-selection]
+    ADVANCED_START --> YAML_METHOD[calc_heat_pulse_velocity_yaml<br/>Custom YAML methods]
+
+    UNIFIED_HPV --> CALC_HPV_MAIN
+    YAML_METHOD --> CALC_HPV_MAIN
+
+    %% ===================================================================
+    %% Core HPV Calculation (Multiple Method Execution)
+    %% ===================================================================
+
+    CALC_HPV_MAIN[calc_heat_pulse_velocity<br/>Main calculation function]
+
+    CALC_HPV_MAIN --> METHOD_EXEC{Execute Methods}
+
+    %% Core Methods
+    METHOD_EXEC -->|HRM| CALC_HRM[calc_hrm<br/>Heat Ratio Method]
+    METHOD_EXEC -->|MHR| CALC_MHR[calc_mhr<br/>Maximum Heat Ratio]
+    METHOD_EXEC -->|HRMXa/b| CALC_HRMX[calc_hrmx<br/>Modified HRM variants]
+    METHOD_EXEC -->|Tmax| CALC_TMAX[calc_tmax_coh/klu<br/>Time-to-peak methods]
+    METHOD_EXEC -->|DMA| CALC_DMA[calc_dma<br/>Dual Method Approach]
+
+    %% Advanced Methods
+    METHOD_EXEC -->|CHPM| CALC_CHPM[calc_chpm<br/>Calibrated Half-Max Point]
+    METHOD_EXEC -->|DRM| CALC_DRM[calc_drm<br/>Double Ratio Method]
+
+    %% All methods converge
+    CALC_HRM --> VH_RESULTS[(vh_results<br/>datetime, pulse_id,<br/>method, sensor_position,<br/>Vh_cm_hr, quality_flag)]
+    CALC_MHR --> VH_RESULTS
+    CALC_HRMX --> VH_RESULTS
+    CALC_TMAX --> VH_RESULTS
+    CALC_DMA --> VH_RESULTS
+    CALC_CHPM --> VH_RESULTS
+    CALC_DRM --> VH_RESULTS
+
+    %% ===================================================================
+    %% Quality Control & Method Comparison (Stage 5 & 10)
+    %% ===================================================================
+
+    VH_RESULTS --> QC_CHOICE{Quality Control &<br/>Comparison?}
+
+    QC_CHOICE -->|Compare methods| COMPARE_METHODS[compare_hpv_methods<br/>Statistics, correlations,<br/>Bland-Altman]
+    QC_CHOICE -->|Diagnose sensors| DIAGNOSE[diagnose_sensor_performance<br/>Battery, sensors, alignment]
+    QC_CHOICE -->|Detect outliers| DETECT_OUT[detect_sensor_outliers<br/>IQR/zscore/MAD]
+    QC_CHOICE -->|Validate alignment| VALIDATE_ALIGN[validate_probe_alignment_advanced<br/>Symmetry analysis]
+    QC_CHOICE -->|Skip QC| TEMPORAL_CHOICE
+
+    COMPARE_METHODS --> QC_RESULTS[(QC Results<br/>Comparison stats,<br/>diagnostics,<br/>recommendations)]
+    DIAGNOSE --> QC_RESULTS
+    DETECT_OUT --> QC_RESULTS
+    VALIDATE_ALIGN --> QC_RESULTS
+
+    QC_RESULTS --> PLOT_QC{Generate<br/>Diagnostic Plots?}
+    PLOT_QC -->|Yes| PLOT_COMPARE[plot_method_comparison<br/>plot_diagnostics<br/>plot_temperature_data]
+    PLOT_QC -->|No| TEMPORAL_CHOICE
+    PLOT_COMPARE --> TEMPORAL_CHOICE
+
+    %% ===================================================================
+    %% Temporal Processing & Aggregation (Stage 6)
+    %% ===================================================================
+
+    TEMPORAL_CHOICE{Temporal Processing?}
+
+    TEMPORAL_CHOICE -->|Aggregate| AGGREGATE[aggregate_velocity_temporal<br/>hourly/daily/weekly/monthly]
+    TEMPORAL_CHOICE -->|Interpolate gaps| INTERPOLATE[interpolate_missing_velocity<br/>linear/spline/locf/nocb]
+    TEMPORAL_CHOICE -->|Both| AGGREGATE
+    AGGREGATE --> INTERPOLATE
+    TEMPORAL_CHOICE -->|Skip| SCALING_CHOICE
+
+    INTERPOLATE --> VH_PROCESSED[(Processed vh_results<br/>Aggregated and/or<br/>gap-filled)]
+
+    VH_PROCESSED --> SCALING_CHOICE
+    VH_RESULTS --> SCALING_CHOICE
+
+    %% ===================================================================
+    %% Scaling to Tree-Level Flux (Stages 7-9)
+    %% ===================================================================
+
+    SCALING_CHOICE{Scale to<br/>Tree Level?}
+
+    SCALING_CHOICE -->|Yes - Full scaling| FLUX_DENSITY[calc_sap_flux_density<br/>Vh → Js]
+    SCALING_CHOICE -->|No - Velocity only| EXPORT_CHOICE
+
+    %% Stage 7: Flux Density
+    WOOD_OBJ --> FLUX_DENSITY
+
+    FLUX_DENSITY --> FLUX_OBJ[(sap_flux_density<br/>Js_g_m2_s<br/>Js_kg_m2_hr<br/>Js_L_m2_day)]
+
+    FLUX_OBJ --> SAPWOOD_CHOICE{Tree<br/>measurements<br/>available?}
+
+    %% Stage 8: Sapwood Area
+    SAPWOOD_CHOICE -->|Yes - Direct| SAPWOOD_DIRECT[Use measurements<br/>from WoodProperties]
+    SAPWOOD_CHOICE -->|Yes - Calculate| CALC_SAPWOOD[calc_sapwood_area<br/>from DBH]
+    SAPWOOD_CHOICE -->|No| EXPORT_CHOICE
+
+    SAPWOOD_DIRECT --> SAPWOOD_OBJ[(sapwood_area<br/>sapwood_area_cm2<br/>sapwood_area_m2)]
+    CALC_SAPWOOD --> SAPWOOD_OBJ
+
+    %% Stage 9: Tree Water Use
+    SAPWOOD_OBJ --> TREE_FLUX[calc_tree_sap_flux<br/>Scale to whole-tree]
+
+    TREE_FLUX --> VARIATION{Account for<br/>spatial variation?}
+
+    VARIATION -->|Radial| RADIAL[Apply radial correction<br/>linear/exponential]
+    VARIATION -->|Azimuthal| AZIMUTHAL[Apply azimuthal correction<br/>cardinal directions]
+    VARIATION -->|Both| RADIAL
+    RADIAL --> AZIMUTHAL
+    VARIATION -->|None| TREE_RESULTS
+
+    AZIMUTHAL --> TREE_RESULTS[(tree_sap_flux<br/>Q_L_hr<br/>Q_L_day<br/>Q_kg_day)]
+
+    TREE_RESULTS --> EXPORT_CHOICE
+
+    %% ===================================================================
+    %% Multi-Tree Comparison & Analysis
+    %% ===================================================================
+
+    PARSEMULTI --> MULTI_CHOICE{Multi-tree<br/>Analysis?}
+
+    MULTI_CHOICE -->|Process individually| PROCESS
+    MULTI_CHOICE -->|Batch process| BATCH[batch_process_sap_flow<br/>Parallel processing]
+    MULTI_CHOICE -->|Compare trees| COMPARE_TREES[compare_trees<br/>Statistical tests,<br/>temporal patterns]
+
+    BATCH --> BATCH_RESULTS[(Batch results<br/>Multiple vh_results)]
+    COMPARE_TREES --> TREE_COMPARE[(Tree comparison<br/>ANOVA, temporal patterns,<br/>method performance)]
+
+    BATCH_RESULTS --> EXPORT_CHOICE
+    TREE_COMPARE --> EXPORT_CHOICE
+
+    %% ===================================================================
+    %% Reporting & Export (Final Stage)
+    %% ===================================================================
+
+    EXPORT_CHOICE{Export &<br/>Reporting?}
+
+    EXPORT_CHOICE -->|Generate report| REPORT_TYPE{Report Type}
+
+    REPORT_TYPE -->|Diagnostic| DIAG_REPORT[generate_diagnostic_report<br/>Data quality, methods,<br/>recommendations]
+    REPORT_TYPE -->|Analysis| ANALYSIS_REPORT[generate_analysis_report<br/>Statistical tests,<br/>visualizations]
+    REPORT_TYPE -->|Custom| CUSTOM_REPORT[Custom report template]
+
+    DIAG_REPORT --> REPORT_FILES[HTML/PDF/MD Report]
+    ANALYSIS_REPORT --> REPORT_FILES
+    CUSTOM_REPORT --> REPORT_FILES
+
+    EXPORT_CHOICE -->|Export data| EXPORT_TYPE{Export Format}
+
+    EXPORT_TYPE -->|CSV| EXPORT_CSV[export_sap_data<br/>export_velocity_results<br/>CSV format]
+    EXPORT_TYPE -->|Excel| EXPORT_XLSX[export_sap_data<br/>XLSX format]
+    EXPORT_TYPE -->|JSON| EXPORT_JSON[export_sap_data<br/>JSON format]
+    EXPORT_TYPE -->|RDS| EXPORT_RDS[export_sap_data<br/>RDS format]
+
+    EXPORT_CSV --> DATA_FILES[Exported Data Files]
+    EXPORT_XLSX --> DATA_FILES
+    EXPORT_JSON --> DATA_FILES
+    EXPORT_RDS --> DATA_FILES
+
+    EXPORT_CHOICE -->|Visualizations| VIZ_TYPE{Visualization Type}
+
+    VIZ_TYPE -->|Time series| PLOT_TS[plot_hpv_timeseries<br/>Velocity over time]
+    VIZ_TYPE -->|Temperature| PLOT_TEMP[plot_temperature_data<br/>Raw sensor data]
+    VIZ_TYPE -->|Diagnostics panel| PLOT_DIAG[plot_diagnostics<br/>Comprehensive panel]
+    VIZ_TYPE -->|Method comparison| PLOT_METHOD[plot_method_comparison<br/>Scatter, Bland-Altman]
+    VIZ_TYPE -->|Custom| PLOT_CUSTOM[Custom ggplot2<br/>with theme_sapfluxr]
+
+    PLOT_TS --> SAVE_PLOT[save_publication_plot<br/>PNG/PDF/SVG]
+    PLOT_TEMP --> SAVE_PLOT
+    PLOT_DIAG --> SAVE_PLOT
+    PLOT_METHOD --> SAVE_PLOT
+    PLOT_CUSTOM --> SAVE_PLOT
+
+    SAVE_PLOT --> PLOT_FILES[Publication Plots]
+
+    %% Final outputs
+    REPORT_FILES --> END[Complete Analysis]
+    DATA_FILES --> END
+    PLOT_FILES --> END
+    EXPORT_CHOICE -->|No export| END
+
+    %% ===================================================================
+    %% Utility Functions (Can be called at various points)
+    %% ===================================================================
+
+    UTILS[Utility Functions]
+
+    UTILS --> FILTER[filter_velocity_results<br/>Quality, range, method]
+    UTILS --> CONVERT[convert_velocity_units<br/>cm/hr ↔ mm/hr ↔ m/day]
+    UTILS --> STATS[calc_velocity_stats<br/>calc_enhanced_statistics<br/>Summary statistics]
+    UTILS --> CHECK[check_package_status<br/>Version and dependencies]
+
+    FILTER -.-> VH_RESULTS
+    CONVERT -.-> VH_RESULTS
+    STATS -.-> VH_RESULTS
+
+    %% ===================================================================
+    %% Styling - Color-coded by workflow stage
+    %% ===================================================================
+
+    classDef import fill:#e3f2fd,stroke:#1976d2,stroke-width:2px,color:#000
+    classDef config fill:#fff3e0,stroke:#f57c00,stroke-width:2px,color:#000
+    classDef process fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px,color:#000
+    classDef calculate fill:#e8f5e9,stroke:#388e3c,stroke-width:2px,color:#000
+    classDef quality fill:#fff8e1,stroke:#fbc02d,stroke-width:2px,color:#000
+    classDef temporal fill:#e0f2f1,stroke:#00796b,stroke-width:2px,color:#000
+    classDef scaling fill:#fce4ec,stroke:#c2185b,stroke-width:2px,color:#000
+    classDef export fill:#efebe9,stroke:#5d4037,stroke-width:2px,color:#000
+    classDef data fill:#e1f5fe,stroke:#0288d1,stroke-width:3px,color:#000
+    classDef decision fill:#ffebee,stroke:#d32f2f,stroke-width:2px,color:#000
+    classDef utility fill:#f5f5f5,stroke:#616161,stroke-width:1px,color:#000
+    classDef endpoint fill:#c8e6c9,stroke:#2e7d32,stroke-width:3px,color:#000
+
+    %% Apply styles
+    class START,IMPORT,READ,READMULTI,READCUSTOM,DETECT,PARSE,PARSEMULTI,VALIDATE import
+    class CONFIG_START,PROBE_PATH,WOOD_PATH,DETECT_PROBE,LOAD_PROBE,CUSTOM_PROBE,LIST_PROBE,LOAD_WOOD,CUSTOM_WOOD_YAML,CREATE_WOOD,LIST_WOOD,DEFAULT_WOOD config
+    class PROCESS,ASSESS_QUALITY,RECOMMEND,RECOMMEND_CAUTION,QUALITY_WARN,METHOD_LIST,MANUAL_START,MANUAL_ASSESS,DETECT_OPTIMAL,USER_METHODS,ALL_METHODS,ADVANCED_START,UNIFIED_HPV,YAML_METHOD process
+    class CALC_HPV_MAIN,CALC_HRM,CALC_MHR,CALC_HRMX,CALC_TMAX,CALC_DMA,CALC_CHPM,CALC_DRM calculate
+    class COMPARE_METHODS,DIAGNOSE,DETECT_OUT,VALIDATE_ALIGN,PLOT_COMPARE quality
+    class AGGREGATE,INTERPOLATE temporal
+    class FLUX_DENSITY,SAPWOOD_DIRECT,CALC_SAPWOOD,TREE_FLUX,RADIAL,AZIMUTHAL,VARIATION scaling
+    class DIAG_REPORT,ANALYSIS_REPORT,CUSTOM_REPORT,EXPORT_CSV,EXPORT_XLSX,EXPORT_JSON,EXPORT_RDS,PLOT_TS,PLOT_TEMP,PLOT_DIAG,PLOT_METHOD,PLOT_CUSTOM,SAVE_PLOT export
+    class SAPDATA,PROBE_OBJ,WOOD_OBJ,VH_RESULTS,QC_RESULTS,VH_PROCESSED,FLUX_OBJ,SAPWOOD_OBJ,TREE_RESULTS,BATCH_RESULTS,TREE_COMPARE data
+    class PIPELINE_CHOICE,QUALITY_RESULT,MANUAL_METHOD,METHOD_EXEC,QC_CHOICE,PLOT_QC,TEMPORAL_CHOICE,SCALING_CHOICE,SAPWOOD_CHOICE,MULTI_CHOICE,EXPORT_CHOICE,REPORT_TYPE,EXPORT_TYPE,VIZ_TYPE decision
+    class UTILS,FILTER,CONVERT,STATS,CHECK utility
+    class END endpoint
+    class REPORT_FILES,DATA_FILES,PLOT_FILES export

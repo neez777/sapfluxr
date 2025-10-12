@@ -1,0 +1,151 @@
+# T-max Cohen Method - YAML Configuration
+# Cohen et al. (1981) Plant, Cell and Environment 4:391-397
+
+method:
+  name: "Tmax_Coh"
+  full_name: "T-max Cohen Method"
+  description: "Calculates velocity from time to maximum temperature"
+  reference: "Cohen et al. (1981) Plant, Cell and Environment 4:391-397"
+  category: "time_to_maximum"
+
+# Input variables required for this method
+inputs:
+  required:
+    - name: "delatT_do"
+      description: "Temperature difference downstream outer"
+      type: "numeric_vector"
+    - name: "delatT_di"
+      description: "Temperature difference downstream inner"
+      type: "numeric_vector"
+    - name: "diffusivity"
+      description: "Thermal diffusivity of sapwood (cm²/s)"
+      type: "numeric_scalar"
+      default: 0.0025
+    - name: "x"
+      description: "Distance from heat source (cm)"
+      type: "numeric_scalar"
+      default: 0.5
+    - name: "pre_pulse"
+      description: "Pre-pulse period (seconds)"
+      type: "numeric_scalar"
+      default: 30
+
+# Output variables this method produces
+outputs:
+  - name: "Vh_outer"
+    description: "Heat pulse velocity for outer sensors (cm/hr)"
+    type: "numeric_scalar"
+  - name: "Vh_inner"
+    description: "Heat pulse velocity for inner sensors (cm/hr)"
+    type: "numeric_scalar"
+
+# Calculation steps
+calculation:
+  steps:
+    - name: "validate_inputs"
+      description: "Validate temperature vectors are numeric"
+      expression: |
+        if (!is.numeric(delatT_do) || !is.numeric(delatT_di)) {
+          stop("Temperature vectors must be numeric")
+        }
+
+    - name: "check_valid_data"
+      description: "Check for valid temperature data"
+      expression: |
+        valid_do <- delatT_do[!is.na(delatT_do)]
+        valid_di <- delatT_di[!is.na(delatT_di)]
+
+        if (length(valid_do) == 0 || length(valid_di) == 0) {
+          warning("No valid temperature data for T-max Cohen calculation")
+          Vh_outer <- NA_real_
+          Vh_inner <- NA_real_
+          return(list(outer = Vh_outer, inner = Vh_inner))
+        }
+
+    - name: "find_time_to_maximum"
+      description: "Find time to maximum temperature"
+      expression: |
+        tmo <- which.max(delatT_do) - pre_pulse
+        tmi <- which.max(delatT_di) - pre_pulse
+
+    - name: "validate_time_to_maximum"
+      description: "Check time to maximum is valid"
+      expression: |
+        if (tmo <= 0 || tmi <= 0) {
+          warning("Time to maximum temperature occurs during pre-pulse period")
+          Vh_outer <- NA_real_
+          Vh_inner <- NA_real_
+          return(list(outer = Vh_outer, inner = Vh_inner))
+        }
+
+    - name: "calculate_discriminants"
+      description: "Calculate discriminants for velocity equation"
+      expression: |
+        discriminant_outer <- (x/100)^2 - 4 * diffusivity/100/100 * tmo
+        discriminant_inner <- (x/100)^2 - 4 * diffusivity/100/100 * tmi
+
+    - name: "calculate_velocities"
+      description: "Calculate T-max Cohen velocities"
+      expression: |
+        # Check for negative discriminants
+        if (discriminant_outer < 0) {
+          warning("Negative discriminant in T-max Cohen calculation for outer sensor")
+          Vh_outer <- NA_real_
+        } else {
+          Vh_outer <- sqrt(discriminant_outer) / tmo * 100 * 3600
+        }
+
+        if (discriminant_inner < 0) {
+          warning("Negative discriminant in T-max Cohen calculation for inner sensor")
+          Vh_inner <- NA_real_
+        } else {
+          Vh_inner <- sqrt(discriminant_inner) / tmi * 100 * 3600
+        }
+
+# Method-specific parameters
+parameters:
+  - name: "diffusivity"
+    description: "Thermal diffusivity of sapwood"
+    type: "numeric"
+    range: [0, 0.01]
+    default: 0.0025
+    units: "cm²/s"
+  - name: "x"
+    description: "Distance from heat source"
+    type: "numeric"
+    range: [0, 2]
+    default: 0.5
+    units: "cm"
+  - name: "pre_pulse"
+    description: "Pre-pulse period"
+    type: "numeric"
+    range: [0, 60]
+    default: 30
+    units: "seconds"
+
+# Quality assessment criteria
+quality_criteria:
+  - name: "valid_time_to_maximum"
+    description: "Time to maximum occurs after pre-pulse period"
+    check: "tmo > 0 && tmi > 0"
+    severity: "error"
+  - name: "positive_discriminant"
+    description: "Discriminants are non-negative"
+    check: "discriminant_outer >= 0 && discriminant_inner >= 0"
+    severity: "error"
+  - name: "velocity_range"
+    description: "Calculated velocity is within reasonable range"
+    check: "abs(Vh_outer) < 200 && abs(Vh_inner) < 200"
+    severity: "warning"
+
+# Method limitations and applicability
+limitations:
+  - "Requires clear single maximum in temperature curve"
+  - "Sensitive to noise around maximum"
+  - "Assumes constant thermal diffusivity"
+  - "May be unreliable with multiple peaks"
+
+applicability:
+  velocity_range: [10, 150]  # cm/hr
+  probe_configurations: ["symmetrical", "asymmetrical"]
+  best_for: ["high_velocities", "clear_single_peaks"]
