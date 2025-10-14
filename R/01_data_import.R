@@ -6,20 +6,54 @@
 #' @importFrom tools file_path_sans_ext
 #' @importFrom progressr progressor
 NULL
+
+#' Detect if running in Shiny environment
+#' @return Logical indicating if in Shiny
+#' @keywords internal
+is_shiny <- function() {
+  !is.null(shiny::getDefaultReactiveDomain())
+}
+
+#' Display message in console or Shiny UI
+#' @param msg Character string message to display
+#' @param type Type of notification for Shiny ("default", "message", "warning", "error")
+#' @param duration Duration in seconds for Shiny notification (NULL for auto)
+#' @keywords internal
+show_message <- function(msg, type = "message", duration = NULL) {
+  if (is_shiny()) {
+    # In Shiny, use showNotification
+    if (requireNamespace("shiny", quietly = TRUE)) {
+      # Remove emoji from Shiny notifications for cleaner display
+      clean_msg <- gsub("[\U0001F300-\U0001F9FF]", "", msg)
+      clean_msg <- trimws(clean_msg)
+
+      shiny::showNotification(
+        clean_msg,
+        type = type,
+        duration = duration
+      )
+    }
+  } else {
+    # In console, use cat
+    cat(msg)
+  }
+}
 #' Read Sap Flow Data from ICT SFM1x Sensors
 #'
 #' Imports and parses sap flow data from ICT SFM1x sensors using character-based chunking.
 #' Handles malformed JSON where entire datasets are on single lines.
 #'
-#' Progress reporting works in both command-line and Shiny applications via the
-#' \code{progressr} package. In CLI, progress is shown in the console. In Shiny,
-#' progress automatically integrates with \code{shiny::Progress}.
+#' Progress reporting works in both command-line and Shiny applications. In console,
+#' progress messages are displayed via \code{cat()}. In Shiny applications, status
+#' messages automatically appear as \code{shiny::showNotification()} popups. Progress
+#' bars work through the \code{progressr} package and must be wrapped in
+#' \code{progressr::with_progress({})}.
 #'
 #' @param file_path Character string specifying the path to the data file
 #' @param format Character string specifying format. Auto-detected if NULL. Currently ict_current, ict_legacy & csv.
 #' @param validate_data Logical indicating whether to validate imported data (default: TRUE)
 #' @param chunk_size Integer specifying characters per chunk (default: auto-sized)
-#' @param show_progress Logical indicating whether to show progress (default: TRUE for files >1MB)
+#' @param show_progress Logical indicating whether to show progress (default: TRUE)
 #' @param ... Additional arguments passed to specific import functions
 #'
 #' @return A list containing:
@@ -34,9 +68,11 @@ NULL
 #'   sap_data <- read_sap_data("data/tree1_data.txt")
 #' })
 #'
-#' # Usage in Shiny application (progress automatically integrates)
+#' # Usage in Shiny application - notifications appear automatically
 #' server <- function(input, output, session) {
 #'   observeEvent(input$import_button, {
+#'     # Status messages will show as Shiny notifications
+#'     # Progress bar updates automatically
 #'     progressr::with_progress({
 #'       sap_data <- read_sap_data(input$file$datapath)
 #'     })
@@ -70,7 +106,7 @@ read_sap_data <- function(file_path,
 
   # Set intelligent defaults
   if (is.null(show_progress)) {
-    show_progress <- file_size_mb > 1
+    show_progress <- TRUE  # Always show progress by default
   }
 
   if (is.null(chunk_size)) {
@@ -88,15 +124,15 @@ read_sap_data <- function(file_path,
   }
 
   if (show_progress) {
-    cat("📊 Reading sap flow data:", basename(file_path),
-        sprintf("(%.1f MB)\n", file_size_mb))
+    show_message(sprintf("📊 Reading sap flow data: %s (%.1f MB)\n",
+                        basename(file_path), file_size_mb))
   }
 
   # Auto-detect format using first 3000 characters
   if (is.null(format)) {
     format <- detect_format(file_path)
     if (show_progress) {
-      cat("🔍 Auto-detected format:", format, "\n")
+      show_message(sprintf("🔍 Auto-detected format: %s\n", format))
     }
   }
 
@@ -129,7 +165,7 @@ read_sap_data <- function(file_path,
   # Validate if requested
   if (validate_data) {
     if (show_progress) {
-      cat("✔️ Validating data structure and ranges...\n")
+      show_message("✔️ Validating data structure and ranges...\n")
     }
     validation_result <- validate_sap_data(result)
     if (!validation_result$valid) {
@@ -140,22 +176,24 @@ read_sap_data <- function(file_path,
   }
 
   if (show_progress) {
-    cat(sprintf("🎉 Import complete: %s pulses, %s measurements",
-                format(nrow(result$diagnostics), big.mark = ","),
-                format(nrow(result$measurements), big.mark = ",")))
+    summary_msg <- sprintf("🎉 Import complete: %s pulses, %s measurements",
+                          format(nrow(result$diagnostics), big.mark = ","),
+                          format(nrow(result$measurements), big.mark = ","))
 
     if (nrow(result$measurements) > 0 && "datetime" %in% names(result$measurements)) {
       valid_times <- !is.na(result$measurements$datetime)
       if (any(valid_times)) {
         time_range <- range(result$measurements$datetime[valid_times])
         duration_days <- as.numeric(difftime(time_range[2], time_range[1], units = "days"))
-        cat(sprintf(" (%.1f days)\n", duration_days))
+        summary_msg <- sprintf("%s (%.1f days)\n", summary_msg, duration_days)
       } else {
-        cat("\n")
+        summary_msg <- paste0(summary_msg, "\n")
       }
     } else {
-      cat("\n")
+      summary_msg <- paste0(summary_msg, "\n")
     }
+
+    show_message(summary_msg, type = "message")
   }
 
   return(result)
@@ -216,7 +254,7 @@ detect_format <- function(file_path) {
   stop("Unable to detect format for file: ", basename(file_path))
 }
 
-#' Read ICT Current format using optimized reading strategy
+#' Read ICT Current format using optimised reading strategy
 #'
 #' @param file_path Path to data file
 #' @param chunk_size Characters per chunk (used only for files > 100MB)
@@ -229,7 +267,7 @@ read_ict_current <- function(file_path, chunk_size, show_progress, ...) {
   file_size_mb <- file_size / 1e6
 
   if (show_progress) {
-    cat("📖 Reading file...\n")
+    show_message("📖 Reading file...\n")
   }
 
   con <- file(file_path, "rb")
@@ -239,16 +277,31 @@ read_ict_current <- function(file_path, chunk_size, show_progress, ...) {
   # For larger files, use list accumulation to avoid repeated string concatenation
   if (file_size_mb < 100) {
     # Read entire file at once - fastest for typical sap flow data files
+    # Create progress reporter for reading
+    p <- if (show_progress) {
+      progressr::progressor(steps = 2)
+    } else {
+      NULL
+    }
+
+    if (show_progress && !is.null(p)) {
+      p(amount = 1, message = sprintf("Reading file... %.1f MB", file_size_mb))
+    }
+
     all_content <- rawToChar(readBin(con, "raw", n = file_size))
 
+    if (show_progress && !is.null(p)) {
+      p(amount = 1, message = "File reading complete")
+    }
+
     if (show_progress) {
-      cat("✅ File reading complete\n")
+      show_message("✅ File reading complete\n")
     }
 
   } else {
     # For very large files, use list accumulation (avoids O(n²) string concatenation)
     if (show_progress) {
-      cat("📖 Reading large file in chunks...\n")
+      show_message("📖 Reading large file in chunks...\n")
     }
 
     chunks <- list()
@@ -277,7 +330,7 @@ read_ict_current <- function(file_path, chunk_size, show_progress, ...) {
     }
 
     if (show_progress) {
-      cat("✅ File reading complete\n")
+      show_message("✅ File reading complete\n")
     }
 
     # Join all chunks once at the end - much faster than repeated paste0
@@ -285,11 +338,11 @@ read_ict_current <- function(file_path, chunk_size, show_progress, ...) {
   }
 
   if (show_progress) {
-    cat("🔧 Parsing data...\n")
+    show_message("🔧 Parsing data...\n")
   }
 
   # Ultra-fast parsing: extract all data at once using vectorized operations
-  result <- parse_ict_current_vectorized(all_content, show_progress)
+  result <- parse_ict_current_vectorized(all_content, show_progress, file_size_mb)
 
   diagnostics <- result$diagnostics
   measurements <- result$measurements
@@ -304,9 +357,10 @@ read_ict_current <- function(file_path, chunk_size, show_progress, ...) {
 #'
 #' @param content Full file content as single string
 #' @param show_progress Show progress messages
+#' @param file_size_mb File size in MB (for progress reporting)
 #' @return List with diagnostics and measurements data frames
 #' @keywords internal
-parse_ict_current_vectorized <- function(content, show_progress) {
+parse_ict_current_vectorized <- function(content, show_progress, file_size_mb = 0) {
 
   # Extract all datetimes at once
   datetime_pattern <- '"date":"([^"]+)"'
@@ -325,7 +379,8 @@ parse_ict_current_vectorized <- function(content, show_progress) {
   }
 
   if (show_progress) {
-    cat(sprintf("Found %s pulses, parsing timestamps...\n", format(n_pulses, big.mark = ",")))
+    show_message(sprintf("Found %s pulses, parsing timestamps...\n",
+                        format(n_pulses, big.mark = ",")))
   }
 
   # Parse datetimes vectorized
@@ -338,7 +393,7 @@ parse_ict_current_vectorized <- function(content, show_progress) {
   }
 
   if (show_progress) {
-    cat("Extracting measurements (optimized)...\n")
+    show_message("Extracting measurements (optimised)...\n")
   }
 
   # OPTIMIZATION: Pre-allocate diagnostic vectors instead of list-of-lists
@@ -356,22 +411,43 @@ parse_ict_current_vectorized <- function(content, show_progress) {
   # Pre-compile regex for numbers (use base R gregexpr for better performance)
   num_pattern <- "[-+]?\\d+\\.\\d+"
 
-  # Progress reporter for large files
-  p <- if (show_progress && n_pulses > 1000) {
+  # Progress reporter for all files (always create if show_progress = TRUE)
+  p <- if (show_progress && n_pulses > 0) {
     progressr::progressor(steps = n_pulses)
   } else {
     NULL
   }
 
+  # Determine update frequency based on file size
+  # Small files: update more frequently for better feedback
+  # Large files: update less frequently for better performance
+  update_interval <- if (n_pulses < 50) {
+    5   # Update every 5 pulses for tiny files
+  } else if (n_pulses < 100) {
+    10  # Update every 10 pulses for small files
+  } else if (n_pulses < 1000) {
+    25  # Update every 25 pulses for medium files
+  } else if (n_pulses < 10000) {
+    100  # Update every 100 pulses for large files
+  } else {
+    500  # Update every 500 pulses for very large files
+  }
+
   # OPTIMIZATION: Use base R regex instead of stringr (faster for this use case)
+  last_reported <- 0  # Track last reported position for accurate progress updates
+
   for (i in seq_len(n_pulses)) {
 
-    # Update progress every 500 records
-    if (show_progress && n_pulses > 1000 && i %% 500 == 0) {
-      p(amount = 500,
-        message = sprintf("Parsing pulse %s / %s",
+    # Update progress at appropriate intervals
+    if (show_progress && !is.null(p) && (i %% update_interval == 0 || i == n_pulses)) {
+      # Calculate actual amount processed since last update
+      amount_to_report <- i - last_reported
+      p(amount = amount_to_report,
+        message = sprintf("Parsing pulse %s / %s (%.0f%%)",
                          format(i, big.mark = ","),
-                         format(n_pulses, big.mark = ",")))
+                         format(n_pulses, big.mark = ","),
+                         100 * i / n_pulses))
+      last_reported <- i
     }
 
     # Extract all numbers from this record using base R (faster than stringr)
@@ -411,7 +487,7 @@ parse_ict_current_vectorized <- function(content, show_progress) {
   }
 
   if (show_progress) {
-    cat("Combining results...\n")
+    show_message("Combining results...\n")
   }
 
   # OPTIMIZATION: Create diagnostics from pre-allocated vectors (much faster)
@@ -628,7 +704,7 @@ parse_pulse_record <- function(record_text, pulse_id) {
 read_ict_legacy <- function(file_path, chunk_size, show_progress, ...) {
 
   if (show_progress) {
-    cat("📖 Reading ICT legacy format...\n")
+    show_message("📖 Reading ICT legacy format...\n")
   }
 
   # Read file content
@@ -669,7 +745,7 @@ read_ict_legacy <- function(file_path, chunk_size, show_progress, ...) {
 read_csv_format <- function(file_path, show_progress, ...) {
 
   if (show_progress) {
-    cat("📖 Reading CSV/tab-delimited format...\n")
+    show_message("📖 Reading CSV/tab-delimited format...\n")
   }
 
   # Detect delimiter
@@ -681,7 +757,8 @@ read_csv_format <- function(file_path, show_progress, ...) {
   }
 
   if (show_progress) {
-    cat("Detected delimiter:", if(delimiter == "\t") "tab" else "comma", "\n")
+    show_message(sprintf("Detected delimiter: %s\n",
+                        if(delimiter == "\t") "tab" else "comma"))
   }
 
   # Read the CSV file
@@ -920,9 +997,9 @@ read_multiple_sap_data <- function(file_paths,
   }
 
   if (show_progress) {
-    cat("🌳 Importing", length(file_paths), "sap flow data files...\n")
-    cat("📁 Files:", paste(basename(file_paths), collapse = ", "), "\n")
-    cat("🏷️  Tree IDs:", paste(tree_ids, collapse = ", "), "\n\n")
+    show_message(sprintf("🌳 Importing %d sap flow data files...\n", length(file_paths)))
+    show_message(sprintf("📁 Files: %s\n", paste(basename(file_paths), collapse = ", ")))
+    show_message(sprintf("🏷️  Tree IDs: %s\n\n", paste(tree_ids, collapse = ", ")))
   }
 
   # Import each file individually
@@ -941,8 +1018,8 @@ read_multiple_sap_data <- function(file_paths,
 
   for (i in seq_along(file_paths)) {
     if (show_progress) {
-      cat(sprintf("📊 [%d/%d] Importing %s (%s)...\n",
-                  i, length(file_paths), tree_ids[i], basename(file_paths[i])))
+      show_message(sprintf("📊 [%d/%d] Importing %s (%s)...\n",
+                          i, length(file_paths), tree_ids[i], basename(file_paths[i])))
     }
 
     tryCatch({
@@ -974,9 +1051,9 @@ read_multiple_sap_data <- function(file_paths,
       import_summary$import_success[i] <- TRUE
 
       if (show_progress) {
-        cat(sprintf("   ✅ Success: %s pulses, %s measurements\n",
-                    format(nrow(sap_data$diagnostics), big.mark = ","),
-                    format(nrow(sap_data$measurements), big.mark = ",")))
+        show_message(sprintf("   ✅ Success: %s pulses, %s measurements\n",
+                            format(nrow(sap_data$diagnostics), big.mark = ","),
+                            format(nrow(sap_data$measurements), big.mark = ",")))
       }
 
     }, error = function(e) {
@@ -985,7 +1062,7 @@ read_multiple_sap_data <- function(file_paths,
       import_summary$import_errors[i] <- as.character(e$message)
 
       if (show_progress) {
-        cat(sprintf("   ❌ Error: %s\n", e$message))
+        show_message(sprintf("   ❌ Error: %s\n", e$message), type = "error")
       }
 
       # Create empty data structure for failed imports
@@ -995,8 +1072,8 @@ read_multiple_sap_data <- function(file_paths,
 
   if (show_progress) {
     successful_imports <- sum(import_summary$import_success)
-    cat(sprintf("\n🎉 Import complete: %d/%d files successful\n",
-                successful_imports, length(file_paths)))
+    show_message(sprintf("\n🎉 Import complete: %d/%d files successful\n",
+                        successful_imports, length(file_paths)))
   }
 
   # Return format based on combine_data parameter
@@ -1046,7 +1123,7 @@ generate_tree_ids <- function(file_paths) {
 combine_multiple_sap_data <- function(individual_data, import_summary, show_progress) {
 
   if (show_progress) {
-    cat("🔄 Combining data from multiple trees...\n")
+    show_message("🔄 Combining data from multiple trees...\n")
   }
 
   # Filter successful imports
@@ -1103,8 +1180,20 @@ combine_multiple_sap_data <- function(individual_data, import_summary, show_prog
 
   # Create combined validation
   combined_validation <- list(
-    valid = all(sapply(successful_data, function(x) x$validation$valid)),
-    issues = unique(unlist(lapply(successful_data, function(x) x$validation$issues))),
+    valid = all(vapply(successful_data, function(x) {
+      # Safely extract validation$valid, defaulting to FALSE if missing
+      if (is.null(x$validation) || is.null(x$validation$valid)) {
+        return(FALSE)
+      }
+      return(isTRUE(x$validation$valid))
+    }, FUN.VALUE = logical(1))),
+    issues = unique(unlist(lapply(successful_data, function(x) {
+      # Safely extract issues
+      if (is.null(x$validation) || is.null(x$validation$issues)) {
+        return(character(0))
+      }
+      return(as.character(x$validation$issues))
+    }))),
     tree_validations = lapply(successful_data, function(x) x$validation)
   )
 
@@ -1122,10 +1211,10 @@ combine_multiple_sap_data <- function(individual_data, import_summary, show_prog
   class(result) <- c("multiple_sap_data", "sap_data", "list")
 
   if (show_progress) {
-    cat(sprintf("✅ Combined: %d trees, %s total pulses, %s total measurements\n",
-                length(successful_data),
-                format(nrow(combined_diagnostics), big.mark = ","),
-                format(nrow(combined_measurements), big.mark = ",")))
+    show_message(sprintf("✅ Combined: %d trees, %s total pulses, %s total measurements\n",
+                        length(successful_data),
+                        format(nrow(combined_diagnostics), big.mark = ","),
+                        format(nrow(combined_measurements), big.mark = ",")))
   }
 
   return(result)
