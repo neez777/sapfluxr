@@ -1,0 +1,50 @@
+Package: sapFluxR
+Title: Comprehensive Sap Flow Analysis from Heat Pulse Velocity Sensors
+Version: 0.2.0
+Authors@R: c(
+    person("Grant", "Joyce", email = "neez1977@gmail.com",
+           role = c("aut", "cre"), comment = "Developer"),
+    person("Gavan", "McGrath", role = "aut",
+           comment = "Original R script development"),
+    person("Tim", "Bleby", role = "aut",
+           comment = "Scientific review and Excel workflow design")
+    )
+Description: A comprehensive R package for processing and analyzing sap flow data
+    from heat pulse velocity sensors. Provides complete pipeline from raw
+    temperature measurements to tree-level sap flux calculations, including
+    multiple HPV calculation methods (HRM, MHR, HRMXa, HRMXb, Tmax variants),
+    data quality control, corrections for probe spacing and wounding effects,
+    sapwood area integration, and temporal aggregation. Includes both
+    programmatic API and interactive Shiny interface for analysis workflows.
+License: GPL-3
+Encoding: UTF-8
+LazyData: true
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3
+Depends:
+    R (>= 4.0.0)
+Imports:
+    dplyr (>= 1.0.0),
+    stringr (>= 1.4.0),
+    readr (>= 2.0.0),
+    tibble (>= 3.0.0),
+    rlang (>= 1.0.0),
+    lubridate (>= 1.8.0),
+    tidyr (>= 1.2.0),
+    R6,
+    progressr (>= 0.13.0)
+Suggests:
+    testthat (>= 3.0.0),
+    knitr,
+    rmarkdown,
+    xts,
+    dygraphs,
+    htmltools,
+    ggplot2 (>= 3.4.0),
+    plotly (>= 4.10.0),
+    patchwork (>= 1.1.0),
+    scales (>= 1.2.0),
+    data.table (>= 1.14.0)
+VignetteBuilder: knitr
+URL: https://github.com/neez777/sapfluxr
+BugReports: https://github.com/neez777/sapfluxr/issues
