@@ -1,0 +1,21 @@
+edaphic:
+  skip_rows: 5
+  header_row: 6
+  column_map:
+    'Timestamp (UTC)': 'timestamp'
+    'Temperature_1': 'T1'
+    'Temperature_2': 'T2'
+  transformations:
+  temperature: "celsius_to_kelvin"
+
+ict_csv:
+  skip_rows: 2
+  header_row: 3
+  column_map:
+    'dd/MM/yyyy hh:mm:ss.zzz': 'timestamp'
+    '0_OuterDownstream(DegC)': 'T1'
+    '1_OuterUpstream(DegC)': 'T2'
+    '2_InnerDownstream(DegC)': 'T3'
+    '3_InnerUpstream(DegC)': 'T4'
+  transformations:
+  temperature: "celsius_to_kelvin"

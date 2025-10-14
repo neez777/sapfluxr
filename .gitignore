@@ -1,0 +1,9 @@
+.Rproj.user
+.Rhistory
+.RData
+.httr-oauth
+.DS_Store
+.quarto
+/inst/extdata/SF*
+/inst/extdata/SX*
+/inst/extdata/thu*

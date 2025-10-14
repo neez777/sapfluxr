@@ -1,0 +1,42 @@
+# Sap Flow Analysis Configuration - HRM Symmetric Standard
+# Generated on: 2025-09-24
+# Symmetric probe configuration optimised for HRM method
+
+metadata:
+  config_name: ICT Complete Standard
+  description: Complete ICT standard configuration
+  created_date: '2025-09-24'
+  version: '1.0'
+  default: true
+
+probe:
+  heater_position: 0           # mm, heater at origin
+  upstream_distance: 5         # mm, sensor distance upstream of heater
+  downstream_distance: 5       # mm, sensor distance downstream of heater
+  diameter: 1.27              # mm, standard probe diameter
+  length: 35                  # mm, standard probe length
+  needle_diameter: 1.27       # mm, needle diameter
+  inner_sensor: 7.5           # mm, distance from probe tip
+  outer_sensor: 22.5          # mm, distance from probe tip
+  manufacturer: ICT           # probe manufacturer
+  model: SFM1                # probe model
+  heat_pulse_duration: 2      # seconds, typical ICT pulse duration
+
+methods:
+  compatible:
+    - HRM
+    - MHR
+    - DMA
+    - Tmax_Coh
+    - Tmax_Klu
+    - HRMx
+  recommended:
+    - HRM
+    - Tmax_Coh
+    - MHR
+    - DMA
+  priority_order:
+    - HRM
+    - Tmax_Coh
+    - MHR
+    - DMA

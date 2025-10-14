@@ -1,0 +1,35 @@
+# Sap Flow Analysis Configuration - Eucalyptus Wood Properties
+# Generated on: 2025-09-24
+# Typical properties for Eucalyptus species
+
+metadata:
+  config_name: Eucalyptus Wood Properties
+  description: Typical wood properties for Eucalyptus species
+  created_date: '2025-09-24'
+  version: '1.0'
+
+wood_property:
+  thermal_diffusivity: 0.00143    # cm²/s, will be estimated from density and moisture
+  thermal_conductivity: 0.27   # W/(m·K), will be estimated if null
+  volumetric_heat_capacity: 1886000  # J/(m³·K), will be estimated if null
+  dry_density: 550            # kg/m³, eucalyptus is denser than typical softwood
+  basic_density: 480          # kg/m³, oven-dry mass / green volume
+  moisture_content: 25        # %, often lower than conifers
+  species: Eucalyptus spp.    # species identification
+  wood_type: hardwood         # hardwood classification
+  temperature: 25             # °C, often warmer climates
+  comments: Typical values for Eucalyptus species - adjust for specific species/site conditions
+
+# Tree-specific measurements (optional - can override per tree in R)
+tree_measurements:
+  dbh: null                   # cm, diameter at breast height
+  bark_thickness: null        # cm, bark thickness (often thicker in eucalyptus)
+  sapwood_depth: null         # cm, sapwood depth
+  sapwood_area: null          # cm², conducting sapwood area
+  heartwood_radius: null      # cm, heartwood radius
+
+# Quality thresholds (species-specific defaults, can override in R)
+quality_thresholds:
+  max_velocity_cm_hr: 150     # cm/hr, eucalyptus often lower max than softwoods
+  min_velocity_cm_hr: -50     # cm/hr, lower bound (allows reverse flow)
+  temperature_range: [0, 50]  # °C, warmer climate species
