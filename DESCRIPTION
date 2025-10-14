@@ -1,4 +1,4 @@
-Package: sapFluxR
+Package: sapfluxr
 Title: Comprehensive Sap Flow Analysis from Heat Pulse Velocity Sensors
 Version: 0.2.0
 Authors@R: c(
