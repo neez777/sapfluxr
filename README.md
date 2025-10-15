@@ -57,7 +57,11 @@ datetime,pulse_id,do,di,uo,ui,batt_volt,batt_current
 ```
 
 ### Legacy Format
-Tab-delimited or fixed-width formats from older ICT sensors (format-specific handling available).
+```
+{"Rdg":[{"k":"date","v":"2024-03-15T12:30:01Z"},{"k":"bv","v":    4.03 },
+{"k":"bc","v":   15.00 },{"k":"bt","v":   27.06},{"k":"ep","v":1},{"k":"ev","v":   20.69},
+{"k":"ec","v":    2.10}],{"N":01,"T":[{"k":"do","v":  20.671},{"k":"di","v":  20.341}
+```
 
 ## Heat Pulse Velocity Methods
 
@@ -72,7 +76,7 @@ Tab-delimited or fixed-width formats from older ICT sensors (format-specific han
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the GPL-3 License - see the [LICENSE](LICENSE) file for details.
 
 ## Acknowledgments
 

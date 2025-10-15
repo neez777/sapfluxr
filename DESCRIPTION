@@ -48,3 +48,4 @@ Suggests:
 VignetteBuilder: knitr
 URL: https://github.com/neez777/sapfluxr
 BugReports: https://github.com/neez777/sapfluxr/issues
+Config/testthat/edition: 3
