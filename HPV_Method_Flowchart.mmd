@@ -40,7 +40,7 @@ graph TB
     TKOut --> DMA
 	  TCOut --> DMA
 	  MHROut --> DMA
-    Methods -->|DMA| DMA[Dual Method Approach]
+	  HRMXOut --> DMA
     DMA --> DMA1{Calculate Vh_crit<br/>D/x × 3600}
     DMA1 --> DMA2{Vh_HRM < Vh_crit?}
     DMA2 -->|Yes: Low Flow| DMA3[Use HRM]
