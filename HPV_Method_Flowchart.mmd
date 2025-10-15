@@ -47,7 +47,7 @@ graph TB
     DMA --> DMA1{Calculate Vh_crit<br/>D/x × 3600}
     DMA1 --> DMA2{Vh_HRM < Vh_crit?}
     DMA2 -->|Yes: Low Flow| DMA3[Use HRM]
-    DMA2 -->|No: High Flow| DMA4[Use Tmax_Klu]
+    DMA2 -->|No: High Flow| DMA4[Use Tmax or MHR]
     DMA3 --> DMAOut[DMA Velocity]
     DMA4 --> DMAOut
 
