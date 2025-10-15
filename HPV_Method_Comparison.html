@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<style type="text/css">
+.inline {
+  background-color: #f7f7f7;
+  border:solid 1px #B0B0B0;
+}
+.error {
+	font-weight: bold;
+	color: #FF0000;
+}
+.warning {
+	font-weight: bold;
+}
+.message {
+	font-style: italic;
+}
+.source, .output, .warning, .error, .message {
+	padding: 0 1em;
+  border:solid 1px #F7F7F7;
+}
+.source {
+  background-color: #f5f5f5;
+}
+.left {
+  text-align: left;
+}
+.right {
+  text-align: right;
+}
+.center {
+  text-align: center;
+}
+.hl.num {
+  color: #AF0F91;
+}
+.hl.sng {
+  color: #317ECC;
+}
+.hl.com {
+  color: #AD95AF;
+  font-style: italic;
+}
+.hl.opt {
+  color: #000000;
+}
+.hl.def {
+  color: #585858;
+}
+.hl.kwa {
+  color: #295F94;
+  font-weight: bold;
+}
+.hl.kwb {
+  color: #B05A65;
+}
+.hl.kwc {
+  color: #55aa55;
+}
+.hl.kwd {
+  color: #BC5A65;
+  font-weight: bold;
+}
+</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HPV Method Comparison</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            line-height: 1.6;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th {
+            background: #34495e;
+            color: white;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+        }
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #ddd;
+        }
+        tr:hover {
+            background: #f8f9fa;
+        }
+        .method-name {
+            font-weight: 600;
+            color: #2980b9;
+        }
+        .good {
+            color: #27ae60;
+            font-weight: 500;
+        }
+        .poor {
+            color: #e74c3c;
+            font-weight: 500;
+        }
+        .moderate {
+            color: #f39c12;
+            font-weight: 500;
+        }
+        .range {
+            font-family: monospace;
+            background: #ecf0f1;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+        .legend {
+            margin: 20px 0;
+            padding: 15px;
+            background: #ecf0f1;
+            border-radius: 5px;
+        }
+        .legend-item {
+            display: inline-block;
+            margin-right: 20px;
+        }
+        .flow-indicator {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            font-weight: 600;
+            margin: 2px;
+        }
+        .low-flow {
+            background: #3498db;
+            color: white;
+        }
+        .mid-flow {
+            background: #f39c12;
+            color: white;
+        }
+        .high-flow {
+            background: #e74c3c;
+            color: white;
+        }
+        .reverse-flow {
+            background: #9b59b6;
+            color: white;
+        }
+        .all-flow {
+            background: #27ae60;
+            color: white;
+        }
+        .section-header {
+            background: #2c3e50;
+            color: white;
+            font-weight: bold;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <h1>Heat Pulse Velocity Methods: Comprehensive Comparison</h1>
+
+    <div class="container">
+        <div class="legend">
+            <strong>Flow Range Indicators:</strong><br>
+            <span class="flow-indicator low-flow">Low Flow (0-20 cm/h)</span>
+            <span class="flow-indicator mid-flow">Mid Flow (20-50 cm/h)</span>
+            <span class="flow-indicator high-flow">High Flow (>50 cm/h)</span>
+            <span class="flow-indicator reverse-flow">Reverse Flow (<0 cm/h)</span>
+            <span class="flow-indicator all-flow">All Ranges</span>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Method</th>
+                    <th>Measurable Range</th>
+                    <th>Best For</th>
+                    <th>Strengths</th>
+                    <th>Weaknesses</th>
+                    <th>Key Parameters</th>
+                    <th>Calculation Basis</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="method-name">HRM<br><small>(Heat Ratio Method)</small></td>
+                    <td>
+                        <span class="range">-20 to 55 cm/h</span><br>
+                        <span class="flow-indicator low-flow">Low Flow</span>
+                        <span class="flow-indicator reverse-flow">Reverse</span>
+                    </td>
+                    <td>
+                        • Low sap flows<br>
+                        • Reverse flows<br>
+                        • Night measurements<br>
+                        • Slow-growing species
+                    </td>
+                    <td class="good">
+                        ✓ Handles reverse flows<br>
+                        ✓ Works at zero flow<br>
+                        ✓ Well-established method<br>
+                        ✓ Stable at low flows<br>
+                        ✓ Extensive literature
+                    </td>
+                    <td class="poor">
+                        ✗ Fails at high flows (>55 cm/h)<br>
+                        ✗ Fixed time window may not be optimal<br>
+                        ✗ Sensitive to timing<br>
+                        ✗ Requires accurate k measurement
+                    </td>
+                    <td>
+                        • D: 0.0025 cm²/s<br>
+                        • x: 0.5 cm<br>
+                        • Window: 60-100s<br>
+                        • Needs 4 probes
+                    </td>
+                    <td>
+                        Averages ΔT ratios in<br>
+                        fixed cooling window<br>
+                        (60-100s post-pulse)
+                    </td>
+                </tr>
+
+                <tr>
+                    <td class="method-name">MHR<br><small>(Maximum Heat Ratio)</small></td>
+                    <td>
+                        <span class="range">-30 to 140 cm³/cm²/h</span><br>
+                        <span class="flow-indicator mid-flow">Mid Flow</span>
+                        <span class="flow-indicator high-flow">High Flow</span>
+                    </td>
+                    <td>
+                        • High sap flows<br>
+                        • Fast-growing species<br>
+                        • Rapidly changing flows<br>
+                        • Young trees with high LAI
+                    </td>
+                    <td class="good">
+                        ✓ Extended high flow range<br>
+                        ✓ Avoids HRM high-flow failures<br>
+                        ✓ Simple calculation<br>
+                        ✓ Robust to transients<br>
+                        ✓ No arbitrary time window
+                    </td>
+                    <td class="poor">
+                        ✗ Less accurate at very low flows<br>
+                        ✗ Susceptible to noise at low flows<br>
+                        ✗ Single point measurement<br>
+                        ✗ Relatively new method
+                    </td>
+                    <td>
+                        • D: 0.0025 cm²/s<br>
+                        • x: 0.5 cm<br>
+                        • Uses ΔTmax only<br>
+                        • Typically 0-50s range
+                    </td>
+                    <td>
+                        Uses maximum ΔT from<br>
+                        each probe (typically<br>
+                        within 0-50s)
+                    </td>
+                </tr>
+
+                <tr>
+                    <td class="method-name">HRMXa<br><small>(Modified HRM - Ratio Averaging)</small></td>
+                    <td>
+                        <span class="range">0 to ~80 cm/h</span><br>
+                        <span class="flow-indicator low-flow">Low Flow</span>
+                        <span class="flow-indicator mid-flow">Mid Flow</span>
+                    </td>
+                    <td>
+                        • Variable flow conditions<br>
+                        • When HRM window inappropriate<br>
+                        • Intermediate flows
+                    </td>
+                    <td class="good">
+                        ✓ Adaptive time window<br>
+                        ✓ Uses only rising phase<br>
+                        ✓ Better than HRM at mid flows<br>
+                        ✓ Flexible window definition
+                    </td>
+                    <td class="poor">
+                        ✗ More complex calculation<br>
+                        ✗ Requires L and H parameters<br>
+                        ✗ Limited published validation<br>
+                        ✗ Choice of L/H values subjective
+                    </td>
+                    <td>
+                        • D: 0.0025 cm²/s<br>
+                        • x: 0.5 cm<br>
+                        • L: 0.5 (50% ΔTmax)<br>
+                        • H: 0.8 (80% ΔTmax)
+                    </td>
+                    <td>
+                        Averages ratios within<br>
+                        adaptive window<br>
+                        (50-80% of ΔTmax)
+                    </td>
+                </tr>
+
+                <tr>
+                    <td class="method-name">HRMXb<br><small>(Modified HRM - Mean Ratio)</small></td>
+                    <td>
+                        <span class="range">0 to ~80 cm/h</span><br>
+                        <span class="flow-indicator low-flow">Low Flow</span>
+                        <span class="flow-indicator mid-flow">Mid Flow</span>
+                    </td>
+                    <td>
+                        • Similar to HRMXa<br>
+                        • Alternative calculation approach
+                    </td>
+                    <td class="good">
+                        ✓ Same as HRMXa<br>
+                        ✓ Ratio of means approach<br>
+                        ✓ May be more stable
+                    </td>
+                    <td class="poor">
+                        ✗ Same as HRMXa<br>
+                        ✗ Different results than HRMXa<br>
+                        ✗ Not clear which is superior
+                    </td>
+                    <td>
+                        • Same as HRMXa<br>
+                        • L: 0.5<br>
+                        • H: 0.8
+                    </td>
+                    <td>
+                        Takes ratio of averaged<br>
+                        ΔT values (not averaging<br>
+                        ratios like HRMXa)
+                    </td>
+                </tr>
+
+                <tr>
+                    <td class="method-name">Tmax_Coh<br><small>(Cohen Tmax Method)</small></td>
+                    <td>
+                        <span class="range">20 to 100+ cm/h</span><br>
+                        <span class="flow-indicator mid-flow">Mid Flow</span>
+                        <span class="flow-indicator high-flow">High Flow</span>
+                    </td>
+                    <td>
+                        • High flows<br>
+                        • When convection dominates<br>
+                        • Simple measurements
+                    </td>
+                    <td class="good">
+                        ✓ Simple calculation<br>
+                        ✓ Single probe sufficient<br>
+                        ✓ Good for high flows<br>
+                        ✓ Thermal equilibrium not needed
+                    </td>
+                    <td class="poor">
+                        ✗ Cannot measure low/zero flows<br>
+                        ✗ Cannot measure reverse flows<br>
+                        ✗ Sensitive to noise<br>
+                        ✗ Single time point<br>
+                        ✗ Ignores finite pulse duration
+                    </td>
+                    <td>
+                        • D: 0.0025 cm²/s<br>
+                        • x: 0.5 cm<br>
+                        • tm: time to max<br>
+                        • Only downstream needed
+                    </td>
+                    <td>
+                        Based on time to reach<br>
+                        maximum temperature<br>
+                        at downstream probe
+                    </td>
+                </tr>
+
+                <tr>
+                    <td class="method-name">Tmax_Klu<br><small>(Kluitenberg Tmax)</small></td>
+                    <td>
+                        <span class="range">20 to 100+ cm/h</span><br>
+                        <span class="flow-indicator mid-flow">Mid Flow</span>
+                        <span class="flow-indicator high-flow">High Flow</span>
+                    </td>
+                    <td>
+                        • High flows<br>
+                        • Preferred over Tmax_Coh<br>
+                        • DMA implementation
+                    </td>
+                    <td class="good">
+                        ✓ All Tmax_Coh strengths<br>
+                        ✓ Accounts for pulse duration<br>
+                        ✓ More accurate than Cohen<br>
+                        ✓ Preferred in DMA
+                    </td>
+                    <td class="poor">
+                        ✗ Same as Tmax_Coh<br>
+                        ✗ Requires accurate tp<br>
+                        ✗ More complex equation
+                    </td>
+                    <td>
+                        • D: 0.0025 cm²/s<br>
+                        • x: 0.5 cm<br>
+                        • tm: time to max<br>
+                        • tp: 2s (pulse duration)
+                    </td>
+                    <td>
+                        Like Tmax_Coh but<br>
+                        corrects for finite<br>
+                        heat pulse duration
+                    </td>
+                </tr>
+
+                <tr>
+                    <td class="method-name">DMA<br><small>(Dual Method Approach)</small></td>
+                    <td>
+                        <span class="range">-20 to 100+ cm/h</span><br>
+                        <span class="flow-indicator all-flow">All Ranges</span>
+                    </td>
+                    <td>
+                        • Full flow range<br>
+                        • Variable conditions<br>
+                        • General purpose<br>
+                        • Recommended default
+                    </td>
+                    <td class="good">
+                        ✓ Full range coverage<br>
+                        ✓ Automatic method selection<br>
+                        ✓ Physics-based threshold<br>
+                        ✓ Combines HRM + Tmax strengths<br>
+                        ✓ No user intervention needed
+                    </td>
+                    <td class="poor">
+                        ✗ Potential discontinuity at switch<br>
+                        ✗ Requires both methods to work<br>
+                        ✗ More complex implementation<br>
+                        ✗ Need to validate threshold
+                    </td>
+                    <td>
+                        • Uses HRM parameters<br>
+                        • Uses Tmax_Klu params<br>
+                        • Switch: Vh_crit = D/x × 3600<br>
+                        • Typically ~18 cm/h
+                    </td>
+                    <td>
+                        Calculates both HRM and<br>
+                        Tmax_Klu, switches based<br>
+                        on Péclet number (β≤1)
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2 style="margin-top: 40px; color: #2c3e50;">Decision Matrix: Which Method to Use?</h2>
+
+        <table style="margin-top: 20px;">
+            <thead>
+                <tr>
+                    <th>Flow Condition</th>
+                    <th>Recommended Method</th>
+                    <th>Alternative</th>
+                    <th>Rationale</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>Reverse Flow</strong> (-20 to 0 cm/h)</td>
+                    <td class="good">HRM or DMA</td>
+                    <td>-</td>
+                    <td>Only HRM-based methods can measure negative flows</td>
+                </tr>
+                <tr>
+                    <td><strong>Zero/Near-Zero</strong> (0-5 cm/h)</td>
+                    <td class="good">HRM or DMA</td>
+                    <td>HRMXa/b</td>
+                    <td>HRM most stable at very low flows, Tmax unreliable</td>
+                </tr>
+                <tr>
+                    <td><strong>Low Flow</strong> (5-20 cm/h)</td>
+                    <td class="good">HRM or DMA</td>
+                    <td>HRMXa/b, MHR</td>
+                    <td>HRM sweet spot, all methods work reasonably</td>
+                </tr>
+                <tr>
+                    <td><strong>Moderate Flow</strong> (20-50 cm/h)</td>
+                    <td class="good">DMA or MHR</td>
+                    <td>HRMXa/b, Tmax_Klu</td>
+                    <td>Transition zone, DMA auto-selects appropriate method</td>
+                </tr>
+                <tr>
+                    <td><strong>High Flow</strong> (50-100 cm/h)</td>
+                    <td class="good">MHR or DMA</td>
+                    <td>Tmax_Klu</td>
+                    <td>HRM fails, MHR most reliable, DMA uses Tmax</td>
+                </tr>
+                <tr>
+                    <td><strong>Very High Flow</strong> (>100 cm/h)</td>
+                    <td class="good">MHR</td>
+                    <td>Tmax_Klu</td>
+                    <td>Only MHR validated to ~140 cm³/cm²/h</td>
+                </tr>
+                <tr>
+                    <td><strong>Variable/Unknown</strong></td>
+                    <td class="good">DMA</td>
+                    <td>Calculate all, compare</td>
+                    <td>DMA automatically handles range, safest choice</td>
+                </tr>
+                <tr>
+                    <td><strong>Rapidly Changing</strong></td>
+                    <td class="good">MHR or DMA</td>
+                    <td>-</td>
+                    <td>MHR more robust to transients than fixed HRM window</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2 style="margin-top: 40px; color: #2c3e50;">Typical Workflow Recommendations</h2>
+
+        <table style="margin-top: 20px;">
+            <thead>
+                <tr>
+                    <th>Use Case</th>
+                    <th>Primary Method</th>
+                    <th>Quality Check Methods</th>
+                    <th>Notes</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>Research Study</strong><br>(need best accuracy)</td>
+                    <td>DMA + MHR + HRM</td>
+                    <td>Calculate all methods<br>Compare for validation</td>
+                    <td>Use DMA for reporting, others for quality control and method comparison</td>
+                </tr>
+                <tr>
+                    <td><strong>Operational Monitoring</strong><br>(need reliability)</td>
+                    <td>DMA</td>
+                    <td>Check HRM vs Tmax_Klu<br>at switch point</td>
+                    <td>DMA provides best coverage with automatic selection</td>
+                </tr>
+                <tr>
+                    <td><strong>Low-Flow Species</strong><br>(e.g., conifers, arid)</td>
+                    <td>HRM</td>
+                    <td>Occasionally check DMA</td>
+                    <td>HRM sufficient if confident flows stay <50 cm/h</td>
+                </tr>
+                <tr>
+                    <td><strong>High-Flow Species</strong><br>(e.g., Eucalyptus, young trees)</td>
+                    <td>MHR</td>
+                    <td>Calculate DMA for validation</td>
+                    <td>MHR extends range beyond other methods</td>
+                </tr>
+                <tr>
+                    <td><strong>Method Development</strong><br>(testing new approaches)</td>
+                    <td>All methods</td>
+                    <td>Compare with gravimetric<br>or other validation</td>
+                    <td>Calculate all methods to understand differences and validate new approaches</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div style="margin-top: 30px; padding: 20px; background: #e8f4f8; border-radius: 5px; border-left: 4px solid #2980b9;">
+            <h3 style="margin-top: 0; color: #2980b9;">💡 General Recommendation</h3>
+            <p><strong>For most applications, calculate DMA as your primary method</strong>, but also compute HRM and MHR for quality control. This approach:</p>
+            <ul>
+                <li>Provides full range coverage without manual intervention</li>
+                <li>Allows you to check method agreement in overlapping ranges</li>
+                <li>Helps identify data quality issues when methods disagree significantly</li>
+                <li>Maintains compatibility with published literature using HRM or MHR</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>
