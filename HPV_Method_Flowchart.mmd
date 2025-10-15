@@ -36,6 +36,9 @@ graph TB
     TK2 --> TK3[Vh = √ 4D/tp×ln 1-tp/tm + x²/tm tm-tp]
     TK3 --> TKOut[Tmax_Klu Velocity]
 
+    HRMOut --> Correct
+    MHROut --> Correct
+
     HRMOut --> DMA
     TKOut --> DMA
 	  TCOut --> DMA
@@ -48,11 +51,10 @@ graph TB
     DMA3 --> DMAOut[DMA Velocity]
     DMA4 --> DMAOut
 
-    HRMOut --> Correct
-    MHROut --> Correct
     HRMXOut --> Correct
     TCOut --> Correct
     DMAOut --> Correct
+    TKOut --> Correct
 
     Correct[Apply Corrections] --> Space{Probe Spacing<br/>Correction Needed?}
     Space -->|Yes| SpaceCorr[Measure at Zero Flow<br/>Calculate x_corrected]
