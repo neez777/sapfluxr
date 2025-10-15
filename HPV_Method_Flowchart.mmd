@@ -1,39 +1,39 @@
 graph TB
     Start([Raw SFM1x Data]) --> Import[Import Data<br/>Extract Temps & Diagnostics]
-    Import --> Setup[Setup Parameters<br/>D, x, tp, windows]
+    Import --> Setup[Setup Parameters<br/>thermal_diffusivity, probe_spacing,<br/>heat_pulse_duration, windows]
     Setup --> Baseline[Calculate Pre-Pulse Baseline<br/>Mean T during 0-30s]
-    Baseline --> DeltaT[Calculate ΔT<br/>T - Baseline for each probe]
-    DeltaT --> Ratios[Calculate Basic Ratios<br/>ΔTd/ΔTu for each pair]
+    Baseline --> DeltaT[Calculate delta_T<br/>T - Baseline for each probe]
+    DeltaT --> Ratios[Calculate Basic Ratios<br/>delta_T_downstream/delta_T_upstream for each pair]
 
     Ratios --> Methods{Select Method}
 
     Methods -->|HRM| HRM1[Extract Window 60-100s]
     HRM1 --> HRM2[Average Ratios in Window]
-    HRM2 --> HRM3[Vh = D/x × ln ratio × 3600]
+    HRM2 --> HRM3[Vh = thermal_diffusivity/probe_spacing × ln ratio × 3600]
     HRM3 --> HRMOut[HRM Velocity]
 
-    Methods -->|MHR| MHR1[Find ΔTmax for each probe]
-    MHR1 --> MHR2[Calculate max ratio<br/>ΔTd_max/ΔTu_max]
-    MHR2 --> MHR3[Vh = D/x × ln max_ratio × 3600]
+    Methods -->|MHR| MHR1[Find delta_T_max for each probe]
+    MHR1 --> MHR2[Calculate max ratio<br/>delta_T_downstream_max/delta_T_upstream_max]
+    MHR2 --> MHR3[Vh = thermal_diffusivity/probe_spacing × ln max_ratio × 3600]
     MHR3 --> MHROut[MHR Velocity]
 
     Methods -->|HRMX| HRMX1[Extract Pre-Max Values<br/>Only rising phase]
-    HRMX1 --> HRMX2[Define Window<br/>L×ΔTmax to H×ΔTmax]
+    HRMX1 --> HRMX2[Define Window<br/>hrmx_lower_threshold × delta_T_max to<br/>hrmx_upper_threshold × delta_T_max]
     HRMX2 --> HRMX3[Filter values in window]
     HRMX3 --> HRMXChoice{HRMX Variant?}
     HRMXChoice -->|HRMXa| HRMXa[Average ratios within window]
     HRMXChoice -->|HRMXb| HRMXb[Ratio of averaged temps]
-    HRMXa --> HRMX4[Vh = D/x × ln ratio × 3600]
+    HRMXa --> HRMX4[Vh = thermal_diffusivity/probe_spacing × ln ratio × 3600]
     HRMXb --> HRMX4
     HRMX4 --> HRMXOut[HRMX Velocity]
 
-    Methods -->|Tmax Cohen| TC1[Find time to ΔTmax: tm]
-    TC1 --> TC2[Vh = √ x²-4Dtm / tm]
+    Methods -->|Tmax Cohen| TC1[Find time_to_max_temp]
+    TC1 --> TC2[Vh = √ probe_spacing²-4×thermal_diffusivity×time_to_max / time_to_max]
     TC2 --> TCOut[Tmax_Coh Velocity]
 
-    Methods -->|Tmax Kluit| TK1[Find time to ΔTmax: tm]
-    TK1 --> TK2[Include pulse duration tp]
-    TK2 --> TK3[Vh = √ 4D/tp×ln 1-tp/tm + x²/tm tm-tp]
+    Methods -->|Tmax Kluit| TK1[Find time_to_max_temp]
+    TK1 --> TK2[Include heat_pulse_duration]
+    TK2 --> TK3[Vh with finite pulse correction]
     TK3 --> TKOut[Tmax_Klu Velocity]
 
     HRMOut --> Correct
@@ -44,8 +44,8 @@ graph TB
 	  TCOut --> DMA
 	  MHROut --> DMA
 	  HRMXOut --> DMA
-    DMA --> DMA1{Calculate Vh_crit<br/>D/x × 3600}
-    DMA1 --> DMA2{Vh_HRM < Vh_crit?}
+    DMA --> DMA1{Calculate Vh_critical_threshold<br/>thermal_diffusivity/probe_spacing × 3600}
+    DMA1 --> DMA2{Vh_HRM < Vh_critical_threshold?}
     DMA2 -->|Yes: Low Flow| DMA3[Use HRM]
     DMA2 -->|No: High Flow| DMA4[Use Tmax or MHR]
     DMA3 --> DMAOut[DMA Velocity]
@@ -57,13 +57,13 @@ graph TB
     TKOut --> Correct
 
     Correct[Apply Corrections] --> Space{Probe Spacing<br/>Correction Needed?}
-    Space -->|Yes| SpaceCorr[Measure at Zero Flow<br/>Calculate x_corrected]
+    Space -->|Yes| SpaceCorr[Measure at Zero Flow<br/>Calculate probe_spacing_corrected]
     Space -->|No| Wound
     SpaceCorr --> Wound{Wound<br/>Correction?}
 
-    Wound -->|Yes| WoundCorr[Apply polynomial<br/>Vc = a + bVh + cVh² + dVh³]
+    Wound -->|Yes| WoundCorr[Apply polynomial wound correction]
     Wound -->|No| Convert
-    WoundCorr --> Convert[Convert to Sap Flux<br/>Js = ρd/ρs × MC+c × Vh]
+    WoundCorr --> Convert[Convert to Sap Flux Density<br/>sap_flux_density = f moisture_content, Vh]
 
     Convert --> Output[(Output Results<br/>Vh by method, depth,<br/>timestamp, diagnostics)]
 
