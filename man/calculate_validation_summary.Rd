@@ -4,10 +4,10 @@
 \alias{calculate_validation_summary}
 \title{Calculate Validation Summary Statistics}
 \usage{
-calculate_validation_summary(sap_data, issues, warnings)
+calculate_validation_summary(heat_pulse_data, issues, warnings)
 }
 \arguments{
-\item{sap_data}{A sap_data object}
+\item{heat_pulse_data}{A heat_pulse_data object}
 
 \item{issues}{Character vector of issues}
 

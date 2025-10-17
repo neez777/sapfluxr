@@ -5,16 +5,17 @@
 \title{Calculate HRMX velocities}
 \usage{
 calc_hrmx(
-  delatT_do,
-  delatT_di,
-  delatT_uo,
-  delatT_ui,
+  deltaT_do,
+  deltaT_di,
+  deltaT_uo,
+  deltaT_ui,
   dTratio_douo,
   dTratio_diui,
   L,
   H,
   diffusivity,
-  probe_spacing
+  probe_spacing,
+  tp
 )
 }
 \description{

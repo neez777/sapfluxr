@@ -4,10 +4,10 @@
 \alias{validate_temporal_consistency}
 \title{Validate Temporal Consistency}
 \usage{
-validate_temporal_consistency(sap_data)
+validate_temporal_consistency(heat_pulse_data)
 }
 \arguments{
-\item{sap_data}{A sap_data object}
+\item{heat_pulse_data}{A heat_pulse_data object}
 }
 \value{
 List with issues and warnings

@@ -4,10 +4,10 @@
 \alias{validate_structure}
 \title{Validate Data Structure}
 \usage{
-validate_structure(sap_data)
+validate_structure(heat_pulse_data)
 }
 \arguments{
-\item{sap_data}{A sap_data object}
+\item{heat_pulse_data}{A heat_pulse_data object}
 }
 \value{
 List with issues and warnings

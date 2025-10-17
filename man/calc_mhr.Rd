@@ -5,10 +5,10 @@
 \title{Calculate MHR velocities}
 \usage{
 calc_mhr(
-  delatT_do,
-  delatT_di,
-  delatT_uo,
-  delatT_ui,
+  deltaT_do,
+  deltaT_di,
+  deltaT_uo,
+  deltaT_ui,
   diffusivity,
   probe_spacing
 )

@@ -5,7 +5,7 @@
 \title{Calculate Heat Pulse Velocity}
 \usage{
 calc_heat_pulse_velocity(
-  sap_data,
+  heat_pulse_data,
   pulse_ids = NULL,
   methods = c("HRM", "MHR", "DMA"),
   probe_config = NULL,
@@ -14,12 +14,13 @@ calc_heat_pulse_velocity(
   diffusivity = NULL,
   probe_spacing = NULL,
   probe_corrections = NULL,
+  confirm_parameters = TRUE,
   plot_results = FALSE,
   show_progress = TRUE
 )
 }
 \arguments{
-\item{sap_data}{A sap_data object from read_sap_data()}
+\item{heat_pulse_data}{A heat_pulse_data object from read_heat_pulse_data()}
 
 \item{pulse_ids}{Vector of pulse IDs to process. If NULL, processes all pulses.}
 
@@ -42,6 +43,9 @@ path to custom YAML, or NULL (uses default generic softwood)}
 metadata will be attached to results. Note: This function calculates raw Vh; apply corrections
 afterwards using apply_hpv_corrections().}
 
+\item{confirm_parameters}{Logical indicating whether to prompt for parameter confirmation
+in interactive mode (default: TRUE). Set to FALSE for non-interactive scripts.}
+
 \item{plot_results}{Logical indicating whether to generate diagnostic plots}
 
 \item{show_progress}{Logical indicating whether to report progress (default: TRUE)}
@@ -53,10 +57,13 @@ A tibble containing calculated heat pulse velocities with columns:
 \item{method}{Calculation method used}
 \item{sensor_position}{Inner or outer sensor position}
 \item{Vh_cm_hr}{Heat pulse velocity in cm/hr}
+\item{calc_window_start_sec}{Start of calculation window (seconds after pulse), for windowed methods like HRM}
+\item{calc_window_end_sec}{End of calculation window (seconds after pulse), for windowed methods like HRM}
+\item{calc_time_sec}{Specific time of calculation (seconds after pulse), for point methods like Tmax}
 \item{quality_flag}{Data quality indicator}
 }
 \description{
-Calculates heat pulse velocity (Vh) from sap flow temperature data using multiple methods
+Calculates heat pulse velocity (Vh) from heat pulse temperature data using multiple methods
 including Heat Ratio Method (HRM), Maximum Heat Ratio (MHR), T-max methods, and others.
 }
 \details{
@@ -78,15 +85,15 @@ The parameters list should contain:
 \examples{
 \dontrun{
 # Load data and calculate velocities with progress bars
-sap_data <- read_sap_data("data.txt")
+heat_pulse_data <- read_heat_pulse_data("data.txt")
 progressr::with_progress({
-  results <- calc_heat_pulse_velocity(sap_data)
+  results <- calc_heat_pulse_velocity(heat_pulse_data)
 })
 
 # Use specific methods and parameters
 params <- list(diffusivity = 0.003, probe_spacing = 0.6)
 progressr::with_progress({
-  results <- calc_heat_pulse_velocity(sap_data, methods = c("HRM", "MHR"),
+  results <- calc_heat_pulse_velocity(heat_pulse_data, methods = c("HRM", "MHR"),
                                      parameters = params)
 })
 }

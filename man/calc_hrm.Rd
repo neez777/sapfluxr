@@ -4,7 +4,14 @@
 \alias{calc_hrm}
 \title{Calculate HRM velocities}
 \usage{
-calc_hrm(dTratio_douo, dTratio_diui, HRM_period, diffusivity, probe_spacing)
+calc_hrm(
+  dTratio_douo,
+  dTratio_diui,
+  HRM_period,
+  diffusivity,
+  probe_spacing,
+  tp
+)
 }
 \description{
 Calculate HRM velocities

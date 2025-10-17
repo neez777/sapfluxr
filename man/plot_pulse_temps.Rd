@@ -6,23 +6,23 @@
 \usage{
 plot_pulse_temps(
   pulse_data,
-  delatT_do,
-  delatT_di,
-  delatT_uo,
-  delatT_ui,
+  deltaT_do,
+  deltaT_di,
+  deltaT_uo,
+  deltaT_ui,
   pulse_id
 )
 }
 \arguments{
 \item{pulse_data}{Data for single pulse}
 
-\item{delatT_do}{Delta temperatures for downstream outer}
+\item{deltaT_do}{Delta temperatures for downstream outer}
 
-\item{delatT_di}{Delta temperatures for downstream inner}
+\item{deltaT_di}{Delta temperatures for downstream inner}
 
-\item{delatT_uo}{Delta temperatures for upstream outer}
+\item{deltaT_uo}{Delta temperatures for upstream outer}
 
-\item{delatT_ui}{Delta temperatures for upstream inner}
+\item{deltaT_ui}{Delta temperatures for upstream inner}
 
 \item{pulse_id}{Pulse ID for title}
 }

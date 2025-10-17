@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+<meta name="author" content="Grant Joyce" />
+
+<meta name="date" content="2025-10-17" />
+
+<title>Quick Start Guide to sapfluxr</title>
+
+<script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
+// be compatible with the behavior of Pandoc < 2.8).
+document.addEventListener('DOMContentLoaded', function(e) {
+  var hs = document.querySelectorAll("div.section[class*='level'] > :first-child");
+  var i, h, a;
+  for (i = 0; i < hs.length; i++) {
+    h = hs[i];
+    if (!/^h[1-6]$/i.test(h.tagName)) continue;  // it should be a header h1-h6
+    a = h.attributes;
+    while (a.length > 0) h.removeAttribute(a[0].name);
+  }
+});
+</script>
+
+<style type="text/css">
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+span.underline{text-decoration: underline;}
+div.column{display: inline-block; vertical-align: top; width: 50%;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+</style>
+
+
+
+<style type="text/css">
+code {
+white-space: pre;
+}
+.sourceCode {
+overflow: visible;
+}
+</style>
+<style type="text/css" data-origin="pandoc">
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+{ counter-reset: source-line 0; }
+pre.numberSource code > span
+{ position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+{ content: counter(source-line);
+position: relative; left: -1em; text-align: right; vertical-align: baseline;
+border: none; display: inline-block;
+-webkit-touch-callout: none; -webkit-user-select: none;
+-khtml-user-select: none; -moz-user-select: none;
+-ms-user-select: none; user-select: none;
+padding: 0 4px; width: 4em;
+color: #aaaaaa;
+}
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa; padding-left: 4px; }
+div.sourceCode
+{ }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } 
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.at { color: #7d9029; } 
+code span.bn { color: #40a070; } 
+code span.bu { color: #008000; } 
+code span.cf { color: #007020; font-weight: bold; } 
+code span.ch { color: #4070a0; } 
+code span.cn { color: #880000; } 
+code span.co { color: #60a0b0; font-style: italic; } 
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.do { color: #ba2121; font-style: italic; } 
+code span.dt { color: #902000; } 
+code span.dv { color: #40a070; } 
+code span.er { color: #ff0000; font-weight: bold; } 
+code span.ex { } 
+code span.fl { color: #40a070; } 
+code span.fu { color: #06287e; } 
+code span.im { color: #008000; font-weight: bold; } 
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.kw { color: #007020; font-weight: bold; } 
+code span.op { color: #666666; } 
+code span.ot { color: #007020; } 
+code span.pp { color: #bc7a00; } 
+code span.sc { color: #4070a0; } 
+code span.ss { color: #bb6688; } 
+code span.st { color: #4070a0; } 
+code span.va { color: #19177c; } 
+code span.vs { color: #4070a0; } 
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } 
+</style>
+<script>
+// apply pandoc div.sourceCode style to pre.sourceCode instead
+(function() {
+  var sheets = document.styleSheets;
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].ownerNode.dataset["origin"] !== "pandoc") continue;
+    try { var rules = sheets[i].cssRules; } catch (e) { continue; }
+    var j = 0;
+    while (j < rules.length) {
+      var rule = rules[j];
+      // check if there is a div.sourceCode rule
+      if (rule.type !== rule.STYLE_RULE || rule.selectorText !== "div.sourceCode") {
+        j++;
+        continue;
+      }
+      var style = rule.style.cssText;
+      // check if color or background-color is set
+      if (rule.style.color === '' && rule.style.backgroundColor === '') {
+        j++;
+        continue;
+      }
+      // replace div.sourceCode by a pre.sourceCode rule
+      sheets[i].deleteRule(j);
+      sheets[i].insertRule('pre.sourceCode{' + style + '}', j);
+    }
+  }
+})();
+</script>
+
+
+
+
+<style type="text/css">body {
+background-color: #fff;
+margin: 1em auto;
+max-width: 700px;
+overflow: visible;
+padding-left: 2em;
+padding-right: 2em;
+font-family: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+font-size: 14px;
+line-height: 1.35;
+}
+#TOC {
+clear: both;
+margin: 0 0 10px 10px;
+padding: 4px;
+width: 400px;
+border: 1px solid #CCCCCC;
+border-radius: 5px;
+background-color: #f6f6f6;
+font-size: 13px;
+line-height: 1.3;
+}
+#TOC .toctitle {
+font-weight: bold;
+font-size: 15px;
+margin-left: 5px;
+}
+#TOC ul {
+padding-left: 40px;
+margin-left: -1.5em;
+margin-top: 5px;
+margin-bottom: 5px;
+}
+#TOC ul ul {
+margin-left: -2em;
+}
+#TOC li {
+line-height: 16px;
+}
+table {
+margin: 1em auto;
+border-width: 1px;
+border-color: #DDDDDD;
+border-style: outset;
+border-collapse: collapse;
+}
+table th {
+border-width: 2px;
+padding: 5px;
+border-style: inset;
+}
+table td {
+border-width: 1px;
+border-style: inset;
+line-height: 18px;
+padding: 5px 5px;
+}
+table, table th, table td {
+border-left-style: none;
+border-right-style: none;
+}
+table thead, table tr.even {
+background-color: #f7f7f7;
+}
+p {
+margin: 0.5em 0;
+}
+blockquote {
+background-color: #f6f6f6;
+padding: 0.25em 0.75em;
+}
+hr {
+border-style: solid;
+border: none;
+border-top: 1px solid #777;
+margin: 28px 0;
+}
+dl {
+margin-left: 0;
+}
+dl dd {
+margin-bottom: 13px;
+margin-left: 13px;
+}
+dl dt {
+font-weight: bold;
+}
+ul {
+margin-top: 0;
+}
+ul li {
+list-style: circle outside;
+}
+ul ul {
+margin-bottom: 0;
+}
+pre, code {
+background-color: #f7f7f7;
+border-radius: 3px;
+color: #333;
+white-space: pre-wrap; 
+}
+pre {
+border-radius: 3px;
+margin: 5px 0px 10px 0px;
+padding: 10px;
+}
+pre:not([class]) {
+background-color: #f7f7f7;
+}
+code {
+font-family: Consolas, Monaco, 'Courier New', monospace;
+font-size: 85%;
+}
+p > code, li > code {
+padding: 2px 0px;
+}
+div.figure {
+text-align: center;
+}
+img {
+background-color: #FFFFFF;
+padding: 2px;
+border: 1px solid #DDDDDD;
+border-radius: 3px;
+border: 1px solid #CCCCCC;
+margin: 0 5px;
+}
+h1 {
+margin-top: 0;
+font-size: 35px;
+line-height: 40px;
+}
+h2 {
+border-bottom: 4px solid #f7f7f7;
+padding-top: 10px;
+padding-bottom: 2px;
+font-size: 145%;
+}
+h3 {
+border-bottom: 2px solid #f7f7f7;
+padding-top: 10px;
+font-size: 120%;
+}
+h4 {
+border-bottom: 1px solid #f7f7f7;
+margin-left: 8px;
+font-size: 105%;
+}
+h5, h6 {
+border-bottom: 1px solid #ccc;
+font-size: 105%;
+}
+a {
+color: #0033dd;
+text-decoration: none;
+}
+a:hover {
+color: #6666ff; }
+a:visited {
+color: #800080; }
+a:visited:hover {
+color: #BB00BB; }
+a[href^="http:"] {
+text-decoration: underline; }
+a[href^="https:"] {
+text-decoration: underline; }
+
+code > span.kw { color: #555; font-weight: bold; } 
+code > span.dt { color: #902000; } 
+code > span.dv { color: #40a070; } 
+code > span.bn { color: #d14; } 
+code > span.fl { color: #d14; } 
+code > span.ch { color: #d14; } 
+code > span.st { color: #d14; } 
+code > span.co { color: #888888; font-style: italic; } 
+code > span.ot { color: #007020; } 
+code > span.al { color: #ff0000; font-weight: bold; } 
+code > span.fu { color: #900; font-weight: bold; } 
+code > span.er { color: #a61717; background-color: #e3d2d2; } 
+</style>
+
+
+
+
+</head>
+
+<body>
+
+
+
+
+<h1 class="title toc-ignore">Quick Start Guide to sapfluxr</h1>
+<h4 class="author">Grant Joyce</h4>
+<h4 class="date">2025-10-17</h4>
+
+
+
+<div id="introduction" class="section level1">
+<h1>Introduction</h1>
+<p><strong>sapfluxr</strong> processes and analyses sap flow data from
+ICT SFM1x heat pulse velocity (HPV) sensors. This guide walks you
+through the complete workflow from raw data to visualised results.</p>
+<div id="installation" class="section level2">
+<h2>Installation</h2>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="co"># Install from GitHub</span></span>
+<span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a>devtools<span class="sc">::</span><span class="fu">install_github</span>(<span class="st">&quot;neez777/sapfluxr&quot;</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="fu">library</span>(sapfluxr)</span>
+<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a><span class="fu">library</span>(ggplot2)  <span class="co"># For plotting</span></span></code></pre></div>
+</div>
+</div>
+<div id="basic-workflow" class="section level1">
+<h1>Basic Workflow</h1>
+<div id="import-data" class="section level2">
+<h2>1. Import Data</h2>
+<p>sapfluxr automatically detects and imports multiple data formats from
+ICT sensors:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a><span class="co"># Import raw heat pulse data</span></span>
+<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a>heat_pulse_data <span class="ot">&lt;-</span> <span class="fu">read_heat_pulse_data</span>(<span class="st">&quot;path/to/your/data.txt&quot;</span>)</span></code></pre></div>
+<p>The import function will: - Auto-detect the file format (ICT current,
+legacy, or CSV) - Parse temperature measurements from all four
+thermistors (do, di, uo, ui) - Extract diagnostic information (battery
+voltage, temperature, etc.) - Validate data quality (if
+<code>validate_data = TRUE</code>)</p>
+<div id="inspect-imported-data" class="section level3">
+<h3>Inspect Imported Data</h3>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a><span class="co"># Summary of imported data</span></span>
+<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a><span class="fu">str</span>(heat_pulse_data, <span class="at">max.level =</span> <span class="dv">2</span>)</span>
+<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a><span class="co">#&gt; List of 3</span></span>
+<span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a><span class="co">#&gt;  $ measurements:&#39;data.frame&#39;:    1500 obs. of  6 variables:</span></span>
+<span id="cb4-5"><a href="#cb4-5" tabindex="-1"></a><span class="co">#&gt;   ..$ pulse_id: int [1:1500] 1 1 1 1 1 1 1 1 1 1 ...</span></span>
+<span id="cb4-6"><a href="#cb4-6" tabindex="-1"></a><span class="co">#&gt;   ..$ datetime: POSIXct[1:1500], format: &quot;2024-03-15 08:00:00&quot; &quot;2024-03-15 08:00:01&quot; ...</span></span>
+<span id="cb4-7"><a href="#cb4-7" tabindex="-1"></a><span class="co">#&gt;   ..$ do      : num [1:1500] 18.6 18.6 18.6 18.7 18.6 ...</span></span>
+<span id="cb4-8"><a href="#cb4-8" tabindex="-1"></a><span class="co">#&gt;   ..$ di      : num [1:1500] 18.3 18.4 18.3 18.4 18.4 ...</span></span>
+<span id="cb4-9"><a href="#cb4-9" tabindex="-1"></a><span class="co">#&gt;   ..$ uo      : num [1:1500] 18.6 18.6 18.6 18.7 18.6 ...</span></span>
+<span id="cb4-10"><a href="#cb4-10" tabindex="-1"></a><span class="co">#&gt;   ..$ ui      : num [1:1500] 18.4 18.4 18.4 18.4 18.4 ...</span></span>
+<span id="cb4-11"><a href="#cb4-11" tabindex="-1"></a><span class="co">#&gt;  $ diagnostics :&#39;data.frame&#39;:    10 obs. of  7 variables:</span></span>
+<span id="cb4-12"><a href="#cb4-12" tabindex="-1"></a><span class="co">#&gt;   ..$ pulse_id        : int [1:10] 1 2 3 4 5 6 7 8 9 10</span></span>
+<span id="cb4-13"><a href="#cb4-13" tabindex="-1"></a><span class="co">#&gt;   ..$ datetime        : POSIXct[1:10], format: &quot;2024-03-15 08:00:00&quot; &quot;2024-03-15 08:30:00&quot; ...</span></span>
+<span id="cb4-14"><a href="#cb4-14" tabindex="-1"></a><span class="co">#&gt;   ..$ batt_volt       : num [1:10] 3.94 4.07 4.01 4.05 3.95 ...</span></span>
+<span id="cb4-15"><a href="#cb4-15" tabindex="-1"></a><span class="co">#&gt;   ..$ batt_current    : num [1:10] 16.7 14.2 13.8 15 16.2 ...</span></span>
+<span id="cb4-16"><a href="#cb4-16" tabindex="-1"></a><span class="co">#&gt;   ..$ batt_temp       : num [1:10] 27.8 27 24 27.7 21.8 ...</span></span>
+<span id="cb4-17"><a href="#cb4-17" tabindex="-1"></a><span class="co">#&gt;   ..$ external_volt   : num [1:10] 19.7 20.1 20.4 22.7 20.9 ...</span></span>
+<span id="cb4-18"><a href="#cb4-18" tabindex="-1"></a><span class="co">#&gt;   ..$ external_current: num [1:10] 13.6 19.4 17.3 18.5 17.7 ...</span></span>
+<span id="cb4-19"><a href="#cb4-19" tabindex="-1"></a><span class="co">#&gt;  $ metadata    :List of 11</span></span>
+<span id="cb4-20"><a href="#cb4-20" tabindex="-1"></a><span class="co">#&gt;   ..$ file_path      : chr &quot;example_data.txt&quot;</span></span>
+<span id="cb4-21"><a href="#cb4-21" tabindex="-1"></a><span class="co">#&gt;   ..$ file_name      : chr &quot;example_data.txt&quot;</span></span>
+<span id="cb4-22"><a href="#cb4-22" tabindex="-1"></a><span class="co">#&gt;   ..$ format         : chr &quot;ict_current&quot;</span></span>
+<span id="cb4-23"><a href="#cb4-23" tabindex="-1"></a><span class="co">#&gt;   ..$ import_time    : POSIXct[1:1], format: &quot;2025-10-17 22:30:25&quot;</span></span>
+<span id="cb4-24"><a href="#cb4-24" tabindex="-1"></a><span class="co">#&gt;   ..$ file_size      : num 125000</span></span>
+<span id="cb4-25"><a href="#cb4-25" tabindex="-1"></a><span class="co">#&gt;   ..$ file_size_mb   : num 0.12</span></span>
+<span id="cb4-26"><a href="#cb4-26" tabindex="-1"></a><span class="co">#&gt;   ..$ n_pulses       : num 10</span></span>
+<span id="cb4-27"><a href="#cb4-27" tabindex="-1"></a><span class="co">#&gt;   ..$ n_measurements : int 1500</span></span>
+<span id="cb4-28"><a href="#cb4-28" tabindex="-1"></a><span class="co">#&gt;   ..$ chunk_size     : num 1e+05</span></span>
+<span id="cb4-29"><a href="#cb4-29" tabindex="-1"></a><span class="co">#&gt;   ..$ r_version      : chr &quot;4.5.1&quot;</span></span>
+<span id="cb4-30"><a href="#cb4-30" tabindex="-1"></a><span class="co">#&gt;   ..$ package_version: chr &quot;0.2.0&quot;</span></span>
+<span id="cb4-31"><a href="#cb4-31" tabindex="-1"></a><span class="co">#&gt;  - attr(*, &quot;class&quot;)= chr [1:2] &quot;heat_pulse_data&quot; &quot;list&quot;</span></span>
+<span id="cb4-32"><a href="#cb4-32" tabindex="-1"></a></span>
+<span id="cb4-33"><a href="#cb4-33" tabindex="-1"></a><span class="co"># View first few temperature measurements</span></span>
+<span id="cb4-34"><a href="#cb4-34" tabindex="-1"></a><span class="fu">head</span>(heat_pulse_data<span class="sc">$</span>measurements)</span>
+<span id="cb4-35"><a href="#cb4-35" tabindex="-1"></a><span class="co">#&gt;   pulse_id            datetime       do       di       uo       ui</span></span>
+<span id="cb4-36"><a href="#cb4-36" tabindex="-1"></a><span class="co">#&gt; 1        1 2024-03-15 08:00:00 18.64788 18.33344 18.63690 18.35142</span></span>
+<span id="cb4-37"><a href="#cb4-37" tabindex="-1"></a><span class="co">#&gt; 2        1 2024-03-15 08:00:01 18.64870 18.38433 18.63693 18.35882</span></span>
+<span id="cb4-38"><a href="#cb4-38" tabindex="-1"></a><span class="co">#&gt; 3        1 2024-03-15 08:00:02 18.62395 18.31709 18.63251 18.37673</span></span>
+<span id="cb4-39"><a href="#cb4-39" tabindex="-1"></a><span class="co">#&gt; 4        1 2024-03-15 08:00:03 18.66819 18.37312 18.65049 18.37029</span></span>
+<span id="cb4-40"><a href="#cb4-40" tabindex="-1"></a><span class="co">#&gt; 5        1 2024-03-15 08:00:04 18.61334 18.35141 18.62813 18.36532</span></span>
+<span id="cb4-41"><a href="#cb4-41" tabindex="-1"></a><span class="co">#&gt; 6        1 2024-03-15 08:00:05 18.64013 18.39068 18.63174 18.35219</span></span>
+<span id="cb4-42"><a href="#cb4-42" tabindex="-1"></a></span>
+<span id="cb4-43"><a href="#cb4-43" tabindex="-1"></a><span class="co"># View diagnostic information</span></span>
+<span id="cb4-44"><a href="#cb4-44" tabindex="-1"></a><span class="fu">head</span>(heat_pulse_data<span class="sc">$</span>diagnostics)</span>
+<span id="cb4-45"><a href="#cb4-45" tabindex="-1"></a><span class="co">#&gt;   pulse_id            datetime batt_volt batt_current batt_temp external_volt</span></span>
+<span id="cb4-46"><a href="#cb4-46" tabindex="-1"></a><span class="co">#&gt; 1        1 2024-03-15 08:00:00  3.941455     16.70443  27.84594      19.73124</span></span>
+<span id="cb4-47"><a href="#cb4-47" tabindex="-1"></a><span class="co">#&gt; 2        2 2024-03-15 08:30:00  4.070029     14.21129  26.96575      20.13023</span></span>
+<span id="cb4-48"><a href="#cb4-48" tabindex="-1"></a><span class="co">#&gt; 3        3 2024-03-15 09:00:00  4.013634     13.75766  23.97146      20.42936</span></span>
+<span id="cb4-49"><a href="#cb4-49" tabindex="-1"></a><span class="co">#&gt; 4        4 2024-03-15 09:30:00  4.047578     14.97117  27.66932      22.65284</span></span>
+<span id="cb4-50"><a href="#cb4-50" tabindex="-1"></a><span class="co">#&gt; 5        5 2024-03-15 10:00:00  3.946977     16.20848  21.79344      20.85909</span></span>
+<span id="cb4-51"><a href="#cb4-51" tabindex="-1"></a><span class="co">#&gt; 6        6 2024-03-15 10:30:00  3.921512     16.69582  25.06269      20.32345</span></span>
+<span id="cb4-52"><a href="#cb4-52" tabindex="-1"></a><span class="co">#&gt;   external_current</span></span>
+<span id="cb4-53"><a href="#cb4-53" tabindex="-1"></a><span class="co">#&gt; 1         13.60032</span></span>
+<span id="cb4-54"><a href="#cb4-54" tabindex="-1"></a><span class="co">#&gt; 2         19.41447</span></span>
+<span id="cb4-55"><a href="#cb4-55" tabindex="-1"></a><span class="co">#&gt; 3         17.29443</span></span>
+<span id="cb4-56"><a href="#cb4-56" tabindex="-1"></a><span class="co">#&gt; 4         18.49753</span></span>
+<span id="cb4-57"><a href="#cb4-57" tabindex="-1"></a><span class="co">#&gt; 5         17.72918</span></span>
+<span id="cb4-58"><a href="#cb4-58" tabindex="-1"></a><span class="co">#&gt; 6         17.55470</span></span></code></pre></div>
+</div>
+</div>
+<div id="calculate-heat-pulse-velocity" class="section level2">
+<h2>2. Calculate Heat Pulse Velocity</h2>
+<p>Calculate sap velocity using one or more established methods:</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a><span class="co"># Calculate using multiple methods</span></span>
+<span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a>vh_results <span class="ot">&lt;-</span> <span class="fu">calc_heat_pulse_velocity</span>(</span>
+<span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a>  heat_pulse_data,</span>
+<span id="cb5-4"><a href="#cb5-4" tabindex="-1"></a>  <span class="at">methods =</span> <span class="fu">c</span>(<span class="st">&quot;HRM&quot;</span>, <span class="st">&quot;MHR&quot;</span>, <span class="st">&quot;HRMXa&quot;</span>, <span class="st">&quot;Tmax_Klu&quot;</span>),</span>
+<span id="cb5-5"><a href="#cb5-5" tabindex="-1"></a>  <span class="at">show_progress =</span> <span class="cn">FALSE</span></span>
+<span id="cb5-6"><a href="#cb5-6" tabindex="-1"></a>)</span>
+<span id="cb5-7"><a href="#cb5-7" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb5-8"><a href="#cb5-8" tabindex="-1"></a><span class="co">#&gt; =================================================================== </span></span>
+<span id="cb5-9"><a href="#cb5-9" tabindex="-1"></a><span class="co">#&gt;   CALCULATION SUMMARY</span></span>
+<span id="cb5-10"><a href="#cb5-10" tabindex="-1"></a><span class="co">#&gt; =================================================================== </span></span>
+<span id="cb5-11"><a href="#cb5-11" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb5-12"><a href="#cb5-12" tabindex="-1"></a><span class="co">#&gt; Total pulses processed: 10</span></span>
+<span id="cb5-13"><a href="#cb5-13" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb5-14"><a href="#cb5-14" tabindex="-1"></a><span class="co">#&gt; Success rates by method:</span></span>
+<span id="cb5-15"><a href="#cb5-15" tabindex="-1"></a><span class="co">#&gt; ------------------------------------------------------------------- </span></span>
+<span id="cb5-16"><a href="#cb5-16" tabindex="-1"></a><span class="co">#&gt; Method          Calculated    Missing  Success %</span></span>
+<span id="cb5-17"><a href="#cb5-17" tabindex="-1"></a><span class="co">#&gt; ------------------------------------------------------------------- </span></span>
+<span id="cb5-18"><a href="#cb5-18" tabindex="-1"></a><span class="co">#&gt; HRM                     20          0     100.0%</span></span>
+<span id="cb5-19"><a href="#cb5-19" tabindex="-1"></a><span class="co">#&gt; MHR                     20          0     100.0%</span></span>
+<span id="cb5-20"><a href="#cb5-20" tabindex="-1"></a><span class="co">#&gt; HRMXa                   20          0     100.0%</span></span>
+<span id="cb5-21"><a href="#cb5-21" tabindex="-1"></a><span class="co">#&gt; Tmax_Klu                 0         20       0.0%</span></span>
+<span id="cb5-22"><a href="#cb5-22" tabindex="-1"></a><span class="co">#&gt; ------------------------------------------------------------------- </span></span>
+<span id="cb5-23"><a href="#cb5-23" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb5-24"><a href="#cb5-24" tabindex="-1"></a><span class="co">#&gt; Quality flags:</span></span>
+<span id="cb5-25"><a href="#cb5-25" tabindex="-1"></a><span class="co">#&gt;   MISSING             : 20</span></span>
+<span id="cb5-26"><a href="#cb5-26" tabindex="-1"></a><span class="co">#&gt;   OK                  : 60</span></span>
+<span id="cb5-27"><a href="#cb5-27" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb5-28"><a href="#cb5-28" tabindex="-1"></a><span class="co">#&gt; ===================================================================</span></span>
+<span id="cb5-29"><a href="#cb5-29" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb5-30"><a href="#cb5-30" tabindex="-1"></a><span class="co">#&gt; Note: Probe corrections not applied. For accurate results, consider:</span></span>
+<span id="cb5-31"><a href="#cb5-31" tabindex="-1"></a><span class="co">#&gt;   1. Collecting zero-flow calibration data</span></span>
+<span id="cb5-32"><a href="#cb5-32" tabindex="-1"></a><span class="co">#&gt;   2. Measuring wood properties from cores</span></span>
+<span id="cb5-33"><a href="#cb5-33" tabindex="-1"></a><span class="co">#&gt;   3. Estimating wound diameter</span></span>
+<span id="cb5-34"><a href="#cb5-34" tabindex="-1"></a><span class="co">#&gt;   4. Using apply_hpv_corrections() before flux calculations</span></span>
+<span id="cb5-35"><a href="#cb5-35" tabindex="-1"></a><span class="co">#&gt; Set options(sapfluxr.suppress_correction_warnings = TRUE) to suppress this message.</span></span>
+<span id="cb5-36"><a href="#cb5-36" tabindex="-1"></a></span>
+<span id="cb5-37"><a href="#cb5-37" tabindex="-1"></a><span class="co"># View results</span></span>
+<span id="cb5-38"><a href="#cb5-38" tabindex="-1"></a><span class="fu">head</span>(vh_results)</span>
+<span id="cb5-39"><a href="#cb5-39" tabindex="-1"></a><span class="co">#&gt;              datetime pulse_id method sensor_position  Vh_cm_hr</span></span>
+<span id="cb5-40"><a href="#cb5-40" tabindex="-1"></a><span class="co">#&gt; 1 2024-03-15 08:00:00        1    HRM           outer 42.449648</span></span>
+<span id="cb5-41"><a href="#cb5-41" tabindex="-1"></a><span class="co">#&gt; 2 2024-03-15 08:00:00        1    HRM           inner 31.878185</span></span>
+<span id="cb5-42"><a href="#cb5-42" tabindex="-1"></a><span class="co">#&gt; 3 2024-03-15 08:00:00        1    MHR           outer  7.354761</span></span>
+<span id="cb5-43"><a href="#cb5-43" tabindex="-1"></a><span class="co">#&gt; 4 2024-03-15 08:00:00        1    MHR           inner  6.185518</span></span>
+<span id="cb5-44"><a href="#cb5-44" tabindex="-1"></a><span class="co">#&gt; 5 2024-03-15 08:00:00        1  HRMXa           outer  6.998871</span></span>
+<span id="cb5-45"><a href="#cb5-45" tabindex="-1"></a><span class="co">#&gt; 6 2024-03-15 08:00:00        1  HRMXa           inner  6.792039</span></span>
+<span id="cb5-46"><a href="#cb5-46" tabindex="-1"></a><span class="co">#&gt;   calc_window_start_sec calc_window_end_sec calc_time_sec quality_flag</span></span>
+<span id="cb5-47"><a href="#cb5-47" tabindex="-1"></a><span class="co">#&gt; 1                    60                  99            NA           OK</span></span>
+<span id="cb5-48"><a href="#cb5-48" tabindex="-1"></a><span class="co">#&gt; 2                    60                  99            NA           OK</span></span>
+<span id="cb5-49"><a href="#cb5-49" tabindex="-1"></a><span class="co">#&gt; 3                    NA                  NA            60           OK</span></span>
+<span id="cb5-50"><a href="#cb5-50" tabindex="-1"></a><span class="co">#&gt; 4                    NA                  NA            58           OK</span></span>
+<span id="cb5-51"><a href="#cb5-51" tabindex="-1"></a><span class="co">#&gt; 5                     8                  46            NA           OK</span></span>
+<span id="cb5-52"><a href="#cb5-52" tabindex="-1"></a><span class="co">#&gt; 6                     8                  53            NA           OK</span></span></code></pre></div>
+<div id="available-methods" class="section level3">
+<h3>Available Methods</h3>
+<table>
+<thead>
+<tr class="header">
+<th>Method</th>
+<th>Best For</th>
+<th>Reference</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>HRM</strong></td>
+<td>Low flows, reverse flows</td>
+<td>Burgess et al. (2001)</td>
+</tr>
+<tr class="even">
+<td><strong>MHR</strong></td>
+<td>Moderate flows</td>
+<td>Lopez et al. (2021)</td>
+</tr>
+<tr class="odd">
+<td><strong>HRMXa/b</strong></td>
+<td>Enhanced HRM accuracy</td>
+<td>Burgess &amp; Bleby (unpublished)</td>
+</tr>
+<tr class="even">
+<td><strong>Tmax_Coh</strong></td>
+<td>High flows</td>
+<td>Cohen et al. (1981)</td>
+</tr>
+<tr class="odd">
+<td><strong>Tmax_Klu</strong></td>
+<td>High flows (adjusted)</td>
+<td>Kluitenberg &amp; Ham (2004)</td>
+</tr>
+<tr class="even">
+<td><strong>DMA</strong></td>
+<td>Full range (auto-switching)</td>
+<td>Forster (2020)</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div id="understanding-the-output" class="section level3">
+<h3>Understanding the Output</h3>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="co"># Results structure</span></span>
+<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a><span class="fu">colnames</span>(vh_results)</span>
+<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a><span class="co">#&gt; [1] &quot;datetime&quot;              &quot;pulse_id&quot;              &quot;method&quot;               </span></span>
+<span id="cb6-4"><a href="#cb6-4" tabindex="-1"></a><span class="co">#&gt; [4] &quot;sensor_position&quot;       &quot;Vh_cm_hr&quot;              &quot;calc_window_start_sec&quot;</span></span>
+<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a><span class="co">#&gt; [7] &quot;calc_window_end_sec&quot;   &quot;calc_time_sec&quot;         &quot;quality_flag&quot;</span></span>
+<span id="cb6-6"><a href="#cb6-6" tabindex="-1"></a></span>
+<span id="cb6-7"><a href="#cb6-7" tabindex="-1"></a><span class="co"># Quality flags</span></span>
+<span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a><span class="fu">table</span>(vh_results<span class="sc">$</span>quality_flag)</span>
+<span id="cb6-9"><a href="#cb6-9" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb6-10"><a href="#cb6-10" tabindex="-1"></a><span class="co">#&gt; MISSING      OK </span></span>
+<span id="cb6-11"><a href="#cb6-11" tabindex="-1"></a><span class="co">#&gt;      20      60</span></span>
+<span id="cb6-12"><a href="#cb6-12" tabindex="-1"></a></span>
+<span id="cb6-13"><a href="#cb6-13" tabindex="-1"></a><span class="co"># Summary by method</span></span>
+<span id="cb6-14"><a href="#cb6-14" tabindex="-1"></a><span class="fu">aggregate</span>(Vh_cm_hr <span class="sc">~</span> method, <span class="at">data =</span> vh_results, <span class="at">FUN =</span> <span class="cf">function</span>(x) {</span>
+<span id="cb6-15"><a href="#cb6-15" tabindex="-1"></a>  <span class="fu">c</span>(<span class="at">mean =</span> <span class="fu">mean</span>(x, <span class="at">na.rm =</span> <span class="cn">TRUE</span>),</span>
+<span id="cb6-16"><a href="#cb6-16" tabindex="-1"></a>    <span class="at">sd =</span> <span class="fu">sd</span>(x, <span class="at">na.rm =</span> <span class="cn">TRUE</span>),</span>
+<span id="cb6-17"><a href="#cb6-17" tabindex="-1"></a>    <span class="at">n =</span> <span class="fu">sum</span>(<span class="sc">!</span><span class="fu">is.na</span>(x)))</span>
+<span id="cb6-18"><a href="#cb6-18" tabindex="-1"></a>})</span>
+<span id="cb6-19"><a href="#cb6-19" tabindex="-1"></a><span class="co">#&gt;   method Vh_cm_hr.mean Vh_cm_hr.sd Vh_cm_hr.n</span></span>
+<span id="cb6-20"><a href="#cb6-20" tabindex="-1"></a><span class="co">#&gt; 1    HRM    17.4324130  10.2355706 20.0000000</span></span>
+<span id="cb6-21"><a href="#cb6-21" tabindex="-1"></a><span class="co">#&gt; 2  HRMXa     7.0647735   0.4657276 20.0000000</span></span>
+<span id="cb6-22"><a href="#cb6-22" tabindex="-1"></a><span class="co">#&gt; 3    MHR     6.9946109   0.3618595 20.0000000</span></span></code></pre></div>
+</div>
+</div>
+<div id="visualise-results" class="section level2">
+<h2>3. Visualise Results</h2>
+<div id="time-series-plot" class="section level3">
+<h3>Time Series Plot</h3>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a><span class="co"># Plot velocity time series</span></span>
+<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a><span class="fu">plot_vh_timeseries</span>(</span>
+<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a>  vh_results,</span>
+<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a>  <span class="at">methods =</span> <span class="fu">c</span>(<span class="st">&quot;HRM&quot;</span>, <span class="st">&quot;MHR&quot;</span>, <span class="st">&quot;HRMXa&quot;</span>),</span>
+<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a>  <span class="at">sensor_position =</span> <span class="st">&quot;outer&quot;</span></span>
+<span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a>)</span>
+<span id="cb7-7"><a href="#cb7-7" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a><span class="co">#&gt; =================================================================== </span></span>
+<span id="cb7-9"><a href="#cb7-9" tabindex="-1"></a><span class="co">#&gt; PLOT SUMMARY</span></span>
+<span id="cb7-10"><a href="#cb7-10" tabindex="-1"></a><span class="co">#&gt; =================================================================== </span></span>
+<span id="cb7-11"><a href="#cb7-11" tabindex="-1"></a><span class="co">#&gt; Date range: 2024-03-15 08:00 to 2024-03-15 12:30</span></span>
+<span id="cb7-12"><a href="#cb7-12" tabindex="-1"></a><span class="co">#&gt; Duration: 0.2 days</span></span>
+<span id="cb7-13"><a href="#cb7-13" tabindex="-1"></a><span class="co">#&gt; Methods: HRM, MHR, HRMXa</span></span>
+<span id="cb7-14"><a href="#cb7-14" tabindex="-1"></a><span class="co">#&gt; Sensor position: outer</span></span>
+<span id="cb7-15"><a href="#cb7-15" tabindex="-1"></a><span class="co">#&gt; Data points: 30</span></span>
+<span id="cb7-16"><a href="#cb7-16" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb7-17"><a href="#cb7-17" tabindex="-1"></a><span class="co">#&gt; Data points per method:</span></span>
+<span id="cb7-18"><a href="#cb7-18" tabindex="-1"></a><span class="co">#&gt;   HRM            : 10</span></span>
+<span id="cb7-19"><a href="#cb7-19" tabindex="-1"></a><span class="co">#&gt;   HRMXa          : 10</span></span>
+<span id="cb7-20"><a href="#cb7-20" tabindex="-1"></a><span class="co">#&gt;   MHR            : 10</span></span>
+<span id="cb7-21"><a href="#cb7-21" tabindex="-1"></a><span class="co">#&gt; ===================================================================</span></span></code></pre></div>
+<p><img role="img" src="data:image/png;base64,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" /><!-- --></p>
+</div>
+<div id="heat-pulse-trace-plot" class="section level3">
+<h3>Heat Pulse Trace Plot</h3>
+<p>Visualise individual heat pulse responses and see exactly where each
+method calculated its result:</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a><span class="co"># Plot trace for a single pulse</span></span>
+<span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a><span class="fu">plot_heat_pulse_trace</span>(</span>
+<span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a>  heat_pulse_data,</span>
+<span id="cb8-4"><a href="#cb8-4" tabindex="-1"></a>  vh_results,</span>
+<span id="cb8-5"><a href="#cb8-5" tabindex="-1"></a>  <span class="at">pulse_id =</span> <span class="dv">5</span>,</span>
+<span id="cb8-6"><a href="#cb8-6" tabindex="-1"></a>  <span class="at">show_methods =</span> <span class="fu">c</span>(<span class="st">&quot;HRM&quot;</span>, <span class="st">&quot;HRMXa&quot;</span>, <span class="st">&quot;Tmax_Klu&quot;</span>)</span>
+<span id="cb8-7"><a href="#cb8-7" tabindex="-1"></a>)</span></code></pre></div>
+<p><img role="img" src="data:image/png;base64,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" /><!-- --></p>
+<p>The shaded regions show which time points each method used for its
+calculation. This is invaluable for: - Understanding why methods give
+different results - Diagnosing problematic pulses - Validating
+calculation windows</p>
+</div>
+<div id="method-comparison" class="section level3">
+<h3>Method Comparison</h3>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a><span class="co"># Compare two methods across all pulses</span></span>
+<span id="cb9-2"><a href="#cb9-2" tabindex="-1"></a><span class="fu">plot_method_comparison</span>(</span>
+<span id="cb9-3"><a href="#cb9-3" tabindex="-1"></a>  vh_results,</span>
+<span id="cb9-4"><a href="#cb9-4" tabindex="-1"></a>  <span class="at">method1 =</span> <span class="st">&quot;HRM&quot;</span>,</span>
+<span id="cb9-5"><a href="#cb9-5" tabindex="-1"></a>  <span class="at">method2 =</span> <span class="st">&quot;MHR&quot;</span>,</span>
+<span id="cb9-6"><a href="#cb9-6" tabindex="-1"></a>  <span class="at">sensor_position =</span> <span class="st">&quot;outer&quot;</span></span>
+<span id="cb9-7"><a href="#cb9-7" tabindex="-1"></a>)</span>
+<span id="cb9-8"><a href="#cb9-8" tabindex="-1"></a><span class="co">#&gt; `geom_smooth()` using formula = &#39;y ~ x&#39;</span></span></code></pre></div>
+<p><img role="img" src="data:image/png;base64,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" /><!-- --></p>
+</div>
+</div>
+</div>
+<div id="configurations" class="section level1">
+<h1>Configurations</h1>
+<div id="wood-properties" class="section level2">
+<h2>Wood Properties</h2>
+<p>Wood properties affect thermal calculations. Use built-in
+configurations or create custom ones:</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" tabindex="-1"></a><span class="co"># Use built-in configurations</span></span>
+<span id="cb10-2"><a href="#cb10-2" tabindex="-1"></a>vh_results <span class="ot">&lt;-</span> <span class="fu">calc_heat_pulse_velocity</span>(</span>
+<span id="cb10-3"><a href="#cb10-3" tabindex="-1"></a>  heat_pulse_data,</span>
+<span id="cb10-4"><a href="#cb10-4" tabindex="-1"></a>  <span class="at">wood_properties =</span> <span class="st">&quot;eucalyptus&quot;</span>  <span class="co"># or &quot;pine&quot;, &quot;generic_sw&quot;</span></span>
+<span id="cb10-5"><a href="#cb10-5" tabindex="-1"></a>)</span>
+<span id="cb10-6"><a href="#cb10-6" tabindex="-1"></a></span>
+<span id="cb10-7"><a href="#cb10-7" tabindex="-1"></a><span class="co"># Override specific properties</span></span>
+<span id="cb10-8"><a href="#cb10-8" tabindex="-1"></a>vh_results <span class="ot">&lt;-</span> <span class="fu">calc_heat_pulse_velocity</span>(</span>
+<span id="cb10-9"><a href="#cb10-9" tabindex="-1"></a>  heat_pulse_data,</span>
+<span id="cb10-10"><a href="#cb10-10" tabindex="-1"></a>  <span class="at">wood_properties =</span> <span class="st">&quot;eucalyptus&quot;</span>,</span>
+<span id="cb10-11"><a href="#cb10-11" tabindex="-1"></a>  <span class="at">wood_overrides =</span> <span class="fu">list</span>(</span>
+<span id="cb10-12"><a href="#cb10-12" tabindex="-1"></a>    <span class="at">thermal_diffusivity =</span> <span class="fl">0.0028</span>,  <span class="co"># cm²/s</span></span>
+<span id="cb10-13"><a href="#cb10-13" tabindex="-1"></a>    <span class="at">dbh =</span> <span class="fl">45.2</span>,                    <span class="co"># cm</span></span>
+<span id="cb10-14"><a href="#cb10-14" tabindex="-1"></a>    <span class="at">sapwood_depth =</span> <span class="fl">3.5</span>            <span class="co"># cm</span></span>
+<span id="cb10-15"><a href="#cb10-15" tabindex="-1"></a>  )</span>
+<span id="cb10-16"><a href="#cb10-16" tabindex="-1"></a>)</span></code></pre></div>
+<div id="create-custom-wood-properties" class="section level3">
+<h3>Create Custom Wood Properties</h3>
+<p>Create a YAML file with your species-specific properties:</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb11-1"><a href="#cb11-1" tabindex="-1"></a><span class="co"># wood_my_species.yaml</span></span>
+<span id="cb11-2"><a href="#cb11-2" tabindex="-1"></a><span class="fu">species</span><span class="kw">:</span></span>
+<span id="cb11-3"><a href="#cb11-3" tabindex="-1"></a><span class="at">  </span><span class="fu">common_name</span><span class="kw">:</span><span class="at"> </span><span class="st">&quot;My Species&quot;</span></span>
+<span id="cb11-4"><a href="#cb11-4" tabindex="-1"></a><span class="at">  </span><span class="fu">scientific_name</span><span class="kw">:</span><span class="at"> </span><span class="st">&quot;Genus species&quot;</span></span>
+<span id="cb11-5"><a href="#cb11-5" tabindex="-1"></a></span>
+<span id="cb11-6"><a href="#cb11-6" tabindex="-1"></a><span class="fu">thermal_properties</span><span class="kw">:</span></span>
+<span id="cb11-7"><a href="#cb11-7" tabindex="-1"></a><span class="at">  </span><span class="fu">thermal_diffusivity</span><span class="kw">:</span></span>
+<span id="cb11-8"><a href="#cb11-8" tabindex="-1"></a><span class="at">    </span><span class="fu">value</span><span class="kw">:</span><span class="at"> </span><span class="fl">0.0025</span></span>
+<span id="cb11-9"><a href="#cb11-9" tabindex="-1"></a><span class="at">    </span><span class="fu">units</span><span class="kw">:</span><span class="at"> </span><span class="st">&quot;cm²/s&quot;</span></span>
+<span id="cb11-10"><a href="#cb11-10" tabindex="-1"></a><span class="at">    </span><span class="fu">source</span><span class="kw">:</span><span class="at"> </span><span class="st">&quot;Measured from cores&quot;</span></span>
+<span id="cb11-11"><a href="#cb11-11" tabindex="-1"></a></span>
+<span id="cb11-12"><a href="#cb11-12" tabindex="-1"></a><span class="at">  </span><span class="fu">thermal_conductivity</span><span class="kw">:</span></span>
+<span id="cb11-13"><a href="#cb11-13" tabindex="-1"></a><span class="at">    </span><span class="fu">value</span><span class="kw">:</span><span class="at"> </span><span class="fl">0.0050</span></span>
+<span id="cb11-14"><a href="#cb11-14" tabindex="-1"></a><span class="at">    </span><span class="fu">units</span><span class="kw">:</span><span class="at"> </span><span class="st">&quot;W/(m·K)&quot;</span></span>
+<span id="cb11-15"><a href="#cb11-15" tabindex="-1"></a></span>
+<span id="cb11-16"><a href="#cb11-16" tabindex="-1"></a><span class="at">  </span><span class="fu">volumetric_heat_capacity</span><span class="kw">:</span></span>
+<span id="cb11-17"><a href="#cb11-17" tabindex="-1"></a><span class="at">    </span><span class="fu">value</span><span class="kw">:</span><span class="at"> </span><span class="fl">2.0</span></span>
+<span id="cb11-18"><a href="#cb11-18" tabindex="-1"></a><span class="at">    </span><span class="fu">units</span><span class="kw">:</span><span class="at"> </span><span class="st">&quot;MJ/(m³·K)&quot;</span></span>
+<span id="cb11-19"><a href="#cb11-19" tabindex="-1"></a></span>
+<span id="cb11-20"><a href="#cb11-20" tabindex="-1"></a><span class="fu">physical_properties</span><span class="kw">:</span></span>
+<span id="cb11-21"><a href="#cb11-21" tabindex="-1"></a><span class="at">  </span><span class="fu">wood_density</span><span class="kw">:</span></span>
+<span id="cb11-22"><a href="#cb11-22" tabindex="-1"></a><span class="at">    </span><span class="fu">value</span><span class="kw">:</span><span class="at"> </span><span class="dv">550</span></span>
+<span id="cb11-23"><a href="#cb11-23" tabindex="-1"></a><span class="at">    </span><span class="fu">units</span><span class="kw">:</span><span class="at"> </span><span class="st">&quot;kg/m³&quot;</span></span>
+<span id="cb11-24"><a href="#cb11-24" tabindex="-1"></a></span>
+<span id="cb11-25"><a href="#cb11-25" tabindex="-1"></a><span class="at">  </span><span class="fu">moisture_content</span><span class="kw">:</span></span>
+<span id="cb11-26"><a href="#cb11-26" tabindex="-1"></a><span class="at">    </span><span class="fu">value</span><span class="kw">:</span><span class="at"> </span><span class="fl">0.40</span></span>
+<span id="cb11-27"><a href="#cb11-27" tabindex="-1"></a><span class="at">    </span><span class="fu">units</span><span class="kw">:</span><span class="at"> </span><span class="st">&quot;fraction&quot;</span></span>
+<span id="cb11-28"><a href="#cb11-28" tabindex="-1"></a></span>
+<span id="cb11-29"><a href="#cb11-29" tabindex="-1"></a><span class="fu">tree_measurements</span><span class="kw">:</span></span>
+<span id="cb11-30"><a href="#cb11-30" tabindex="-1"></a><span class="at">  </span><span class="fu">dbh</span><span class="kw">:</span></span>
+<span id="cb11-31"><a href="#cb11-31" tabindex="-1"></a><span class="at">    </span><span class="fu">value</span><span class="kw">:</span><span class="at"> </span><span class="fl">35.0</span></span>
+<span id="cb11-32"><a href="#cb11-32" tabindex="-1"></a><span class="at">    </span><span class="fu">units</span><span class="kw">:</span><span class="at"> </span><span class="st">&quot;cm&quot;</span></span>
+<span id="cb11-33"><a href="#cb11-33" tabindex="-1"></a></span>
+<span id="cb11-34"><a href="#cb11-34" tabindex="-1"></a><span class="at">  </span><span class="fu">sapwood_depth</span><span class="kw">:</span></span>
+<span id="cb11-35"><a href="#cb11-35" tabindex="-1"></a><span class="at">    </span><span class="fu">value</span><span class="kw">:</span><span class="at"> </span><span class="fl">2.8</span></span>
+<span id="cb11-36"><a href="#cb11-36" tabindex="-1"></a><span class="at">    </span><span class="fu">units</span><span class="kw">:</span><span class="at"> </span><span class="st">&quot;cm&quot;</span></span></code></pre></div>
+<p>Load your custom configuration:</p>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" tabindex="-1"></a>vh_results <span class="ot">&lt;-</span> <span class="fu">calc_heat_pulse_velocity</span>(</span>
+<span id="cb12-2"><a href="#cb12-2" tabindex="-1"></a>  heat_pulse_data,</span>
+<span id="cb12-3"><a href="#cb12-3" tabindex="-1"></a>  <span class="at">wood_properties =</span> <span class="st">&quot;path/to/wood_my_species.yaml&quot;</span></span>
+<span id="cb12-4"><a href="#cb12-4" tabindex="-1"></a>)</span></code></pre></div>
+</div>
+</div>
+<div id="probe-configuration" class="section level2">
+<h2>Probe Configuration</h2>
+<p>Probe configurations define hardware specifications:</p>
+<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" tabindex="-1"></a><span class="co"># Use default symmetric probe (ICT SFM1x standard)</span></span>
+<span id="cb13-2"><a href="#cb13-2" tabindex="-1"></a>vh_results <span class="ot">&lt;-</span> <span class="fu">calc_heat_pulse_velocity</span>(</span>
+<span id="cb13-3"><a href="#cb13-3" tabindex="-1"></a>  heat_pulse_data,</span>
+<span id="cb13-4"><a href="#cb13-4" tabindex="-1"></a>  <span class="at">probe_config =</span> <span class="st">&quot;symmetrical&quot;</span>  <span class="co"># Default</span></span>
+<span id="cb13-5"><a href="#cb13-5" tabindex="-1"></a>)</span>
+<span id="cb13-6"><a href="#cb13-6" tabindex="-1"></a></span>
+<span id="cb13-7"><a href="#cb13-7" tabindex="-1"></a><span class="co"># Use asymmetric probe (CHPM optimised)</span></span>
+<span id="cb13-8"><a href="#cb13-8" tabindex="-1"></a>vh_results <span class="ot">&lt;-</span> <span class="fu">calc_heat_pulse_velocity</span>(</span>
+<span id="cb13-9"><a href="#cb13-9" tabindex="-1"></a>  heat_pulse_data,</span>
+<span id="cb13-10"><a href="#cb13-10" tabindex="-1"></a>  <span class="at">probe_config =</span> <span class="st">&quot;asymmetrical&quot;</span></span>
+<span id="cb13-11"><a href="#cb13-11" tabindex="-1"></a>)</span></code></pre></div>
+<div id="create-custom-probe-configuration" class="section level3">
+<h3>Create Custom Probe Configuration</h3>
+<p>For custom probe geometries:</p>
+<div class="sourceCode" id="cb14"><pre class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb14-1"><a href="#cb14-1" tabindex="-1"></a><span class="co"># probe_custom.yaml</span></span>
+<span id="cb14-2"><a href="#cb14-2" tabindex="-1"></a><span class="fu">probe_type</span><span class="kw">:</span><span class="at"> </span><span class="st">&quot;custom_probe&quot;</span></span>
+<span id="cb14-3"><a href="#cb14-3" tabindex="-1"></a><span class="fu">description</span><span class="kw">:</span><span class="at"> </span><span class="st">&quot;Custom probe geometry&quot;</span></span>
+<span id="cb14-4"><a href="#cb14-4" tabindex="-1"></a></span>
+<span id="cb14-5"><a href="#cb14-5" tabindex="-1"></a><span class="fu">geometry</span><span class="kw">:</span></span>
+<span id="cb14-6"><a href="#cb14-6" tabindex="-1"></a><span class="at">  </span><span class="fu">probe_spacing</span><span class="kw">:</span></span>
+<span id="cb14-7"><a href="#cb14-7" tabindex="-1"></a><span class="at">    </span><span class="fu">value</span><span class="kw">:</span><span class="at"> </span><span class="fl">0.6</span></span>
+<span id="cb14-8"><a href="#cb14-8" tabindex="-1"></a><span class="at">    </span><span class="fu">units</span><span class="kw">:</span><span class="at"> </span><span class="st">&quot;cm&quot;</span></span>
+<span id="cb14-9"><a href="#cb14-9" tabindex="-1"></a></span>
+<span id="cb14-10"><a href="#cb14-10" tabindex="-1"></a><span class="at">  </span><span class="fu">probe_diameter</span><span class="kw">:</span></span>
+<span id="cb14-11"><a href="#cb14-11" tabindex="-1"></a><span class="at">    </span><span class="fu">value</span><span class="kw">:</span><span class="at"> </span><span class="fl">1.5</span></span>
+<span id="cb14-12"><a href="#cb14-12" tabindex="-1"></a><span class="at">    </span><span class="fu">units</span><span class="kw">:</span><span class="at"> </span><span class="st">&quot;mm&quot;</span></span>
+<span id="cb14-13"><a href="#cb14-13" tabindex="-1"></a></span>
+<span id="cb14-14"><a href="#cb14-14" tabindex="-1"></a><span class="at">  </span><span class="fu">thermistor_positions</span><span class="kw">:</span></span>
+<span id="cb14-15"><a href="#cb14-15" tabindex="-1"></a><span class="at">    </span><span class="fu">downstream_outer</span><span class="kw">:</span><span class="at"> </span><span class="fl">0.6</span><span class="co">   # cm from heater</span></span>
+<span id="cb14-16"><a href="#cb14-16" tabindex="-1"></a><span class="at">    </span><span class="fu">downstream_inner</span><span class="kw">:</span><span class="at"> </span><span class="fl">0.3</span></span>
+<span id="cb14-17"><a href="#cb14-17" tabindex="-1"></a><span class="at">    </span><span class="fu">upstream_outer</span><span class="kw">:</span><span class="at"> </span><span class="fl">-0.6</span></span>
+<span id="cb14-18"><a href="#cb14-18" tabindex="-1"></a><span class="at">    </span><span class="fu">upstream_inner</span><span class="kw">:</span><span class="at"> </span><span class="fl">-0.3</span></span>
+<span id="cb14-19"><a href="#cb14-19" tabindex="-1"></a></span>
+<span id="cb14-20"><a href="#cb14-20" tabindex="-1"></a><span class="fu">measurement</span><span class="kw">:</span></span>
+<span id="cb14-21"><a href="#cb14-21" tabindex="-1"></a><span class="at">  </span><span class="fu">heat_pulse_duration</span><span class="kw">:</span></span>
+<span id="cb14-22"><a href="#cb14-22" tabindex="-1"></a><span class="at">    </span><span class="fu">value</span><span class="kw">:</span><span class="at"> </span><span class="fl">2.0</span></span>
+<span id="cb14-23"><a href="#cb14-23" tabindex="-1"></a><span class="at">    </span><span class="fu">units</span><span class="kw">:</span><span class="at"> </span><span class="st">&quot;seconds&quot;</span></span></code></pre></div>
+</div>
+</div>
+</div>
+<div id="advanced-topics" class="section level1">
+<h1>Advanced Topics</h1>
+<div id="custom-calculation-parameters" class="section level2">
+<h2>Custom Calculation Parameters</h2>
+<p>Override default calculation windows:</p>
+<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" tabindex="-1"></a>vh_results <span class="ot">&lt;-</span> <span class="fu">calc_heat_pulse_velocity</span>(</span>
+<span id="cb15-2"><a href="#cb15-2" tabindex="-1"></a>  heat_pulse_data,</span>
+<span id="cb15-3"><a href="#cb15-3" tabindex="-1"></a>  <span class="at">methods =</span> <span class="st">&quot;HRM&quot;</span>,</span>
+<span id="cb15-4"><a href="#cb15-4" tabindex="-1"></a>  <span class="at">parameters =</span> <span class="fu">list</span>(</span>
+<span id="cb15-5"><a href="#cb15-5" tabindex="-1"></a>    <span class="at">pre_pulse =</span> <span class="dv">30</span>,      <span class="co"># Baseline period (sec)</span></span>
+<span id="cb15-6"><a href="#cb15-6" tabindex="-1"></a>    <span class="at">HRM_start =</span> <span class="dv">70</span>,      <span class="co"># HRM window start (sec)</span></span>
+<span id="cb15-7"><a href="#cb15-7" tabindex="-1"></a>    <span class="at">HRM_end =</span> <span class="dv">110</span>,       <span class="co"># HRM window end (sec)</span></span>
+<span id="cb15-8"><a href="#cb15-8" tabindex="-1"></a>    <span class="at">L =</span> <span class="fl">0.5</span>,             <span class="co"># HRMX lower bound (proportion of max temp)</span></span>
+<span id="cb15-9"><a href="#cb15-9" tabindex="-1"></a>    <span class="at">H =</span> <span class="fl">0.8</span>              <span class="co"># HRMX upper bound</span></span>
+<span id="cb15-10"><a href="#cb15-10" tabindex="-1"></a>  )</span>
+<span id="cb15-11"><a href="#cb15-11" tabindex="-1"></a>)</span></code></pre></div>
+</div>
+<div id="filter-by-quality" class="section level2">
+<h2>Filter by Quality</h2>
+<div class="sourceCode" id="cb16"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" tabindex="-1"></a><span class="co"># Keep only high-quality results</span></span>
+<span id="cb16-2"><a href="#cb16-2" tabindex="-1"></a>good_results <span class="ot">&lt;-</span> vh_results[vh_results<span class="sc">$</span>quality_flag <span class="sc">==</span> <span class="st">&quot;OK&quot;</span>, ]</span>
+<span id="cb16-3"><a href="#cb16-3" tabindex="-1"></a></span>
+<span id="cb16-4"><a href="#cb16-4" tabindex="-1"></a><span class="co"># View problematic results</span></span>
+<span id="cb16-5"><a href="#cb16-5" tabindex="-1"></a><span class="fu">table</span>(vh_results<span class="sc">$</span>quality_flag, vh_results<span class="sc">$</span>method)</span>
+<span id="cb16-6"><a href="#cb16-6" tabindex="-1"></a><span class="co">#&gt;          </span></span>
+<span id="cb16-7"><a href="#cb16-7" tabindex="-1"></a><span class="co">#&gt;           HRM HRMXa MHR Tmax_Klu</span></span>
+<span id="cb16-8"><a href="#cb16-8" tabindex="-1"></a><span class="co">#&gt;   MISSING   0     0   0       20</span></span>
+<span id="cb16-9"><a href="#cb16-9" tabindex="-1"></a><span class="co">#&gt;   OK       20    20  20        0</span></span></code></pre></div>
+</div>
+<div id="export-results" class="section level2">
+<h2>Export Results</h2>
+<div class="sourceCode" id="cb17"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" tabindex="-1"></a><span class="co"># Export to CSV</span></span>
+<span id="cb17-2"><a href="#cb17-2" tabindex="-1"></a><span class="fu">write.csv</span>(vh_results, <span class="st">&quot;sap_velocity_results.csv&quot;</span>, <span class="at">row.names =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb17-3"><a href="#cb17-3" tabindex="-1"></a></span>
+<span id="cb17-4"><a href="#cb17-4" tabindex="-1"></a><span class="co"># Export with metadata</span></span>
+<span id="cb17-5"><a href="#cb17-5" tabindex="-1"></a><span class="fu">saveRDS</span>(<span class="fu">list</span>(</span>
+<span id="cb17-6"><a href="#cb17-6" tabindex="-1"></a>  <span class="at">results =</span> vh_results,</span>
+<span id="cb17-7"><a href="#cb17-7" tabindex="-1"></a>  <span class="at">metadata =</span> heat_pulse_data<span class="sc">$</span>metadata,</span>
+<span id="cb17-8"><a href="#cb17-8" tabindex="-1"></a>  <span class="at">processing_date =</span> <span class="fu">Sys.time</span>()</span>
+<span id="cb17-9"><a href="#cb17-9" tabindex="-1"></a>), <span class="st">&quot;sap_velocity_complete.rds&quot;</span>)</span></code></pre></div>
+</div>
+</div>
+<div id="workflow-summary" class="section level1">
+<h1>Workflow Summary</h1>
+<div class="sourceCode" id="cb18"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1" tabindex="-1"></a><span class="co"># Complete workflow</span></span>
+<span id="cb18-2"><a href="#cb18-2" tabindex="-1"></a><span class="fu">library</span>(sapfluxr)</span>
+<span id="cb18-3"><a href="#cb18-3" tabindex="-1"></a></span>
+<span id="cb18-4"><a href="#cb18-4" tabindex="-1"></a><span class="co"># 1. Import</span></span>
+<span id="cb18-5"><a href="#cb18-5" tabindex="-1"></a>heat_pulse_data <span class="ot">&lt;-</span> <span class="fu">read_heat_pulse_data</span>(<span class="st">&quot;mydata.txt&quot;</span>)</span>
+<span id="cb18-6"><a href="#cb18-6" tabindex="-1"></a></span>
+<span id="cb18-7"><a href="#cb18-7" tabindex="-1"></a><span class="co"># 2. Calculate</span></span>
+<span id="cb18-8"><a href="#cb18-8" tabindex="-1"></a>vh_results <span class="ot">&lt;-</span> <span class="fu">calc_heat_pulse_velocity</span>(</span>
+<span id="cb18-9"><a href="#cb18-9" tabindex="-1"></a>  heat_pulse_data,</span>
+<span id="cb18-10"><a href="#cb18-10" tabindex="-1"></a>  <span class="at">methods =</span> <span class="fu">c</span>(<span class="st">&quot;HRM&quot;</span>, <span class="st">&quot;MHR&quot;</span>, <span class="st">&quot;DMA&quot;</span>),</span>
+<span id="cb18-11"><a href="#cb18-11" tabindex="-1"></a>  <span class="at">wood_properties =</span> <span class="st">&quot;eucalyptus&quot;</span></span>
+<span id="cb18-12"><a href="#cb18-12" tabindex="-1"></a>)</span>
+<span id="cb18-13"><a href="#cb18-13" tabindex="-1"></a></span>
+<span id="cb18-14"><a href="#cb18-14" tabindex="-1"></a><span class="co"># 3. Visualise</span></span>
+<span id="cb18-15"><a href="#cb18-15" tabindex="-1"></a><span class="fu">plot_vh_timeseries</span>(vh_results)</span>
+<span id="cb18-16"><a href="#cb18-16" tabindex="-1"></a><span class="fu">plot_heat_pulse_trace</span>(heat_pulse_data, vh_results, <span class="at">pulse_id =</span> <span class="dv">1</span>)</span>
+<span id="cb18-17"><a href="#cb18-17" tabindex="-1"></a></span>
+<span id="cb18-18"><a href="#cb18-18" tabindex="-1"></a><span class="co"># 4. Export</span></span>
+<span id="cb18-19"><a href="#cb18-19" tabindex="-1"></a><span class="fu">write.csv</span>(vh_results, <span class="st">&quot;results.csv&quot;</span>, <span class="at">row.names =</span> <span class="cn">FALSE</span>)</span></code></pre></div>
+</div>
+<div id="getting-help" class="section level1">
+<h1>Getting Help</h1>
+<ul>
+<li><strong>Package documentation</strong>:
+<code>?calc_heat_pulse_velocity</code></li>
+<li><strong>Report issues</strong>: <a href="https://github.com/neez777/sapfluxr/issues" class="uri">https://github.com/neez777/sapfluxr/issues</a></li>
+<li><strong>Method details</strong>: See <code>knowledge_docs/</code> in
+package installation</li>
+</ul>
+</div>
+<div id="references" class="section level1">
+<h1>References</h1>
+<ul>
+<li><p>Burgess, S. S. O., Adams, M. A., Turner, N. C., Beverly, C. R.,
+Ong, C. K., Khan, A. A. H., &amp; Bleby, T. M. (2001). An improved heat
+pulse method to measure low and reverse rates of sap flow in woody
+plants. <em>Tree Physiology</em>, 21(9), 589-598.</p></li>
+<li><p>Cohen, Y., Fuchs, M., &amp; Green, G. C. (1981). Improvement of
+the heat pulse method for determining sap flow in trees. <em>Plant, Cell
+&amp; Environment</em>, 4(5), 391-397.</p></li>
+<li><p>Forster, M. A. (2020). How significant is nocturnal sap flow?
+<em>Tree Physiology</em>, 40(8), 1179-1190.</p></li>
+<li><p>Kluitenberg, G. J., &amp; Ham, J. M. (2004). Improved theory for
+calculating sap flow with the heat pulse method. <em>Agricultural and
+Forest Meteorology</em>, 126(1-2), 169-173.</p></li>
+<li><p>Lopez, J. G., Morán-López, T., Benito Garzón, M., &amp; Oliveras
+Menor, I. (2021). An improved heat pulse method using a single probe for
+determining sap flow in temperate trees. <em>Tree Physiology</em>,
+41(12), 2437-2449.</p></li>
+</ul>
+</div>
+
+
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

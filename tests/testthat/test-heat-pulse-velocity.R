@@ -4,8 +4,8 @@
 
 library(testthat)
 
-# Helper function to create mock sap_data with realistic temperature patterns
-create_mock_sap_data_for_vh <- function() {
+# Helper function to create mock heat_pulse_data with realistic temperature patterns
+create_mock_heat_pulse_data_for_vh <- function() {
 
   # Create realistic temperature data with heat pulse pattern
   n_samples <- 120  # 2 minutes of data at 1 second intervals
@@ -53,7 +53,7 @@ create_mock_sap_data_for_vh <- function() {
     stringsAsFactors = FALSE
   )
 
-  sap_data <- list(
+  heat_pulse_data <- list(
     diagnostics = diagnostics,
     measurements = measurements,
     metadata = list(
@@ -64,15 +64,15 @@ create_mock_sap_data_for_vh <- function() {
     )
   )
 
-  class(sap_data) <- c("sap_data", "list")
-  return(sap_data)
+  class(heat_pulse_data) <- c("heat_pulse_data", "list")
+  return(heat_pulse_data)
 }
 
 # Basic functionality tests
 test_that("calc_heat_pulse_velocity works with valid data", {
-  sap_data <- create_mock_sap_data_for_vh()
+  heat_pulse_data <- create_mock_heat_pulse_data_for_vh()
 
-  result <- calc_heat_pulse_velocity(sap_data, methods = c("HRM", "MHR"))
+  result <- calc_heat_pulse_velocity(heat_pulse_data, methods = c("HRM", "MHR"))
 
   # Check that it's a data frame (class may vary depending on implementation)
   expect_s3_class(result, "data.frame")
@@ -81,32 +81,32 @@ test_that("calc_heat_pulse_velocity works with valid data", {
 })
 
 test_that("calc_heat_pulse_velocity fails with invalid input", {
-  invalid_data <- list(not_sap_data = TRUE)
+  invalid_data <- list(not_heat_pulse_data = TRUE)
 
-  expect_error(calc_heat_pulse_velocity(invalid_data), "Input must be a sap_data object")
+  expect_error(calc_heat_pulse_velocity(invalid_data), "Input must be a heat_pulse_data object")
 })
 
 test_that("calc_heat_pulse_velocity handles missing pulse IDs", {
-  sap_data <- create_mock_sap_data_for_vh()
+  heat_pulse_data <- create_mock_heat_pulse_data_for_vh()
 
   expect_warning(
-    expect_error(calc_heat_pulse_velocity(sap_data, pulse_ids = c(999)),
+    expect_error(calc_heat_pulse_velocity(heat_pulse_data, pulse_ids = c(999)),
                  "No valid pulse IDs to process"),
     "Pulse IDs not found in data"
   )
 })
 
 test_that("calc_heat_pulse_velocity works with specific pulse IDs", {
-  sap_data <- create_mock_sap_data_for_vh()
+  heat_pulse_data <- create_mock_heat_pulse_data_for_vh()
 
-  result <- calc_heat_pulse_velocity(sap_data, pulse_ids = 1, methods = "HRM")
+  result <- calc_heat_pulse_velocity(heat_pulse_data, pulse_ids = 1, methods = "HRM")
 
   expect_equal(unique(result$pulse_id), 1)
   expect_true(all(result$method == "HRM"))
 })
 
 test_that("calc_heat_pulse_velocity works with custom parameters", {
-  sap_data <- create_mock_sap_data_for_vh()
+  heat_pulse_data <- create_mock_heat_pulse_data_for_vh()
 
   custom_params <- list(
     diffusivity = 0.003,
@@ -114,18 +114,19 @@ test_that("calc_heat_pulse_velocity works with custom parameters", {
     pre_pulse = 25
   )
 
-  result <- calc_heat_pulse_velocity(sap_data, parameters = custom_params, methods = "HRM")
+  result <- calc_heat_pulse_velocity(heat_pulse_data, parameters = custom_params, methods = "HRM")
 
   expect_s3_class(result, "data.frame")
   expect_true(nrow(result) > 0)
 })
 
 test_that("calc_vh_single_pulse calculates HRM correctly", {
-  sap_data <- create_mock_sap_data_for_vh()
-  measurements <- sap_data$measurements
+  heat_pulse_data <- create_mock_heat_pulse_data_for_vh()
+  measurements <- heat_pulse_data$measurements
 
   default_params <- list(
     diffusivity = 0.0025,
+    probe_spacing = 0.5,
     x = 0.5,
     L = 0.5,
     H = 0.8,
@@ -135,7 +136,9 @@ test_that("calc_vh_single_pulse calculates HRM correctly", {
     pre_pulse = 30
   )
 
-  result <- calc_vh_single_pulse(1, measurements, default_params, "HRM")
+  # Filter measurements for pulse_id 1
+  pulse_data <- measurements[measurements$pulse_id == 1, ]
+  result <- calc_vh_single_pulse(pulse_data, 1, default_params, "HRM")
 
   expect_true(nrow(result) == 2)  # Outer and inner
   expect_true(all(result$method == "HRM"))
@@ -149,8 +152,9 @@ test_that("calc_hrm produces reasonable results", {
   dTratio_douo <- c(NA, NA, 1.5, 1.6, 1.4, 1.5)  # First two NA for pre-pulse
   dTratio_diui <- c(NA, NA, 1.3, 1.4, 1.2, 1.3)
   HRM_period <- c(FALSE, FALSE, FALSE, TRUE, TRUE, TRUE)  # Use last 3 points
+  tp <- c(0, 1, 2, 3, 4, 5)  # Time vector in seconds
 
-  result <- calc_hrm(dTratio_douo, dTratio_diui, HRM_period, 0.0025, 0.5)
+  result <- calc_hrm(dTratio_douo, dTratio_diui, HRM_period, 0.0025, 0.5, tp)
 
   expect_type(result, "list")
   expect_true(all(c("outer", "inner") %in% names(result)))
@@ -235,12 +239,12 @@ test_that("add_quality_flags correctly identifies issues", {
 
 # Integration tests
 test_that("all methods produce results", {
-  sap_data <- create_mock_sap_data_for_vh()
+  heat_pulse_data <- create_mock_heat_pulse_data_for_vh()
 
   all_methods <- c("HRM", "MHR", "HRMXa", "HRMXb", "Tmax_Coh", "Tmax_Klu", "DMA")
 
   # This might produce warnings due to mathematical constraints, but should not error
-  result <- calc_heat_pulse_velocity(sap_data, methods = all_methods)
+  result <- calc_heat_pulse_velocity(heat_pulse_data, methods = all_methods)
 
   # Check for basic data frame structure (class may vary)
   expect_s3_class(result, "data.frame")
@@ -252,18 +256,18 @@ test_that("all methods produce results", {
 })
 
 test_that("calc_heat_pulse_velocity handles data with missing temperature columns", {
-  sap_data <- create_mock_sap_data_for_vh()
-  sap_data$measurements$do <- NULL  # Remove required column
+  heat_pulse_data <- create_mock_heat_pulse_data_for_vh()
+  heat_pulse_data$measurements$do <- NULL  # Remove required column
 
-  expect_error(calc_heat_pulse_velocity(sap_data), "No pulses were successfully processed")
+  expect_error(calc_heat_pulse_velocity(heat_pulse_data), "No pulses were successfully processed")
 })
 
 test_that("calc_heat_pulse_velocity handles pulse ID validation properly", {
-  sap_data <- create_mock_sap_data_for_vh()
+  heat_pulse_data <- create_mock_heat_pulse_data_for_vh()
 
   # Request non-existent pulse ID
   expect_warning({
-    result <- calc_heat_pulse_velocity(sap_data, pulse_ids = c(1, 999), methods = "HRM")
+    result <- calc_heat_pulse_velocity(heat_pulse_data, pulse_ids = c(1, 999), methods = "HRM")
   })
 
   # Should still process the valid pulse
@@ -272,11 +276,11 @@ test_that("calc_heat_pulse_velocity handles pulse ID validation properly", {
 })
 
 test_that("calc_heat_pulse_velocity provides progress messages for many pulses", {
-  sap_data <- create_mock_sap_data_for_vh()
+  heat_pulse_data <- create_mock_heat_pulse_data_for_vh()
 
   # Add more pulses to trigger progress messages
-  base_measurements <- sap_data$measurements
-  base_diagnostics <- sap_data$diagnostics
+  base_measurements <- heat_pulse_data$measurements
+  base_diagnostics <- heat_pulse_data$diagnostics
 
   all_measurements <- list(base_measurements)
   all_diagnostics <- list(base_diagnostics)
@@ -293,12 +297,12 @@ test_that("calc_heat_pulse_velocity provides progress messages for many pulses",
     all_diagnostics[[i]] <- new_diagnostics
   }
 
-  sap_data$measurements <- do.call(rbind, all_measurements)
-  sap_data$diagnostics <- do.call(rbind, all_diagnostics)
-  sap_data$metadata$n_pulses <- 15
+  heat_pulse_data$measurements <- do.call(rbind, all_measurements)
+  heat_pulse_data$diagnostics <- do.call(rbind, all_diagnostics)
+  heat_pulse_data$metadata$n_pulses <- 15
 
   # Capture messages (some R versions may not trigger progress for 15 pulses)
-  result <- suppressMessages(calc_heat_pulse_velocity(sap_data, methods = "HRM"))
+  result <- suppressMessages(calc_heat_pulse_velocity(heat_pulse_data, methods = "HRM"))
 
   # Test should pass whether or not progress messages are shown
   expect_s3_class(result, "data.frame")
@@ -306,13 +310,13 @@ test_that("calc_heat_pulse_velocity provides progress messages for many pulses",
 })
 
 test_that("calc_heat_pulse_velocity handles processing errors gracefully", {
-  sap_data <- create_mock_sap_data_for_vh()
+  heat_pulse_data <- create_mock_heat_pulse_data_for_vh()
 
   # Create problematic data (all temperatures the same - this should cause calculation issues)
-  sap_data$measurements[, c("do", "di", "uo", "ui")] <- 18.8
+  heat_pulse_data$measurements[, c("do", "di", "uo", "ui")] <- 18.8
 
   # Should complete but may have warnings
-  result <- calc_heat_pulse_velocity(sap_data, methods = "HRM")
+  result <- calc_heat_pulse_velocity(heat_pulse_data, methods = "HRM")
 
   # Should still return a result, even if calculations have issues
   expect_s3_class(result, "data.frame")
@@ -323,14 +327,14 @@ test_that("calc_heat_pulse_velocity handles processing errors gracefully", {
 
 # Edge case tests
 test_that("calc_heat_pulse_velocity handles edge cases", {
-  sap_data <- create_mock_sap_data_for_vh()
+  heat_pulse_data <- create_mock_heat_pulse_data_for_vh()
 
   # Test with problematic data
   # Make all temperatures the same (should cause issues but not crash)
-  sap_data$measurements[, c("do", "di", "uo", "ui")] <- 18.8
+  heat_pulse_data$measurements[, c("do", "di", "uo", "ui")] <- 18.8
 
   expect_no_error({
-    result <- calc_heat_pulse_velocity(sap_data, methods = "HRM")
+    result <- calc_heat_pulse_velocity(heat_pulse_data, methods = "HRM")
   })
 
   expect_s3_class(result, "data.frame")
@@ -343,24 +347,24 @@ test_that("calc_heat_pulse_velocity handles edge cases", {
 })
 
 test_that("Error handling for completely invalid data", {
-  sap_data <- create_mock_sap_data_for_vh()
+  heat_pulse_data <- create_mock_heat_pulse_data_for_vh()
 
   # Remove all temperature columns
-  sap_data$measurements <- sap_data$measurements[, c("pulse_id", "datetime")]
+  heat_pulse_data$measurements <- heat_pulse_data$measurements[, c("pulse_id", "datetime")]
 
   expect_error({
-    calc_heat_pulse_velocity(sap_data, methods = "HRM")
+    calc_heat_pulse_velocity(heat_pulse_data, methods = "HRM")
   })
 })
 
 # Integration test: full workflow
 test_that("Integration test: complete workflow with realistic data", {
   # Create realistic test data
-  sap_data <- create_mock_sap_data_for_vh()
+  heat_pulse_data <- create_mock_heat_pulse_data_for_vh()
 
   # Add more pulses for better testing
-  base_measurements <- sap_data$measurements
-  base_diagnostics <- sap_data$diagnostics
+  base_measurements <- heat_pulse_data$measurements
+  base_diagnostics <- heat_pulse_data$diagnostics
 
   for (i in 2:3) {
     new_measurements <- base_measurements
@@ -371,14 +375,14 @@ test_that("Integration test: complete workflow with realistic data", {
     new_diagnostics$pulse_id <- i
     new_diagnostics$datetime <- new_diagnostics$datetime[1] + (i-1) * 1800
 
-    sap_data$measurements <- rbind(sap_data$measurements, new_measurements)
-    sap_data$diagnostics <- rbind(sap_data$diagnostics, new_diagnostics)
+    heat_pulse_data$measurements <- rbind(heat_pulse_data$measurements, new_measurements)
+    heat_pulse_data$diagnostics <- rbind(heat_pulse_data$diagnostics, new_diagnostics)
   }
 
-  sap_data$metadata$n_pulses <- 3
+  heat_pulse_data$metadata$n_pulses <- 3
 
   # Process with multiple methods
-  result <- calc_heat_pulse_velocity(sap_data, methods = c("HRM", "MHR", "DMA"))
+  result <- calc_heat_pulse_velocity(heat_pulse_data, methods = c("HRM", "MHR", "DMA"))
 
   expect_s3_class(result, "data.frame")
   expect_equal(length(unique(result$pulse_id)), 3)
@@ -401,11 +405,11 @@ test_that("Integration test: complete workflow with realistic data", {
 # Performance test (optional)
 test_that("Performance test: processing multiple pulses efficiently", {
   # Create larger dataset
-  sap_data <- create_mock_sap_data_for_vh()
+  heat_pulse_data <- create_mock_heat_pulse_data_for_vh()
 
   # Add more pulses
-  base_measurements <- sap_data$measurements
-  base_diagnostics <- sap_data$diagnostics
+  base_measurements <- heat_pulse_data$measurements
+  base_diagnostics <- heat_pulse_data$diagnostics
 
   for (i in 2:5) {
     new_measurements <- base_measurements
@@ -416,15 +420,15 @@ test_that("Performance test: processing multiple pulses efficiently", {
     new_diagnostics$pulse_id <- i
     new_diagnostics$datetime <- new_diagnostics$datetime[1] + (i-1) * 1800
 
-    sap_data$measurements <- rbind(sap_data$measurements, new_measurements)
-    sap_data$diagnostics <- rbind(sap_data$diagnostics, new_diagnostics)
+    heat_pulse_data$measurements <- rbind(heat_pulse_data$measurements, new_measurements)
+    heat_pulse_data$diagnostics <- rbind(heat_pulse_data$diagnostics, new_diagnostics)
   }
 
-  sap_data$metadata$n_pulses <- 5
+  heat_pulse_data$metadata$n_pulses <- 5
 
   # Time the calculation
   start_time <- Sys.time()
-  result <- calc_heat_pulse_velocity(sap_data, methods = c("HRM", "MHR"))
+  result <- calc_heat_pulse_velocity(heat_pulse_data, methods = c("HRM", "MHR"))
   end_time <- Sys.time()
 
   processing_time <- as.numeric(difftime(end_time, start_time, units = "secs"))

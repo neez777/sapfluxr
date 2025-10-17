@@ -4,7 +4,7 @@
 \alias{calc_tmax_coh}
 \title{Calculate Tmax Cohen velocities}
 \usage{
-calc_tmax_coh(delatT_do, delatT_di, diffusivity, probe_spacing, pre_pulse)
+calc_tmax_coh(deltaT_do, deltaT_di, diffusivity, probe_spacing, pre_pulse)
 }
 \description{
 Calculate Tmax Cohen velocities

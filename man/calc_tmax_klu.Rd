@@ -5,8 +5,8 @@
 \title{Calculate Tmax Kluitenberg velocities}
 \usage{
 calc_tmax_klu(
-  delatT_do,
-  delatT_di,
+  deltaT_do,
+  deltaT_di,
   diffusivity,
   probe_spacing,
   tp_1,

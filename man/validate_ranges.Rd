@@ -4,10 +4,10 @@
 \alias{validate_ranges}
 \title{Validate Data Ranges}
 \usage{
-validate_ranges(sap_data, temperature_range, voltage_range)
+validate_ranges(heat_pulse_data, temperature_range, voltage_range)
 }
 \arguments{
-\item{sap_data}{A sap_data object}
+\item{heat_pulse_data}{A heat_pulse_data object}
 
 \item{temperature_range}{Range for temperature values}
 
