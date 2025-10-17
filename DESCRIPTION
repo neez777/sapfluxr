@@ -43,6 +43,7 @@ Suggests:
     ggplot2 (>= 3.4.0),
     plotly (>= 4.10.0),
     patchwork (>= 1.1.0),
+    cowplot (>= 1.1.0),
     scales (>= 1.2.0),
     data.table (>= 1.14.0)
 VignetteBuilder: knitr

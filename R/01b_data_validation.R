@@ -1,10 +1,10 @@
 # R/01b_data_validation.R
-#' Validate Sap Flow Data
+#' Validate Heat Pulse Data
 #'
-#' Performs comprehensive validation of imported sap flow data, checking for
+#' Performs comprehensive validation of imported heat pulse temperature data, checking for
 #' data integrity, reasonable value ranges, and structural consistency.
 #'
-#' @param sap_data A sap_data object from read_sap_data()
+#' @param heat_pulse_data A heat_pulse_data object from read_heat_pulse_data()
 #' @param temperature_range Numeric vector of length 2 specifying min/max reasonable
 #'   temperature values in Celsius (default: c(-10, 60))
 #' @param voltage_range Numeric vector of length 2 specifying min/max reasonable
@@ -20,43 +20,43 @@
 #'
 #' @examples
 #' \dontrun{
-#' sap_data <- read_sap_data("data.txt")
-#' validation <- validate_sap_data(sap_data)
+#' heat_pulse_data <- read_heat_pulse_data("data.txt")
+#' validation <- validate_heat_pulse_data(heat_pulse_data)
 #' if (!validation$valid) {
 #'   print(validation$issues)
 #' }
 #' }
 #'
 #' @export
-validate_sap_data <- function(sap_data,
+validate_heat_pulse_data <- function(heat_pulse_data,
                               temperature_range = c(-10, 60),
                               voltage_range = c(0, 30),
                               strict_validation = FALSE) {
 
-  if (!inherits(sap_data, "sap_data")) {
-    stop("Input must be a sap_data object")
+  if (!inherits(heat_pulse_data, "heat_pulse_data")) {
+    stop("Input must be a heat_pulse_data object")
   }
 
   issues <- character(0)
   warnings <- character(0)
 
   # Validate structure
-  structure_check <- validate_structure(sap_data)
+  structure_check <- validate_structure(heat_pulse_data)
   issues <- c(issues, structure_check$issues)
   warnings <- c(warnings, structure_check$warnings)
 
   # Validate data ranges
-  range_check <- validate_ranges(sap_data, temperature_range, voltage_range)
+  range_check <- validate_ranges(heat_pulse_data, temperature_range, voltage_range)
   issues <- c(issues, range_check$issues)
   warnings <- c(warnings, range_check$warnings)
 
   # Validate temporal consistency
-  temporal_check <- validate_temporal_consistency(sap_data)
+  temporal_check <- validate_temporal_consistency(heat_pulse_data)
   issues <- c(issues, temporal_check$issues)
   warnings <- c(warnings, temporal_check$warnings)
 
   # Validate sensor consistency
-  sensor_check <- validate_sensor_consistency(sap_data)
+  sensor_check <- validate_sensor_consistency(heat_pulse_data)
   if (strict_validation) {
     issues <- c(issues, sensor_check$issues)
   } else {
@@ -64,7 +64,7 @@ validate_sap_data <- function(sap_data,
   }
 
   # Calculate validation summary
-  summary_stats <- calculate_validation_summary(sap_data, issues, warnings)
+  summary_stats <- calculate_validation_summary(heat_pulse_data, issues, warnings)
 
   # Overall validation result
   valid <- length(issues) == 0
@@ -79,25 +79,25 @@ validate_sap_data <- function(sap_data,
 
 #' Validate Data Structure
 #'
-#' @param sap_data A sap_data object
+#' @param heat_pulse_data A heat_pulse_data object
 #' @return List with issues and warnings
 #' @keywords internal
-validate_structure <- function(sap_data) {
+validate_structure <- function(heat_pulse_data) {
 
   issues <- character(0)
   warnings <- character(0)
 
   # Check required components
   required_components <- c("diagnostics", "measurements", "metadata")
-  missing_components <- setdiff(required_components, names(sap_data))
+  missing_components <- setdiff(required_components, names(heat_pulse_data))
   if (length(missing_components) > 0) {
     issues <- c(issues, paste("Missing required components:",
                               paste(missing_components, collapse = ", ")))
   }
 
   # Validate diagnostics structure
-  if ("diagnostics" %in% names(sap_data)) {
-    diag <- sap_data$diagnostics
+  if ("diagnostics" %in% names(heat_pulse_data)) {
+    diag <- heat_pulse_data$diagnostics
     required_diag_cols <- c("pulse_id", "datetime")
     missing_diag_cols <- setdiff(required_diag_cols, names(diag))
     if (length(missing_diag_cols) > 0) {
@@ -112,8 +112,8 @@ validate_structure <- function(sap_data) {
   }
 
   # Validate measurements structure
-  if ("measurements" %in% names(sap_data)) {
-    meas <- sap_data$measurements
+  if ("measurements" %in% names(heat_pulse_data)) {
+    meas <- heat_pulse_data$measurements
     required_meas_cols <- c("pulse_id", "datetime")
     expected_temp_cols <- c("do", "di", "uo", "ui")
 
@@ -140,19 +140,19 @@ validate_structure <- function(sap_data) {
 
 #' Validate Data Ranges
 #'
-#' @param sap_data A sap_data object
+#' @param heat_pulse_data A heat_pulse_data object
 #' @param temperature_range Range for temperature values
 #' @param voltage_range Range for voltage values
 #' @return List with issues and warnings
 #' @keywords internal
-validate_ranges <- function(sap_data, temperature_range, voltage_range) {
+validate_ranges <- function(heat_pulse_data, temperature_range, voltage_range) {
 
   issues <- character(0)
   warnings <- character(0)
 
   # Validate temperature ranges
-  if ("measurements" %in% names(sap_data)) {
-    meas <- sap_data$measurements
+  if ("measurements" %in% names(heat_pulse_data)) {
+    meas <- heat_pulse_data$measurements
     temp_cols <- intersect(c("do", "di", "uo", "ui"), names(meas))
 
     for (col in temp_cols) {
@@ -170,8 +170,8 @@ validate_ranges <- function(sap_data, temperature_range, voltage_range) {
   }
 
   # Validate voltage ranges
-  if ("diagnostics" %in% names(sap_data)) {
-    diag <- sap_data$diagnostics
+  if ("diagnostics" %in% names(heat_pulse_data)) {
+    diag <- heat_pulse_data$diagnostics
     voltage_cols <- intersect(c("batt_volt", "external_volt"), names(diag))
 
     for (col in voltage_cols) {
@@ -193,17 +193,17 @@ validate_ranges <- function(sap_data, temperature_range, voltage_range) {
 
 #' Validate Temporal Consistency
 #'
-#' @param sap_data A sap_data object
+#' @param heat_pulse_data A heat_pulse_data object
 #' @return List with issues and warnings
 #' @keywords internal
-validate_temporal_consistency <- function(sap_data) {
+validate_temporal_consistency <- function(heat_pulse_data) {
 
   issues <- character(0)
   warnings <- character(0)
 
   # Check diagnostics timestamps
-  if ("diagnostics" %in% names(sap_data)) {
-    diag <- sap_data$diagnostics
+  if ("diagnostics" %in% names(heat_pulse_data)) {
+    diag <- heat_pulse_data$diagnostics
     if ("datetime" %in% names(diag)) {
       # Check for missing timestamps
       missing_timestamps <- sum(is.na(diag$datetime))
@@ -228,8 +228,8 @@ validate_temporal_consistency <- function(sap_data) {
   }
 
   # Check measurements timestamps
-  if ("measurements" %in% names(sap_data)) {
-    meas <- sap_data$measurements
+  if ("measurements" %in% names(heat_pulse_data)) {
+    meas <- heat_pulse_data$measurements
     if ("datetime" %in% names(meas)) {
       # Check for missing timestamps
       missing_timestamps <- sum(is.na(meas$datetime))
@@ -254,16 +254,16 @@ validate_temporal_consistency <- function(sap_data) {
 
 #' Validate Sensor Consistency
 #'
-#' @param sap_data A sap_data object
+#' @param heat_pulse_data A heat_pulse_data object
 #' @return List with issues and warnings
 #' @keywords internal
-validate_sensor_consistency <- function(sap_data) {
+validate_sensor_consistency <- function(heat_pulse_data) {
 
   issues <- character(0)
   warnings <- character(0)
 
-  if ("measurements" %in% names(sap_data)) {
-    meas <- sap_data$measurements
+  if ("measurements" %in% names(heat_pulse_data)) {
+    meas <- heat_pulse_data$measurements
     temp_cols <- intersect(c("do", "di", "uo", "ui"), names(meas))
 
     if (length(temp_cols) >= 2) {
@@ -301,23 +301,23 @@ validate_sensor_consistency <- function(sap_data) {
 
 #' Calculate Validation Summary Statistics
 #'
-#' @param sap_data A sap_data object
+#' @param heat_pulse_data A heat_pulse_data object
 #' @param issues Character vector of issues
 #' @param warnings Character vector of warnings
 #' @return List with summary statistics
 #' @keywords internal
-calculate_validation_summary <- function(sap_data, issues, warnings) {
+calculate_validation_summary <- function(heat_pulse_data, issues, warnings) {
 
   summary_stats <- list(
     n_issues = length(issues),
     n_warnings = length(warnings),
-    n_diagnostics = if ("diagnostics" %in% names(sap_data)) nrow(sap_data$diagnostics) else 0,
-    n_measurements = if ("measurements" %in% names(sap_data)) nrow(sap_data$measurements) else 0
+    n_diagnostics = if ("diagnostics" %in% names(heat_pulse_data)) nrow(heat_pulse_data$diagnostics) else 0,
+    n_measurements = if ("measurements" %in% names(heat_pulse_data)) nrow(heat_pulse_data$measurements) else 0
   )
 
   # Add data quality metrics
-  if ("measurements" %in% names(sap_data)) {
-    meas <- sap_data$measurements
+  if ("measurements" %in% names(heat_pulse_data)) {
+    meas <- heat_pulse_data$measurements
     temp_cols <- intersect(c("do", "di", "uo", "ui"), names(meas))
 
     if (length(temp_cols) > 0) {

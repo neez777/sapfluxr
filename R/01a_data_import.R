@@ -38,9 +38,9 @@ show_message <- function(msg, type = "message", duration = NULL) {
     cat(msg)
   }
 }
-#' Read Sap Flow Data from ICT SFM1x Sensors
+#' Read Heat Pulse Data from ICT SFM1x Sensors
 #'
-#' Imports and parses sap flow data from ICT SFM1x sensors using character-based chunking.
+#' Imports and parses raw heat pulse temperature data from ICT SFM1x sensors using character-based chunking.
 #' Handles malformed JSON where entire datasets are on single lines.
 #'
 #' Progress reporting works in both command-line and Shiny applications. In console,
@@ -65,7 +65,7 @@ show_message <- function(msg, type = "message", duration = NULL) {
 #' \dontrun{
 #' # Basic usage in R console (with progress bar)
 #' progressr::with_progress({
-#'   sap_data <- read_sap_data("data/tree1_data.txt")
+#'   heat_pulse_data <- read_heat_pulse_data("data/tree1_data.txt")
 #' })
 #'
 #' # Usage in Shiny application - notifications appear automatically
@@ -74,21 +74,21 @@ show_message <- function(msg, type = "message", duration = NULL) {
 #'     # Status messages will show as Shiny notifications
 #'     # Progress bar updates automatically
 #'     progressr::with_progress({
-#'       sap_data <- read_sap_data(input$file$datapath)
+#'       heat_pulse_data <- read_heat_pulse_data(input$file$datapath)
 #'     })
 #'   })
 #' }
 #'
 #' # Without progress reporting
-#' sap_data <- read_sap_data("data/tree1_data.txt", show_progress = FALSE)
+#' heat_pulse_data <- read_heat_pulse_data("data/tree1_data.txt", show_progress = FALSE)
 #'
 #' # Specify format explicitly
-#' sap_data <- read_sap_data("data/tree1_data.txt", format = "ict_current")
+#' heat_pulse_data <- read_heat_pulse_data("data/tree1_data.txt", format = "ict_current")
 #' }
 #'
-#' @seealso \code{\link{read_multiple_sap_data}} for importing multiple files
+#' @seealso \code{\link{read_multiple_heat_pulse_data}} for importing multiple files
 #' @export
-read_sap_data <- function(file_path,
+read_heat_pulse_data <- function(file_path,
                                  format = NULL,
                                  validate_data = TRUE,
                                  chunk_size = NULL,
@@ -124,7 +124,7 @@ read_sap_data <- function(file_path,
   }
 
   if (show_progress) {
-    show_message(sprintf("📊 Reading sap flow data: %s (%.1f MB)\n",
+    show_message(sprintf("📊 Reading heat pulse data: %s (%.1f MB)\n",
                         basename(file_path), file_size_mb))
   }
 
@@ -160,14 +160,14 @@ read_sap_data <- function(file_path,
                                error = function(e) "dev")
   )
 
-  class(result) <- c("sap_data", "list")
+  class(result) <- c("heat_pulse_data", "list")
 
   # Validate if requested
   if (validate_data) {
     if (show_progress) {
       show_message("✔️ Validating data structure and ranges...\n")
     }
-    validation_result <- validate_sap_data(result)
+    validation_result <- validate_heat_pulse_data(result)
     if (!validation_result$valid) {
       warning("Data validation issues found: ",
               paste(validation_result$issues, collapse = "; "))
@@ -720,9 +720,9 @@ create_empty_measurements <- function() {
   )
 }
 
-#' Read Multiple Sap Flow Data Files
+#' Read Multiple Heat Pulse Data Files
 #'
-#' Imports and combines sap flow data from multiple files, typically representing
+#' Imports and combines raw heat pulse temperature data from multiple files, typically representing
 #' different trees or sensors. Each file is processed individually and then combined
 #' with tree/sensor identification for comparative analysis.
 #'
@@ -739,14 +739,14 @@ create_empty_measurements <- function() {
 #'   \item{diagnostics}{Combined data frame with sensor diagnostics and tree_id}
 #'   \item{measurements}{Combined data frame with temperature measurements and tree_id}
 #'   \item{metadata}{List containing combined file information}
-#'   \item{individual_data}{List of individual sap_data objects for each file}
+#'   \item{individual_data}{List of individual heat_pulse_data objects for each file}
 #'   \item{tree_summary}{Data frame summarizing each tree's data}
 #'
-#'   If combine_data = FALSE, a list of individual sap_data objects named by tree_id
+#'   If combine_data = FALSE, a list of individual heat_pulse_data objects named by tree_id
 #'
 #' @details
 #' This function enables comparative analysis across multiple trees by:
-#' 1. Importing each file individually using read_sap_data()
+#' 1. Importing each file individually using read_heat_pulse_data()
 #' 2. Adding tree/sensor identification to all data
 #' 3. Optionally combining data for unified analysis
 #' 4. Providing summary statistics for each tree
@@ -761,12 +761,12 @@ create_empty_measurements <- function() {
 #' # Import multiple files with automatic tree identification (console)
 #' files <- c("tree1_data.txt", "tree2_data.txt", "tree3_data.txt")
 #' progressr::with_progress({
-#'   multi_data <- read_multiple_sap_data(files)
+#'   multi_data <- read_multiple_heat_pulse_data(files)
 #' })
 #'
 #' # Import with explicit tree names
 #' progressr::with_progress({
-#'   multi_data <- read_multiple_sap_data(
+#'   multi_data <- read_multiple_heat_pulse_data(
 #'     files,
 #'     tree_ids = c("Oak_1", "Oak_2", "Pine_1")
 #'   )
@@ -777,21 +777,21 @@ create_empty_measurements <- function() {
 #'   observeEvent(input$import_multiple_button, {
 #'     file_paths <- input$files$datapath
 #'     progressr::with_progress({
-#'       multi_data <- read_multiple_sap_data(file_paths)
+#'       multi_data <- read_multiple_heat_pulse_data(file_paths)
 #'     })
 #'   })
 #' }
 #'
 #' # Keep individual data objects for separate processing
-#' individual_data <- read_multiple_sap_data(files, combine_data = FALSE)
+#' individual_data <- read_multiple_heat_pulse_data(files, combine_data = FALSE)
 #'
 #' # Process combined data
-#' results <- process_sap_data(multi_data)
+#' results <- process_heat_pulse_data(multi_data)
 #' }
 #'
-#' @seealso \code{\link{read_sap_data}}, \code{\link{process_sap_data}}
+#' @seealso \code{\link{read_heat_pulse_data}}
 #' @export
-read_multiple_sap_data <- function(file_paths,
+read_multiple_heat_pulse_data <- function(file_paths,
                                    tree_ids = NULL,
                                    format = NULL,
                                    validate_data = TRUE,
@@ -822,7 +822,7 @@ read_multiple_sap_data <- function(file_paths,
   }
 
   if (show_progress) {
-    show_message(sprintf("🌳 Importing %d sap flow data files...\n", length(file_paths)))
+    show_message(sprintf("🌳 Importing %d heat pulse data files...\n", length(file_paths)))
     show_message(sprintf("📁 Files: %s\n", paste(basename(file_paths), collapse = ", ")))
     show_message(sprintf("🏷️  Tree IDs: %s\n\n", paste(tree_ids, collapse = ", ")))
   }
@@ -849,7 +849,7 @@ read_multiple_sap_data <- function(file_paths,
 
     tryCatch({
       # Import individual file
-      sap_data <- read_sap_data(
+      heat_pulse_data <- read_heat_pulse_data(
         file_path = file_paths[i],
         format = format,
         validate_data = validate_data,
@@ -859,26 +859,26 @@ read_multiple_sap_data <- function(file_paths,
       )
 
       # Add tree identification to data
-      sap_data$diagnostics$tree_id <- tree_ids[i]
-      sap_data$measurements$tree_id <- tree_ids[i]
+      heat_pulse_data$diagnostics$tree_id <- tree_ids[i]
+      heat_pulse_data$measurements$tree_id <- tree_ids[i]
 
       # Update metadata
-      sap_data$metadata$tree_id <- tree_ids[i]
-      sap_data$metadata$file_index <- i
+      heat_pulse_data$metadata$tree_id <- tree_ids[i]
+      heat_pulse_data$metadata$file_index <- i
 
       # Store individual data
-      individual_data[[tree_ids[i]]] <- sap_data
+      individual_data[[tree_ids[i]]] <- heat_pulse_data
 
       # Update summary
-      import_summary$n_pulses[i] <- nrow(sap_data$diagnostics)
-      import_summary$n_measurements[i] <- nrow(sap_data$measurements)
-      import_summary$file_size_mb[i] <- sap_data$metadata$file_size_mb
+      import_summary$n_pulses[i] <- nrow(heat_pulse_data$diagnostics)
+      import_summary$n_measurements[i] <- nrow(heat_pulse_data$measurements)
+      import_summary$file_size_mb[i] <- heat_pulse_data$metadata$file_size_mb
       import_summary$import_success[i] <- TRUE
 
       if (show_progress) {
         show_message(sprintf("   ✅ Success: %s pulses, %s measurements\n",
-                            format(nrow(sap_data$diagnostics), big.mark = ","),
-                            format(nrow(sap_data$measurements), big.mark = ",")))
+                            format(nrow(heat_pulse_data$diagnostics), big.mark = ","),
+                            format(nrow(heat_pulse_data$measurements), big.mark = ",")))
       }
 
     }, error = function(e) {
@@ -891,7 +891,7 @@ read_multiple_sap_data <- function(file_paths,
       }
 
       # Create empty data structure for failed imports
-      individual_data[[tree_ids[i]]] <- create_empty_sap_data(tree_ids[i], file_paths[i])
+      individual_data[[tree_ids[i]]] <- create_empty_heat_pulse_data(tree_ids[i], file_paths[i])
     })
   }
 
@@ -903,11 +903,11 @@ read_multiple_sap_data <- function(file_paths,
 
   # Return format based on combine_data parameter
   if (combine_data) {
-    return(combine_multiple_sap_data(individual_data, import_summary, show_progress))
+    return(combine_multiple_heat_pulse_data(individual_data, import_summary, show_progress))
   } else {
     # Add summary as attribute
     attr(individual_data, "import_summary") <- import_summary
-    class(individual_data) <- c("multiple_sap_data", "list")
+    class(individual_data) <- c("multiple_heat_pulse_data", "list")
     return(individual_data)
   }
 }
@@ -939,13 +939,13 @@ generate_tree_ids <- function(file_paths) {
   return(clean_names)
 }
 
-#' Combine multiple sap_data objects into unified structure
-#' @param individual_data List of sap_data objects
+#' Combine multiple heat_pulse_data objects into unified structure
+#' @param individual_data List of heat_pulse_data objects
 #' @param import_summary Data frame with import summary
 #' @param show_progress Logical, whether to show progress
-#' @return Combined sap_data object
+#' @return Combined heat_pulse_data object
 #' @keywords internal
-combine_multiple_sap_data <- function(individual_data, import_summary, show_progress) {
+combine_multiple_heat_pulse_data <- function(individual_data, import_summary, show_progress) {
 
   if (show_progress) {
     show_message("🔄 Combining data from multiple trees...\n")
@@ -1033,7 +1033,7 @@ combine_multiple_sap_data <- function(individual_data, import_summary, show_prog
     import_summary = import_summary
   )
 
-  class(result) <- c("multiple_sap_data", "sap_data", "list")
+  class(result) <- c("multiple_heat_pulse_data", "heat_pulse_data", "list")
 
   if (show_progress) {
     show_message(sprintf("✅ Combined: %d trees, %s total pulses, %s total measurements\n",
@@ -1045,12 +1045,12 @@ combine_multiple_sap_data <- function(individual_data, import_summary, show_prog
   return(result)
 }
 
-#' Create empty sap_data object for failed imports
+#' Create empty heat_pulse_data object for failed imports
 #' @param tree_id Character, tree identifier
 #' @param file_path Character, file path
-#' @return Empty sap_data object
+#' @return Empty heat_pulse_data object
 #' @keywords internal
-create_empty_sap_data <- function(tree_id, file_path) {
+create_empty_heat_pulse_data <- function(tree_id, file_path) {
   result <- list(
     diagnostics = create_empty_diagnostics(),
     measurements = create_empty_measurements(),
@@ -1072,6 +1072,6 @@ create_empty_sap_data <- function(tree_id, file_path) {
     )
   )
 
-  class(result) <- c("sap_data", "list")
+  class(result) <- c("heat_pulse_data", "list")
   return(result)
 }

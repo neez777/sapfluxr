@@ -1,12 +1,12 @@
 #' Calculate Heat Pulse Velocity
 #'
-#' Calculates heat pulse velocity (Vh) from sap flow temperature data using multiple methods
+#' Calculates heat pulse velocity (Vh) from heat pulse temperature data using multiple methods
 #' including Heat Ratio Method (HRM), Maximum Heat Ratio (MHR), T-max methods, and others.
 #'
 #' Progress reporting works through the \code{progressr} package. Wrap calls in
 #' \code{progressr::with_progress({})} to see progress bars. Works in both console and Shiny.
 #'
-#' @param sap_data A sap_data object from read_sap_data()
+#' @param heat_pulse_data A heat_pulse_data object from read_heat_pulse_data()
 #' @param pulse_ids Vector of pulse IDs to process. If NULL, processes all pulses.
 #' @param methods Character vector of methods to use. Options: "HRM", "MHR", "HRMXa", "HRMXb",
 #'   "Tmax_Coh", "Tmax_Klu", "DMA". Default: c("HRM", "MHR", "DMA")
@@ -20,6 +20,8 @@
 #' @param probe_corrections Optional output from apply_hpv_corrections(). If provided, corrections
 #'   metadata will be attached to results. Note: This function calculates raw Vh; apply corrections
 #'   afterwards using apply_hpv_corrections().
+#' @param confirm_parameters Logical indicating whether to prompt for parameter confirmation
+#'   in interactive mode (default: TRUE). Set to FALSE for non-interactive scripts.
 #' @param plot_results Logical indicating whether to generate diagnostic plots
 #' @param show_progress Logical indicating whether to report progress (default: TRUE)
 #'
@@ -42,20 +44,23 @@
 #'   \item{method}{Calculation method used}
 #'   \item{sensor_position}{Inner or outer sensor position}
 #'   \item{Vh_cm_hr}{Heat pulse velocity in cm/hr}
+#'   \item{calc_window_start_sec}{Start of calculation window (seconds after pulse), for windowed methods like HRM}
+#'   \item{calc_window_end_sec}{End of calculation window (seconds after pulse), for windowed methods like HRM}
+#'   \item{calc_time_sec}{Specific time of calculation (seconds after pulse), for point methods like Tmax}
 #'   \item{quality_flag}{Data quality indicator}
 #'
 #' @examples
 #' \dontrun{
 #' # Load data and calculate velocities with progress bars
-#' sap_data <- read_sap_data("data.txt")
+#' heat_pulse_data <- read_heat_pulse_data("data.txt")
 #' progressr::with_progress({
-#'   results <- calc_heat_pulse_velocity(sap_data)
+#'   results <- calc_heat_pulse_velocity(heat_pulse_data)
 #' })
 #'
 #' # Use specific methods and parameters
 #' params <- list(diffusivity = 0.003, probe_spacing = 0.6)
 #' progressr::with_progress({
-#'   results <- calc_heat_pulse_velocity(sap_data, methods = c("HRM", "MHR"),
+#'   results <- calc_heat_pulse_velocity(heat_pulse_data, methods = c("HRM", "MHR"),
 #'                                      parameters = params)
 #' })
 #' }
@@ -69,7 +74,7 @@
 #' }
 #'
 #' @export
-calc_heat_pulse_velocity <- function(sap_data,
+calc_heat_pulse_velocity <- function(heat_pulse_data,
                                      pulse_ids = NULL,
                                      methods = c("HRM", "MHR", "DMA"),
                                      probe_config = NULL,
@@ -78,11 +83,12 @@ calc_heat_pulse_velocity <- function(sap_data,
                                      diffusivity = NULL,
                                      probe_spacing = NULL,
                                      probe_corrections = NULL,
+                                     confirm_parameters = TRUE,
                                      plot_results = FALSE,
                                      show_progress = TRUE) {
 
-  if (!inherits(sap_data, "sap_data")) {
-    stop("Input must be a sap_data object from read_sap_data()")
+  if (!inherits(heat_pulse_data, "heat_pulse_data")) {
+    stop("Input must be a heat_pulse_data object from read_heat_pulse_data()")
   }
 
   # Load probe configuration
@@ -129,7 +135,7 @@ calc_heat_pulse_velocity <- function(sap_data,
   }
 
   # Get pulse IDs to process
-  measurements <- sap_data$measurements
+  measurements <- heat_pulse_data$measurements
   if (is.null(pulse_ids)) {
     pulse_ids <- unique(measurements$pulse_id)
   }
@@ -143,6 +149,22 @@ calc_heat_pulse_velocity <- function(sap_data,
 
   if (length(pulse_ids) == 0) {
     stop("No valid pulse IDs to process")
+  }
+
+  # Show parameter summary and get confirmation
+  if (confirm_parameters && interactive()) {
+    confirmed <- prompt_parameter_confirmation(
+      probe_config = probe_config,
+      wood_properties = wood_properties,
+      params = params,
+      methods = methods,
+      n_pulses = length(pulse_ids)
+    )
+
+    if (!confirmed) {
+      message("\nCalculation cancelled by user.")
+      return(invisible(NULL))
+    }
   }
 
   # OPTIMISATION: Pre-split measurements by pulse_id once (massive speedup!)
@@ -220,39 +242,11 @@ calc_heat_pulse_velocity <- function(sap_data,
   # Combine results
   combined_results <- dplyr::bind_rows(all_results)
 
-  # Check for T-max method failures and warn once with summary
-  if ("Tmax_Coh" %in% methods) {
-    tmax_coh_results <- combined_results[combined_results$method == "Tmax_Coh", ]
-    na_count <- sum(is.na(tmax_coh_results$Vh_cm_hr))
-    total_count <- nrow(tmax_coh_results)
-    if (na_count > 0) {
-      na_pct <- round(100 * na_count / total_count, 1)
-      if (na_pct > 50) {
-        message(sprintf("Tmax_Coh: %d/%d (%.1f%%) calculations failed (negative discriminant). ",
-                       na_count, total_count, na_pct),
-                "This method requires high flow velocities (>50 cm/hr). ",
-                "Consider using HRM or MHR for low-moderate flows.")
-      }
-    }
-  }
-
-  if ("Tmax_Klu" %in% methods) {
-    tmax_klu_results <- combined_results[combined_results$method == "Tmax_Klu", ]
-    na_count <- sum(is.na(tmax_klu_results$Vh_cm_hr))
-    total_count <- nrow(tmax_klu_results)
-    if (na_count > 0) {
-      na_pct <- round(100 * na_count / total_count, 1)
-      if (na_pct > 50) {
-        message(sprintf("Tmax_Klu: %d/%d (%.1f%%) calculations failed. ",
-                       na_count, total_count, na_pct),
-                "This method requires high flow velocities (>50 cm/hr). ",
-                "Consider using HRM or MHR for low-moderate flows.")
-      }
-    }
-  }
-
   # Add quality flags
   combined_results <- add_quality_flags(combined_results)
+
+  # Print comprehensive calculation summary
+  print_calculation_summary(combined_results, successful_pulses)
 
   # Check if probe corrections should be applied
   if (!is.null(probe_corrections)) {
@@ -324,50 +318,50 @@ calc_vh_single_pulse <- function(pulse_data, pulse_id, parameters, methods, plot
   ui_mu_pre <- mean(pulse_data$ui[pre_pulse_period], na.rm = TRUE)
 
   # Calculate delta temperatures
-  delatT_do <- pulse_data$do - do_mu_pre
-  delatT_do[pre_pulse_period] <- NA
-  delatT_di <- pulse_data$di - di_mu_pre
-  delatT_di[pre_pulse_period] <- NA
-  delatT_uo <- pulse_data$uo - uo_mu_pre
-  delatT_uo[pre_pulse_period] <- NA
-  delatT_ui <- pulse_data$ui - ui_mu_pre
-  delatT_ui[pre_pulse_period] <- NA
+  deltaT_do <- pulse_data$do - do_mu_pre
+  deltaT_do[pre_pulse_period] <- NA
+  deltaT_di <- pulse_data$di - di_mu_pre
+  deltaT_di[pre_pulse_period] <- NA
+  deltaT_uo <- pulse_data$uo - uo_mu_pre
+  deltaT_uo[pre_pulse_period] <- NA
+  deltaT_ui <- pulse_data$ui - ui_mu_pre
+  deltaT_ui[pre_pulse_period] <- NA
 
   # Calculate temperature ratios
-  dTratio_douo <- delatT_do / delatT_uo
-  dTratio_diui <- delatT_di / delatT_ui
+  dTratio_douo <- deltaT_do / deltaT_uo
+  dTratio_diui <- deltaT_di / deltaT_ui
 
   # Initialize results
   method_results <- list()
 
   # Heat Ratio Method (HRM)
   if ("HRM" %in% methods) {
-    hrm_results <- calc_hrm(dTratio_douo, dTratio_diui, HRM_period, diffusivity, probe_spacing)
+    hrm_results <- calc_hrm(dTratio_douo, dTratio_diui, HRM_period, diffusivity, probe_spacing, tp)
     method_results[["HRM"]] <- hrm_results
   }
 
   # Maximum Heat Ratio (MHR)
   if ("MHR" %in% methods) {
-    mhr_results <- calc_mhr(delatT_do, delatT_di, delatT_uo, delatT_ui, diffusivity, probe_spacing)
+    mhr_results <- calc_mhr(deltaT_do, deltaT_di, deltaT_uo, deltaT_ui, diffusivity, probe_spacing)
     method_results[["MHR"]] <- mhr_results
   }
 
   # HRMX methods
   if ("HRMXa" %in% methods || "HRMXb" %in% methods) {
-    hrmx_results <- calc_hrmx(delatT_do, delatT_di, delatT_uo, delatT_ui,
-                              dTratio_douo, dTratio_diui, L, H, diffusivity, probe_spacing)
+    hrmx_results <- calc_hrmx(deltaT_do, deltaT_di, deltaT_uo, deltaT_ui,
+                              dTratio_douo, dTratio_diui, L, H, diffusivity, probe_spacing, tp)
     if ("HRMXa" %in% methods) method_results[["HRMXa"]] <- hrmx_results$HRMXa
     if ("HRMXb" %in% methods) method_results[["HRMXb"]] <- hrmx_results$HRMXb
   }
 
   # T-max methods
   if ("Tmax_Coh" %in% methods) {
-    tmax_coh_results <- calc_tmax_coh(delatT_do, delatT_di, diffusivity, probe_spacing, pre_pulse)
+    tmax_coh_results <- calc_tmax_coh(deltaT_do, deltaT_di, diffusivity, probe_spacing, pre_pulse)
     method_results[["Tmax_Coh"]] <- tmax_coh_results
   }
 
   if ("Tmax_Klu" %in% methods) {
-    tmax_klu_results <- calc_tmax_klu(delatT_do, delatT_di, diffusivity, probe_spacing, tp_1, pre_pulse)
+    tmax_klu_results <- calc_tmax_klu(deltaT_do, deltaT_di, diffusivity, probe_spacing, tp_1, pre_pulse)
     method_results[["Tmax_Klu"]] <- tmax_klu_results
   }
 
@@ -375,11 +369,11 @@ calc_vh_single_pulse <- function(pulse_data, pulse_id, parameters, methods, plot
   if ("DMA" %in% methods) {
     # Requires both HRM and Tmax_Klu
     if (!"HRM" %in% method_results) {
-      hrm_results <- calc_hrm(dTratio_douo, dTratio_diui, HRM_period, diffusivity, probe_spacing)
+      hrm_results <- calc_hrm(dTratio_douo, dTratio_diui, HRM_period, diffusivity, probe_spacing, tp)
       method_results[["HRM"]] <- hrm_results
     }
     if (!"Tmax_Klu" %in% method_results) {
-      tmax_klu_results <- calc_tmax_klu(delatT_do, delatT_di, diffusivity, probe_spacing, tp_1, pre_pulse)
+      tmax_klu_results <- calc_tmax_klu(deltaT_do, deltaT_di, diffusivity, probe_spacing, tp_1, pre_pulse)
       method_results[["Tmax_Klu"]] <- tmax_klu_results
     }
 
@@ -399,6 +393,9 @@ calc_vh_single_pulse <- function(pulse_data, pulse_id, parameters, methods, plot
       method = method_name,
       sensor_position = "outer",
       Vh_cm_hr = method_result$outer,
+      calc_window_start_sec = method_result$window_start_outer,
+      calc_window_end_sec = method_result$window_end_outer,
+      calc_time_sec = method_result$calc_time_outer,
       stringsAsFactors = FALSE
     )
     result_rows[[paste0(method_name, "_inner")]] <- data.frame(
@@ -407,6 +404,9 @@ calc_vh_single_pulse <- function(pulse_data, pulse_id, parameters, methods, plot
       method = method_name,
       sensor_position = "inner",
       Vh_cm_hr = method_result$inner,
+      calc_window_start_sec = method_result$window_start_inner,
+      calc_window_end_sec = method_result$window_end_inner,
+      calc_time_sec = method_result$calc_time_inner,
       stringsAsFactors = FALSE
     )
   }
@@ -415,7 +415,7 @@ calc_vh_single_pulse <- function(pulse_data, pulse_id, parameters, methods, plot
 
   # Plot if requested
   if (plot_results) {
-    plot_pulse_temps(pulse_data, delatT_do, delatT_di, delatT_uo, delatT_ui, pulse_id)
+    plot_pulse_temps(pulse_data, deltaT_do, deltaT_di, deltaT_uo, deltaT_ui, pulse_id)
   }
 
   return(result_df)
@@ -425,7 +425,7 @@ calc_vh_single_pulse <- function(pulse_data, pulse_id, parameters, methods, plot
 
 #' Calculate HRM velocities
 #' @keywords internal
-calc_hrm <- function(dTratio_douo, dTratio_diui, HRM_period, diffusivity, probe_spacing) {
+calc_hrm <- function(dTratio_douo, dTratio_diui, HRM_period, diffusivity, probe_spacing, tp) {
 
   # Validate inputs
   if (!is.logical(HRM_period)) {
@@ -440,8 +440,23 @@ calc_hrm <- function(dTratio_douo, dTratio_diui, HRM_period, diffusivity, probe_
   hrm_indices <- which(HRM_period)
   if (length(hrm_indices) == 0) {
     warning("No valid HRM sampling period")
-    return(list(outer = NA_real_, inner = NA_real_))
+    return(list(
+      outer = NA_real_,
+      inner = NA_real_,
+      window_start_outer = NA_real_,
+      window_end_outer = NA_real_,
+      window_start_inner = NA_real_,
+      window_end_inner = NA_real_,
+      calc_time_outer = NA_real_,
+      calc_time_inner = NA_real_
+    ))
   }
+
+  # Get window boundaries in seconds (not indices)
+  window_start_idx <- min(hrm_indices)
+  window_end_idx <- max(hrm_indices)
+  window_start <- tp[window_start_idx]
+  window_end <- tp[window_end_idx]
 
   # Get ratios for HRM period
   hrm_ratios_outer <- dTratio_douo[HRM_period]
@@ -478,31 +493,62 @@ calc_hrm <- function(dTratio_douo, dTratio_diui, HRM_period, diffusivity, probe_
     Vhi_HRM <- diffusivity / probe_spacing * log(dTratio_HRM_diui_mean) * 3600
   }
 
-  return(list(outer = Vho_HRM, inner = Vhi_HRM))
+  return(list(
+    outer = Vho_HRM,
+    inner = Vhi_HRM,
+    window_start_outer = window_start,
+    window_end_outer = window_end,
+    window_start_inner = window_start,
+    window_end_inner = window_end,
+    calc_time_outer = NA_real_,
+    calc_time_inner = NA_real_
+  ))
 }
 
 #' Calculate MHR velocities
 #' @keywords internal
-calc_mhr <- function(delatT_do, delatT_di, delatT_uo, delatT_ui, diffusivity, probe_spacing) {
+calc_mhr <- function(deltaT_do, deltaT_di, deltaT_uo, deltaT_ui, diffusivity, probe_spacing) {
 
   # Input validation
-  if (all(is.na(delatT_do)) || all(is.na(delatT_di)) ||
-      all(is.na(delatT_uo)) || all(is.na(delatT_ui))) {
+  if (all(is.na(deltaT_do)) || all(is.na(deltaT_di)) ||
+      all(is.na(deltaT_uo)) || all(is.na(deltaT_ui))) {
     warning("All temperature differences are NA")
-    return(list(outer = NA_real_, inner = NA_real_))
+    return(list(
+      outer = NA_real_,
+      inner = NA_real_,
+      window_start_outer = NA_real_,
+      window_end_outer = NA_real_,
+      window_start_inner = NA_real_,
+      window_end_inner = NA_real_,
+      calc_time_outer = NA_real_,
+      calc_time_inner = NA_real_
+    ))
   }
 
-  # Find maximum temperature increases
-  dTdo_max <- max(delatT_do, na.rm = TRUE)
-  dTdi_max <- max(delatT_di, na.rm = TRUE)
-  dTuo_max <- max(delatT_uo, na.rm = TRUE)
-  dTui_max <- max(delatT_ui, na.rm = TRUE)
+  # Find maximum temperature increases and their timing
+  dTdo_max <- max(deltaT_do, na.rm = TRUE)
+  dTdi_max <- max(deltaT_di, na.rm = TRUE)
+  dTuo_max <- max(deltaT_uo, na.rm = TRUE)
+  dTui_max <- max(deltaT_ui, na.rm = TRUE)
+
+  # Get time to maximum
+  tmo <- which.max(deltaT_do)
+  tmi <- which.max(deltaT_di)
 
   # Check for valid maximums
   if (any(c(dTdo_max, dTdi_max, dTuo_max, dTui_max) <= 0) ||
       any(!is.finite(c(dTdo_max, dTdi_max, dTuo_max, dTui_max)))) {
     warning("Invalid maximum temperature increases for MHR")
-    return(list(outer = NA_real_, inner = NA_real_))
+    return(list(
+      outer = NA_real_,
+      inner = NA_real_,
+      window_start_outer = NA_real_,
+      window_end_outer = NA_real_,
+      window_start_inner = NA_real_,
+      window_end_inner = NA_real_,
+      calc_time_outer = NA_real_,
+      calc_time_inner = NA_real_
+    ))
   }
 
   # Calculate ratios and velocities
@@ -523,33 +569,54 @@ calc_mhr <- function(delatT_do, delatT_di, delatT_uo, delatT_ui, diffusivity, pr
     Vhi_MHR <- (diffusivity / probe_spacing) * log(dTdi_max_dTui_max) * 3600
   }
 
-  return(list(outer = Vho_MHR, inner = Vhi_MHR))
+  return(list(
+    outer = Vho_MHR,
+    inner = Vhi_MHR,
+    window_start_outer = NA_real_,
+    window_end_outer = NA_real_,
+    window_start_inner = NA_real_,
+    window_end_inner = NA_real_,
+    calc_time_outer = tmo,
+    calc_time_inner = tmi
+  ))
 }
 
 #' Calculate HRMX velocities
 #' @keywords internal
-calc_hrmx <- function(delatT_do, delatT_di, delatT_uo, delatT_ui,
-                      dTratio_douo, dTratio_diui, L, H, diffusivity, probe_spacing) {
+calc_hrmx <- function(deltaT_do, deltaT_di, deltaT_uo, deltaT_ui,
+                      dTratio_douo, dTratio_diui, L, H, diffusivity, probe_spacing, tp) {
 
   # Input validation
-  if (all(is.na(delatT_do)) || all(is.na(delatT_di)) ||
-      all(is.na(delatT_uo)) || all(is.na(delatT_ui))) {
+  if (all(is.na(deltaT_do)) || all(is.na(deltaT_di)) ||
+      all(is.na(deltaT_uo)) || all(is.na(deltaT_ui))) {
     warning("All temperature differences are NA for HRMX")
-    return(list(HRMXa = list(outer = NA_real_, inner = NA_real_),
-                HRMXb = list(outer = NA_real_, inner = NA_real_)))
+    return(list(
+      HRMXa = list(
+        outer = NA_real_, inner = NA_real_,
+        window_start_outer = NA_real_, window_end_outer = NA_real_,
+        window_start_inner = NA_real_, window_end_inner = NA_real_,
+        calc_time_outer = NA_real_, calc_time_inner = NA_real_
+      ),
+      HRMXb = list(
+        outer = NA_real_, inner = NA_real_,
+        window_start_outer = NA_real_, window_end_outer = NA_real_,
+        window_start_inner = NA_real_, window_end_inner = NA_real_,
+        calc_time_outer = NA_real_, calc_time_inner = NA_real_
+      )
+    ))
   }
 
   # Calculate max temperatures
-  dTdo_max <- max(delatT_do, na.rm = TRUE)
-  dTdi_max <- max(delatT_di, na.rm = TRUE)
-  dTuo_max <- max(delatT_uo, na.rm = TRUE)
-  dTui_max <- max(delatT_ui, na.rm = TRUE)
+  dTdo_max <- max(deltaT_do, na.rm = TRUE)
+  dTdi_max <- max(deltaT_di, na.rm = TRUE)
+  dTuo_max <- max(deltaT_uo, na.rm = TRUE)
+  dTui_max <- max(deltaT_ui, na.rm = TRUE)
 
   # Calculate pre-max values
-  dTdo_premax <- c(NA, ifelse(diff(delatT_do) > 0, delatT_do[-1], NA))
-  dTdi_premax <- c(NA, ifelse(diff(delatT_di) > 0, delatT_di[-1], NA))
-  dTuo_premax <- c(NA, ifelse(diff(delatT_uo) > 0, delatT_uo[-1], NA))
-  dTui_premax <- c(NA, ifelse(diff(delatT_ui) > 0, delatT_ui[-1], NA))
+  dTdo_premax <- c(NA, ifelse(diff(deltaT_do) > 0, deltaT_do[-1], NA))
+  dTdi_premax <- c(NA, ifelse(diff(deltaT_di) > 0, deltaT_di[-1], NA))
+  dTuo_premax <- c(NA, ifelse(diff(deltaT_uo) > 0, deltaT_uo[-1], NA))
+  dTui_premax <- c(NA, ifelse(diff(deltaT_ui) > 0, deltaT_ui[-1], NA))
 
   # Calculate window bounds
   dTdo_max_L <- dTdo_max * L
@@ -623,24 +690,72 @@ calc_hrmx <- function(delatT_do, delatT_di, delatT_uo, delatT_ui,
     Vhi_HRMXb <- (diffusivity / probe_spacing) * log(dT_ratio_diui_HRMX_mean) * 3600
   }
 
+  # Track which time points were actually used for HRMXa
+  # Outer: uses either downstream or upstream depending on which had higher mean
+  hrmxa_outer_indices <- if (!is.na(dTdo_HRMX_mean) && !is.na(dTuo_HRMX_mean) && dTdo_HRMX_mean > dTuo_HRMX_mean) {
+    which(!is.na(dTdo_HRMX))
+  } else {
+    which(!is.na(dTuo_HRMX))
+  }
+
+  # Inner: uses either downstream or upstream depending on which had higher mean
+  hrmxa_inner_indices <- if (!is.na(dTdi_HRMX_mean) && !is.na(dTui_HRMX_mean) && dTdi_HRMX_mean > dTui_HRMX_mean) {
+    which(!is.na(dTdi_HRMX))
+  } else {
+    which(!is.na(dTui_HRMX))
+  }
+
+  # Track which time points were used for HRMXb (uses all valid points from both sensors)
+  hrmxb_outer_indices <- unique(c(which(!is.na(dTdo_HRMX)), which(!is.na(dTuo_HRMX))))
+  hrmxb_inner_indices <- unique(c(which(!is.na(dTdi_HRMX)), which(!is.na(dTui_HRMX))))
+
+  # Convert indices to seconds
+  hrmxa_window_start_outer <- if (length(hrmxa_outer_indices) > 0) tp[min(hrmxa_outer_indices)] else NA_real_
+  hrmxa_window_end_outer <- if (length(hrmxa_outer_indices) > 0) tp[max(hrmxa_outer_indices)] else NA_real_
+  hrmxa_window_start_inner <- if (length(hrmxa_inner_indices) > 0) tp[min(hrmxa_inner_indices)] else NA_real_
+  hrmxa_window_end_inner <- if (length(hrmxa_inner_indices) > 0) tp[max(hrmxa_inner_indices)] else NA_real_
+
+  hrmxb_window_start_outer <- if (length(hrmxb_outer_indices) > 0) tp[min(hrmxb_outer_indices)] else NA_real_
+  hrmxb_window_end_outer <- if (length(hrmxb_outer_indices) > 0) tp[max(hrmxb_outer_indices)] else NA_real_
+  hrmxb_window_start_inner <- if (length(hrmxb_inner_indices) > 0) tp[min(hrmxb_inner_indices)] else NA_real_
+  hrmxb_window_end_inner <- if (length(hrmxb_inner_indices) > 0) tp[max(hrmxb_inner_indices)] else NA_real_
+
   return(list(
-    HRMXa = list(outer = Vho_HRMXa, inner = Vhi_HRMXa),
-    HRMXb = list(outer = Vho_HRMXb, inner = Vhi_HRMXb)
+    HRMXa = list(
+      outer = Vho_HRMXa,
+      inner = Vhi_HRMXa,
+      window_start_outer = hrmxa_window_start_outer,
+      window_end_outer = hrmxa_window_end_outer,
+      window_start_inner = hrmxa_window_start_inner,
+      window_end_inner = hrmxa_window_end_inner,
+      calc_time_outer = NA_real_,
+      calc_time_inner = NA_real_
+    ),
+    HRMXb = list(
+      outer = Vho_HRMXb,
+      inner = Vhi_HRMXb,
+      window_start_outer = hrmxb_window_start_outer,
+      window_end_outer = hrmxb_window_end_outer,
+      window_start_inner = hrmxb_window_start_inner,
+      window_end_inner = hrmxb_window_end_inner,
+      calc_time_outer = NA_real_,
+      calc_time_inner = NA_real_
+    )
   ))
 }
 
 #' Calculate Tmax Cohen velocities
 #' @keywords internal
-calc_tmax_coh <- function(delatT_do, delatT_di, diffusivity, probe_spacing, pre_pulse) {
+calc_tmax_coh <- function(deltaT_do, deltaT_di, diffusivity, probe_spacing, pre_pulse) {
 
   # Validate inputs
-  if (!is.numeric(delatT_do) || !is.numeric(delatT_di)) {
+  if (!is.numeric(deltaT_do) || !is.numeric(deltaT_di)) {
     stop("Temperature vectors must be numeric")
   }
 
   # Remove NA values for finding maximum
-  valid_do <- delatT_do[!is.na(delatT_do)]
-  valid_di <- delatT_di[!is.na(delatT_di)]
+  valid_do <- deltaT_do[!is.na(deltaT_do)]
+  valid_di <- deltaT_di[!is.na(deltaT_di)]
 
   if (length(valid_do) == 0 || length(valid_di) == 0) {
     return(list(outer = NA_real_, inner = NA_real_,
@@ -648,8 +763,8 @@ calc_tmax_coh <- function(delatT_do, delatT_di, diffusivity, probe_spacing, pre_
   }
 
   # Find time to maximum (adjust for pre-pulse period)
-  tmo <- which.max(delatT_do) - pre_pulse
-  tmi <- which.max(delatT_di) - pre_pulse
+  tmo <- which.max(deltaT_do) - pre_pulse
+  tmi <- which.max(deltaT_di) - pre_pulse
 
   # Check for valid time to maximum
   if (tmo <= 0 || tmi <= 0) {
@@ -678,16 +793,26 @@ calc_tmax_coh <- function(delatT_do, delatT_di, diffusivity, probe_spacing, pre_
     inner_issue <- NA_character_
   }
 
-  return(list(outer = Vho_Tmax_Coh, inner = Vhi_Tmax_Coh,
-              outer_issue = outer_issue, inner_issue = inner_issue))
+  return(list(
+    outer = Vho_Tmax_Coh,
+    inner = Vhi_Tmax_Coh,
+    outer_issue = outer_issue,
+    inner_issue = inner_issue,
+    window_start_outer = NA_real_,
+    window_end_outer = NA_real_,
+    window_start_inner = NA_real_,
+    window_end_inner = NA_real_,
+    calc_time_outer = tmo,
+    calc_time_inner = tmi
+  ))
 }
 
 #' Calculate Tmax Kluitenberg velocities
 #' @keywords internal
-calc_tmax_klu <- function(delatT_do, delatT_di, diffusivity, probe_spacing, tp_1, pre_pulse) {
+calc_tmax_klu <- function(deltaT_do, deltaT_di, diffusivity, probe_spacing, tp_1, pre_pulse) {
 
   # Validate inputs
-  if (!is.numeric(delatT_do) || !is.numeric(delatT_di)) {
+  if (!is.numeric(deltaT_do) || !is.numeric(deltaT_di)) {
     stop("Temperature vectors must be numeric")
   }
 
@@ -696,8 +821,8 @@ calc_tmax_klu <- function(delatT_do, delatT_di, diffusivity, probe_spacing, tp_1
   }
 
   # Remove NA values for finding maximum
-  valid_do <- delatT_do[!is.na(delatT_do)]
-  valid_di <- delatT_di[!is.na(delatT_di)]
+  valid_do <- deltaT_do[!is.na(deltaT_do)]
+  valid_di <- deltaT_di[!is.na(deltaT_di)]
 
   if (length(valid_do) == 0 || length(valid_di) == 0) {
     return(list(outer = NA_real_, inner = NA_real_,
@@ -705,8 +830,8 @@ calc_tmax_klu <- function(delatT_do, delatT_di, diffusivity, probe_spacing, tp_1
   }
 
   # Find time to maximum (adjust for pre-pulse period)
-  tmo <- which.max(delatT_do) - pre_pulse
-  tmi <- which.max(delatT_di) - pre_pulse
+  tmo <- which.max(deltaT_do) - pre_pulse
+  tmi <- which.max(deltaT_di) - pre_pulse
 
   # Check if time to max > pulse duration (required for Kluitenberg method)
   if (tmo <= tp_1) {
@@ -753,8 +878,18 @@ calc_tmax_klu <- function(delatT_do, delatT_di, diffusivity, probe_spacing, tp_1
     }
   }
 
-  return(list(outer = Vho_Tmax_Klu, inner = Vhi_Tmax_Klu,
-              outer_issue = outer_issue, inner_issue = inner_issue))
+  return(list(
+    outer = Vho_Tmax_Klu,
+    inner = Vhi_Tmax_Klu,
+    outer_issue = outer_issue,
+    inner_issue = inner_issue,
+    window_start_outer = NA_real_,
+    window_end_outer = NA_real_,
+    window_start_inner = NA_real_,
+    window_end_inner = NA_real_,
+    calc_time_outer = tmo,
+    calc_time_inner = tmi
+  ))
 }
 
 #' Calculate DMA velocities
@@ -765,22 +900,38 @@ calc_dma <- function(hrm_results, tmax_klu_results, diffusivity, probe_spacing) 
   # Handle outer sensor with proper NA checking
   if (is.na(hrm_results$outer) || !is.finite(hrm_results$outer)) {
     Vho_DMA <- tmax_klu_results$outer
+    use_hrm_outer <- FALSE
   } else if (hrm_results$outer < Vh_HRM_crit) {
     Vho_DMA <- hrm_results$outer
+    use_hrm_outer <- TRUE
   } else {
     Vho_DMA <- tmax_klu_results$outer
+    use_hrm_outer <- FALSE
   }
 
   # Handle inner sensor with proper NA checking
   if (is.na(hrm_results$inner) || !is.finite(hrm_results$inner)) {
     Vhi_DMA <- tmax_klu_results$inner
+    use_hrm_inner <- FALSE
   } else if (hrm_results$inner < Vh_HRM_crit) {
     Vhi_DMA <- hrm_results$inner
+    use_hrm_inner <- TRUE
   } else {
     Vhi_DMA <- tmax_klu_results$inner
+    use_hrm_inner <- FALSE
   }
 
-  return(list(outer = Vho_DMA, inner = Vhi_DMA))
+  # Pass through metadata from the selected method
+  return(list(
+    outer = Vho_DMA,
+    inner = Vhi_DMA,
+    window_start_outer = if (use_hrm_outer) hrm_results$window_start_outer else tmax_klu_results$window_start_outer,
+    window_end_outer = if (use_hrm_outer) hrm_results$window_end_outer else tmax_klu_results$window_end_outer,
+    window_start_inner = if (use_hrm_inner) hrm_results$window_start_inner else tmax_klu_results$window_start_inner,
+    window_end_inner = if (use_hrm_inner) hrm_results$window_end_inner else tmax_klu_results$window_end_inner,
+    calc_time_outer = if (use_hrm_outer) hrm_results$calc_time_outer else tmax_klu_results$calc_time_outer,
+    calc_time_inner = if (use_hrm_inner) hrm_results$calc_time_inner else tmax_klu_results$calc_time_inner
+  ))
 }
 
 #' Add Quality Flags to Results
@@ -803,25 +954,25 @@ add_quality_flags <- function(results) {
 #' Plot Temperature Differences for Diagnostic Purposes
 #'
 #' @param pulse_data Data for single pulse
-#' @param delatT_do Delta temperatures for downstream outer
-#' @param delatT_di Delta temperatures for downstream inner
-#' @param delatT_uo Delta temperatures for upstream outer
-#' @param delatT_ui Delta temperatures for upstream inner
+#' @param deltaT_do Delta temperatures for downstream outer
+#' @param deltaT_di Delta temperatures for downstream inner
+#' @param deltaT_uo Delta temperatures for upstream outer
+#' @param deltaT_ui Delta temperatures for upstream inner
 #' @param pulse_id Pulse ID for title
 #' @keywords internal
-plot_pulse_temps <- function(pulse_data, delatT_do, delatT_di, delatT_uo, delatT_ui, pulse_id) {
+plot_pulse_temps <- function(pulse_data, deltaT_do, deltaT_di, deltaT_uo, deltaT_ui, pulse_id) {
   if (!requireNamespace("graphics", quietly = TRUE)) {
     return()
   }
 
-  graphics::plot(pulse_data$datetime, delatT_do, type = "l", las = 1,
+  graphics::plot(pulse_data$datetime, deltaT_do, type = "l", las = 1,
                  xlab = "Time", ylab = expression(paste(Delta, 'T')),
                  main = paste("Pulse", pulse_id),
                  xlim = range(pulse_data$datetime, na.rm = TRUE),
-                 ylim = c(0, max(delatT_do, delatT_uo, delatT_di, delatT_ui, na.rm = TRUE)))
-  graphics::lines(pulse_data$datetime, delatT_uo, lty = 2)
-  graphics::lines(pulse_data$datetime, delatT_di, lty = 3)
-  graphics::lines(pulse_data$datetime, delatT_ui, lty = 4)
+                 ylim = c(0, max(deltaT_do, deltaT_uo, deltaT_di, deltaT_ui, na.rm = TRUE)))
+  graphics::lines(pulse_data$datetime, deltaT_uo, lty = 2)
+  graphics::lines(pulse_data$datetime, deltaT_di, lty = 3)
+  graphics::lines(pulse_data$datetime, deltaT_ui, lty = 4)
   graphics::legend("topleft", lty = c(1, 2, 3, 4), legend = c("DO", "UO", "DI", "UI"), bty = "n")
 }#' Get Default Calculation Parameters
 #'
@@ -921,6 +1072,204 @@ validate_parameters <- function(parameters) {
 }
 
 
+#' Format Parameter Summary for Display
+#'
+#' @param probe_config ProbeConfiguration object
+#' @param wood_properties WoodProperties object
+#' @param params List of calculation parameters
+#' @param methods Character vector of methods
+#' @param n_pulses Number of pulses to process
+#' @return Character string with formatted summary
+#' @keywords internal
+format_parameter_summary <- function(probe_config, wood_properties, params, methods, n_pulses) {
+
+  # Build header
+  header <- paste0(
+    "\n",
+    strrep("=", 67), "\n",
+    "  HEAT PULSE VELOCITY CALCULATION - PARAMETER SUMMARY\n",
+    strrep("=", 67), "\n\n"
+  )
+
+  # Probe configuration section
+  probe_section <- paste0(
+    "\U0001F4CD PROBE CONFIGURATION\n",
+    sprintf("  Name:               %s\n", probe_config$config_name),
+    sprintf("  Type:               %s\n", tools::toTitleCase(probe_config$config_type)),
+    sprintf("  Upstream spacing:   %.1f mm (%.2f cm)\n",
+            abs(probe_config$sensor_positions$upstream_outer) * 10,
+            abs(probe_config$sensor_positions$upstream_outer)),
+    sprintf("  Downstream spacing: %.1f mm (%.2f cm)\n",
+            abs(probe_config$sensor_positions$downstream_outer) * 10,
+            abs(probe_config$sensor_positions$downstream_outer)),
+    sprintf("  Pulse duration:     %s seconds\n", probe_config$heat_pulse_duration),
+    sprintf("  Compatible methods: %s\n", paste(probe_config$compatible_methods, collapse = ", ")),
+    sprintf("  Source:             %s\n\n",
+            ifelse(is.null(probe_config$yaml_source), "Programmatic",
+                   basename(probe_config$yaml_source)))
+  )
+
+  # Wood properties section
+  wood_section <- paste0(
+    "\U0001F333 WOOD PROPERTIES\n",
+    sprintf("  Configuration:      %s\n", wood_properties$config_name),
+    sprintf("  Species:            %s\n", wood_properties$species),
+    sprintf("  Thermal diffusivity: %.5f cm\U00B2/s\n", wood_properties$thermal_diffusivity),
+    sprintf("  Wood type:          %s\n", tools::toTitleCase(wood_properties$wood_type))
+  )
+
+  # Add optional wood properties
+  if (!is.null(wood_properties$moisture_content)) {
+    wood_section <- paste0(wood_section,
+                           sprintf("  Moisture content:   %.1f%%\n", wood_properties$moisture_content))
+  }
+  if (!is.null(wood_properties$tree_measurements$dbh)) {
+    wood_section <- paste0(wood_section,
+                           sprintf("  DBH:                %.1f cm\n", wood_properties$tree_measurements$dbh))
+  }
+  if (!is.null(wood_properties$tree_measurements$sapwood_depth)) {
+    wood_section <- paste0(wood_section,
+                           sprintf("  Sapwood depth:      %.2f cm\n", wood_properties$tree_measurements$sapwood_depth))
+  }
+
+  wood_section <- paste0(wood_section,
+                         sprintf("  Source:             %s\n\n",
+                                 ifelse(is.null(wood_properties$yaml_source), "Programmatic",
+                                        basename(wood_properties$yaml_source))))
+
+  # Calculation parameters section
+  calc_section <- paste0(
+    "\U00002699\U0000FE0F  CALCULATION PARAMETERS\n",
+    sprintf("  Methods:            %s\n", paste(methods, collapse = ", ")),
+    sprintf("  Diffusivity:        %.5f cm\U00B2/s (from wood properties)\n", params$diffusivity),
+    sprintf("  Probe spacing:      %.2f cm (from probe config)\n", params$probe_spacing),
+    sprintf("  Pre-pulse period:   %s sec\n", params$pre_pulse),
+    sprintf("  HRM window:         %s-%s sec\n", params$HRM_start, params$HRM_end),
+    sprintf("  Pulse duration:     %s sec (for Tmax_Klu)\n\n", params$tp_1)
+  )
+
+  # Processing section
+  est_time_min <- max(1, round(n_pulses * length(methods) * 0.001, 1))
+  processing_section <- paste0(
+    "\U0001F4CA PROCESSING\n",
+    sprintf("  Pulses to process:  %s\n", format(n_pulses, big.mark = ",")),
+    sprintf("  Estimated time:     ~%.1f minute%s\n\n",
+            est_time_min, ifelse(est_time_min == 1, "", "s"))
+  )
+
+  # Footer
+  footer <- paste0(strrep("=", 67), "\n")
+
+  # Combine all sections
+  summary <- paste0(header, probe_section, wood_section, calc_section, processing_section, footer)
+
+  return(summary)
+}
+
+
+#' Prompt User for Parameter Confirmation
+#'
+#' @param probe_config ProbeConfiguration object
+#' @param wood_properties WoodProperties object
+#' @param params List of calculation parameters
+#' @param methods Character vector of methods
+#' @param n_pulses Number of pulses
+#' @return Logical indicating whether user confirmed
+#' @keywords internal
+prompt_parameter_confirmation <- function(probe_config, wood_properties, params, methods, n_pulses) {
+
+  # Show summary
+  summary <- format_parameter_summary(probe_config, wood_properties, params, methods, n_pulses)
+  cat(summary)
+
+  # Prompt for confirmation
+  cat("\nAre these parameters correct? (yes/no): ")
+  response <- tolower(trimws(readline()))
+
+  if (response %in% c("y", "yes")) {
+    return(TRUE)
+  } else {
+    # Provide guidance
+    cat("\nTo modify these parameters:\n\n")
+    cat("1. PROBE CONFIGURATION:\n")
+    cat("   - Use different config: probe_config = \"asymmetrical\"\n")
+    cat("   - Load custom YAML: probe_config = load_probe_config(\"path/to/config.yaml\")\n")
+    cat("   - Create custom: probe_config = create_custom_probe_config(...)\n\n")
+
+    cat("2. WOOD PROPERTIES:\n")
+    cat("   - Use different config: wood_properties = \"eucalyptus\"\n")
+    cat("   - Load custom YAML: wood_properties = load_wood_properties(\"path/to/wood.yaml\")\n")
+    cat("   - Create custom: wood_properties = create_custom_wood_properties(...)\n")
+    cat("   - Override specific values: wood_properties = load_wood_properties(\"eucalyptus\",\n")
+    cat("                                 overrides = list(thermal_diffusivity = 0.003))\n\n")
+
+    cat("3. CALCULATION PARAMETERS:\n")
+    cat("   - Override diffusivity: diffusivity = 0.003\n")
+    cat("   - Override probe spacing: probe_spacing = 0.6\n")
+    cat("   - Override multiple: parameters = list(HRM_start = 70, HRM_end = 110)\n\n")
+
+    cat("4. METHODS:\n")
+    cat("   - Change methods: methods = c(\"HRM\", \"MHR\", \"Tmax_Coh\")\n\n")
+
+    cat("See ?calc_heat_pulse_velocity for full documentation.\n")
+
+    return(FALSE)
+  }
+}
+
+
+#' Print Calculation Summary
+#'
+#' Prints a summary of calculation results including success rates per method
+#'
+#' @param results Results tibble from calc_heat_pulse_velocity
+#' @param n_pulses Total number of pulses processed
+#' @keywords internal
+print_calculation_summary <- function(results, n_pulses) {
+
+  cat("\n")
+  cat(strrep("=", 67), "\n")
+  cat("  CALCULATION SUMMARY\n")
+  cat(strrep("=", 67), "\n\n")
+
+  cat(sprintf("Total pulses processed: %s\n\n", format(n_pulses, big.mark = ",")))
+
+  # Calculate success rates per method
+  methods <- unique(results$method)
+
+  cat("Success rates by method:\n")
+  cat(strrep("-", 67), "\n")
+  cat(sprintf("%-15s %10s %10s %10s\n", "Method", "Calculated", "Missing", "Success %"))
+  cat(strrep("-", 67), "\n")
+
+  for (method in methods) {
+    method_results <- results[results$method == method, ]
+    total <- nrow(method_results)
+    calculated <- sum(!is.na(method_results$Vh_cm_hr) & is.finite(method_results$Vh_cm_hr))
+    missing <- total - calculated
+    success_pct <- round(100 * calculated / total, 1)
+
+    cat(sprintf("%-15s %10s %10s %9.1f%%\n",
+                method,
+                format(calculated, big.mark = ","),
+                format(missing, big.mark = ","),
+                success_pct))
+  }
+
+  cat(strrep("-", 67), "\n\n")
+
+  # Quality flag summary
+  cat("Quality flags:\n")
+  flag_counts <- table(results$quality_flag)
+  for (flag in names(flag_counts)) {
+    cat(sprintf("  %-20s: %s\n", flag, format(flag_counts[flag], big.mark = ",")))
+  }
+
+  cat("\n")
+  cat(strrep("=", 67), "\n\n")
+}
+
+
 #' Create Test Sap Data Object
 #'
 #' Creates a properly formatted sap_data object for testing purposes.
@@ -1014,8 +1363,8 @@ create_test_sap_data <- function(n_points = 120, n_pulses = 1, add_noise = TRUE)
   combined_measurements <- do.call(rbind, all_measurements)
   combined_diagnostics <- do.call(rbind, all_diagnostics)
 
-  # Create sap_data object structure
-  sap_data <- list(
+  # Create heat_pulse_data object structure
+  heat_pulse_data <- list(
     measurements = combined_measurements,
     diagnostics = combined_diagnostics,
     metadata = list(
@@ -1030,6 +1379,6 @@ create_test_sap_data <- function(n_points = 120, n_pulses = 1, add_noise = TRUE)
     )
   )
 
-  class(sap_data) <- "sap_data"
-  return(sap_data)
+  class(heat_pulse_data) <- "heat_pulse_data"
+  return(heat_pulse_data)
 }
