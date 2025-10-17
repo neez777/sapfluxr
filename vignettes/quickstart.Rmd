@@ -1,0 +1,432 @@
+---
+title: "Quick Start Guide to sapfluxr"
+author: "Grant Joyce"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Quick Start Guide to sapfluxr}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 5
+)
+```
+
+# Introduction
+
+**sapfluxr** processes and analyses sap flow data from ICT SFM1x heat pulse velocity (HPV) sensors. This guide walks you through the complete workflow from raw data to visualised results.
+
+## Installation
+
+```{r eval=FALSE}
+# Install from GitHub
+devtools::install_github("neez777/sapfluxr")
+```
+
+```{r}
+library(sapfluxr)
+library(ggplot2)  # For plotting
+```
+
+# Basic Workflow
+
+## 1. Import Data
+
+sapfluxr automatically detects and imports multiple data formats from ICT sensors:
+
+```{r eval=FALSE}
+# Import raw heat pulse data
+heat_pulse_data <- read_heat_pulse_data("path/to/your/data.txt")
+```
+
+The import function will:
+- Auto-detect the file format (ICT current, legacy, or CSV)
+- Parse temperature measurements from all four thermistors (do, di, uo, ui)
+- Extract diagnostic information (battery voltage, temperature, etc.)
+- Validate data quality (if `validate_data = TRUE`)
+
+```{r include=FALSE}
+# Create example data for this vignette
+set.seed(42)
+n_pulses <- 10
+
+# Simulate realistic temperature data
+measurements <- data.frame(
+  pulse_id = rep(1:n_pulses, each = 150),
+  datetime = rep(seq(as.POSIXct("2024-03-15 08:00:00"),
+                     by = "30 min", length.out = n_pulses), each = 150)
+)
+
+# Add time within each pulse
+measurements$datetime <- measurements$datetime + rep(0:149, times = n_pulses)
+
+# Simulate temperature data with realistic heat pulse response
+for (i in 1:n_pulses) {
+  pulse_rows <- (i-1)*150 + 1:150
+  time_sec <- 0:149
+
+  # Pre-pulse baseline temperatures
+  baseline_do <- 18.5 + rnorm(1, 0, 0.1)
+  baseline_di <- 18.4 + rnorm(1, 0, 0.1)
+  baseline_uo <- 18.6 + rnorm(1, 0, 0.1)
+  baseline_ui <- 18.3 + rnorm(1, 0, 0.1)
+
+  # Heat pulse response (rises after 30 sec, peaks around 60-80 sec, decays)
+  heat_response <- ifelse(time_sec < 30, 0,
+                          exp(-(time_sec - 60)^2 / 800) * runif(1, 0.8, 1.2))
+
+  measurements$do[pulse_rows] <- baseline_do + heat_response * 1.2 + rnorm(150, 0, 0.02)
+  measurements$di[pulse_rows] <- baseline_di + heat_response * 1.0 + rnorm(150, 0, 0.02)
+  measurements$uo[pulse_rows] <- baseline_uo + heat_response * 0.8 + rnorm(150, 0, 0.01)
+  measurements$ui[pulse_rows] <- baseline_ui + heat_response * 0.7 + rnorm(150, 0, 0.01)
+}
+
+# Create diagnostic data
+diagnostics <- data.frame(
+  pulse_id = 1:n_pulses,
+  datetime = seq(as.POSIXct("2024-03-15 08:00:00"), by = "30 min", length.out = n_pulses),
+  batt_volt = runif(n_pulses, 3.9, 4.1),
+  batt_current = c(rnorm(n_pulses-1, 15, 2), rnorm(1, 180, 10)),  # One high heating pulse
+  batt_temp = rnorm(n_pulses, 25, 2),
+  external_volt = rnorm(n_pulses, 21, 1),
+  external_current = c(rnorm(n_pulses-1, 18, 2), rnorm(1, 75, 5))
+)
+
+# Create heat_pulse_data object
+heat_pulse_data <- list(
+  measurements = measurements,
+  diagnostics = diagnostics,
+  metadata = list(
+    file_path = "example_data.txt",
+    file_name = "example_data.txt",
+    format = "ict_current",
+    import_time = Sys.time(),
+    file_size = 125000,
+    file_size_mb = 0.12,
+    n_pulses = n_pulses,
+    n_measurements = nrow(measurements),
+    chunk_size = 100000,
+    r_version = paste(R.version$major, R.version$minor, sep = "."),
+    package_version = "0.2.0"
+  )
+)
+class(heat_pulse_data) <- c("heat_pulse_data", "list")
+```
+
+### Inspect Imported Data
+
+```{r}
+# Summary of imported data
+str(heat_pulse_data, max.level = 2)
+
+# View first few temperature measurements
+head(heat_pulse_data$measurements)
+
+# View diagnostic information
+head(heat_pulse_data$diagnostics)
+```
+
+## 2. Calculate Heat Pulse Velocity
+
+Calculate sap velocity using one or more established methods:
+
+```{r}
+# Calculate using multiple methods
+vh_results <- calc_heat_pulse_velocity(
+  heat_pulse_data,
+  methods = c("HRM", "MHR", "HRMXa", "Tmax_Klu"),
+  show_progress = FALSE
+)
+
+# View results
+head(vh_results)
+```
+
+### Available Methods
+
+| Method | Best For | Reference |
+|--------|----------|-----------|
+| **HRM** | Low flows, reverse flows | Burgess et al. (2001) |
+| **MHR** | Moderate flows | Lopez et al. (2021) |
+| **HRMXa/b** | Enhanced HRM accuracy | Burgess & Bleby (unpublished) |
+| **Tmax_Coh** | High flows | Cohen et al. (1981) |
+| **Tmax_Klu** | High flows (adjusted) | Kluitenberg & Ham (2004) |
+| **DMA** | Full range (auto-switching) | Forster (2020) |
+
+### Understanding the Output
+
+```{r}
+# Results structure
+colnames(vh_results)
+
+# Quality flags
+table(vh_results$quality_flag)
+
+# Summary by method
+aggregate(Vh_cm_hr ~ method, data = vh_results, FUN = function(x) {
+  c(mean = mean(x, na.rm = TRUE),
+    sd = sd(x, na.rm = TRUE),
+    n = sum(!is.na(x)))
+})
+```
+
+## 3. Visualise Results
+
+### Time Series Plot
+
+```{r fig.width=8, fig.height=5}
+# Plot velocity time series
+plot_vh_timeseries(
+  vh_results,
+  methods = c("HRM", "MHR", "HRMXa"),
+  sensor_position = "outer"
+)
+```
+
+### Heat Pulse Trace Plot
+
+Visualise individual heat pulse responses and see exactly where each method calculated its result:
+
+```{r fig.width=8, fig.height=6}
+# Plot trace for a single pulse
+plot_heat_pulse_trace(
+  heat_pulse_data,
+  vh_results,
+  pulse_id = 5,
+  show_methods = c("HRM", "HRMXa", "Tmax_Klu")
+)
+```
+
+The shaded regions show which time points each method used for its calculation. This is invaluable for:
+- Understanding why methods give different results
+- Diagnosing problematic pulses
+- Validating calculation windows
+
+### Method Comparison
+
+```{r fig.width=8, fig.height=6}
+# Compare two methods across all pulses
+plot_method_comparison(
+  vh_results,
+  method1 = "HRM",
+  method2 = "MHR",
+  sensor_position = "outer"
+)
+```
+
+# Configurations
+
+## Wood Properties
+
+Wood properties affect thermal calculations. Use built-in configurations or create custom ones:
+
+```{r eval=FALSE}
+# Use built-in configurations
+vh_results <- calc_heat_pulse_velocity(
+  heat_pulse_data,
+  wood_properties = "eucalyptus"  # or "pine", "generic_sw"
+)
+
+# Override specific properties
+vh_results <- calc_heat_pulse_velocity(
+  heat_pulse_data,
+  wood_properties = "eucalyptus",
+  wood_overrides = list(
+    thermal_diffusivity = 0.0028,  # cm²/s
+    dbh = 45.2,                    # cm
+    sapwood_depth = 3.5            # cm
+  )
+)
+```
+
+### Create Custom Wood Properties
+
+Create a YAML file with your species-specific properties:
+
+```yaml
+# wood_my_species.yaml
+species:
+  common_name: "My Species"
+  scientific_name: "Genus species"
+
+thermal_properties:
+  thermal_diffusivity:
+    value: 0.0025
+    units: "cm²/s"
+    source: "Measured from cores"
+
+  thermal_conductivity:
+    value: 0.0050
+    units: "W/(m·K)"
+
+  volumetric_heat_capacity:
+    value: 2.0
+    units: "MJ/(m³·K)"
+
+physical_properties:
+  wood_density:
+    value: 550
+    units: "kg/m³"
+
+  moisture_content:
+    value: 0.40
+    units: "fraction"
+
+tree_measurements:
+  dbh:
+    value: 35.0
+    units: "cm"
+
+  sapwood_depth:
+    value: 2.8
+    units: "cm"
+```
+
+Load your custom configuration:
+
+```{r eval=FALSE}
+vh_results <- calc_heat_pulse_velocity(
+  heat_pulse_data,
+  wood_properties = "path/to/wood_my_species.yaml"
+)
+```
+
+## Probe Configuration
+
+Probe configurations define hardware specifications:
+
+```{r eval=FALSE}
+# Use default symmetric probe (ICT SFM1x standard)
+vh_results <- calc_heat_pulse_velocity(
+  heat_pulse_data,
+  probe_config = "symmetrical"  # Default
+)
+
+# Use asymmetric probe (CHPM optimised)
+vh_results <- calc_heat_pulse_velocity(
+  heat_pulse_data,
+  probe_config = "asymmetrical"
+)
+```
+
+### Create Custom Probe Configuration
+
+For custom probe geometries:
+
+```yaml
+# probe_custom.yaml
+probe_type: "custom_probe"
+description: "Custom probe geometry"
+
+geometry:
+  probe_spacing:
+    value: 0.6
+    units: "cm"
+
+  probe_diameter:
+    value: 1.5
+    units: "mm"
+
+  thermistor_positions:
+    downstream_outer: 0.6   # cm from heater
+    downstream_inner: 0.3
+    upstream_outer: -0.6
+    upstream_inner: -0.3
+
+measurement:
+  heat_pulse_duration:
+    value: 2.0
+    units: "seconds"
+```
+
+# Advanced Topics
+
+## Custom Calculation Parameters
+
+Override default calculation windows:
+
+```{r eval=FALSE}
+vh_results <- calc_heat_pulse_velocity(
+  heat_pulse_data,
+  methods = "HRM",
+  parameters = list(
+    pre_pulse = 30,      # Baseline period (sec)
+    HRM_start = 70,      # HRM window start (sec)
+    HRM_end = 110,       # HRM window end (sec)
+    L = 0.5,             # HRMX lower bound (proportion of max temp)
+    H = 0.8              # HRMX upper bound
+  )
+)
+```
+
+## Filter by Quality
+
+```{r}
+# Keep only high-quality results
+good_results <- vh_results[vh_results$quality_flag == "OK", ]
+
+# View problematic results
+table(vh_results$quality_flag, vh_results$method)
+```
+
+## Export Results
+
+```{r eval=FALSE}
+# Export to CSV
+write.csv(vh_results, "sap_velocity_results.csv", row.names = FALSE)
+
+# Export with metadata
+saveRDS(list(
+  results = vh_results,
+  metadata = heat_pulse_data$metadata,
+  processing_date = Sys.time()
+), "sap_velocity_complete.rds")
+```
+
+# Workflow Summary
+
+```r
+# Complete workflow
+library(sapfluxr)
+
+# 1. Import
+heat_pulse_data <- read_heat_pulse_data("mydata.txt")
+
+# 2. Calculate
+vh_results <- calc_heat_pulse_velocity(
+  heat_pulse_data,
+  methods = c("HRM", "MHR", "DMA"),
+  wood_properties = "eucalyptus"
+)
+
+# 3. Visualise
+plot_vh_timeseries(vh_results)
+plot_heat_pulse_trace(heat_pulse_data, vh_results, pulse_id = 1)
+
+# 4. Export
+write.csv(vh_results, "results.csv", row.names = FALSE)
+```
+
+# Getting Help
+
+- **Package documentation**: `?calc_heat_pulse_velocity`
+- **Report issues**: https://github.com/neez777/sapfluxr/issues
+- **Method details**: See `knowledge_docs/` in package installation
+
+# References
+
+- Burgess, S. S. O., Adams, M. A., Turner, N. C., Beverly, C. R., Ong, C. K., Khan, A. A. H., & Bleby, T. M. (2001). An improved heat pulse method to measure low and reverse rates of sap flow in woody plants. *Tree Physiology*, 21(9), 589-598.
+
+- Cohen, Y., Fuchs, M., & Green, G. C. (1981). Improvement of the heat pulse method for determining sap flow in trees. *Plant, Cell & Environment*, 4(5), 391-397.
+
+- Forster, M. A. (2020). How significant is nocturnal sap flow? *Tree Physiology*, 40(8), 1179-1190.
+
+- Kluitenberg, G. J., & Ham, J. M. (2004). Improved theory for calculating sap flow with the heat pulse method. *Agricultural and Forest Meteorology*, 126(1-2), 169-173.
+
+- Lopez, J. G., Morán-López, T., Benito Garzón, M., & Oliveras Menor, I. (2021). An improved heat pulse method using a single probe for determining sap flow in temperate trees. *Tree Physiology*, 41(12), 2437-2449.
