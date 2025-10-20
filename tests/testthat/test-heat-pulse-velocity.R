@@ -169,11 +169,16 @@ test_that("calc_mhr produces reasonable results", {
   delatT_uo <- c(NA, NA, 0.2, 0.4, 0.8, 0.6, 0.4)
   delatT_ui <- c(NA, NA, 0.1, 0.3, 0.6, 0.5, 0.3)
 
-  result <- calc_mhr(delatT_do, delatT_di, delatT_uo, delatT_ui, 0.0025, 0.5)
+  result <- calc_mhr(delatT_do, delatT_di, delatT_uo, delatT_ui, 0.0025, 0.5, pre_pulse = 2)
 
   expect_type(result, "list")
   expect_true(all(c("outer", "inner") %in% names(result)))
   expect_true(all(is.numeric(c(result$outer, result$inner))))
+
+  # Check that timing information is provided
+  expect_true(all(c("calc_time_outer", "calc_time_inner",
+                    "window_start_outer", "window_end_outer",
+                    "window_start_inner", "window_end_inner") %in% names(result)))
 })
 
 test_that("calc_tmax_coh produces reasonable results", {
@@ -203,21 +208,6 @@ test_that("calc_tmax_klu produces reasonable results", {
   expect_true(all(is.numeric(c(result$outer, result$inner))))
 })
 
-test_that("calc_dma combines HRM and Tmax results correctly", {
-  hrm_results <- list(outer = 5, inner = 4)  # Below critical velocity
-  tmax_results <- list(outer = 25, inner = 30)  # Above critical velocity
-
-  result <- calc_dma(hrm_results, tmax_results, 0.0025, 0.5)
-
-  expect_type(result, "list")
-  expect_true(all(c("outer", "inner") %in% names(result)))
-
-  # Should use HRM values since they're below critical
-  Vh_HRM_crit <- 0.0025 / 0.5 * 3600  # = 18 cm/hr
-  expect_equal(result$outer, hrm_results$outer)  # 5 < 18, so use HRM
-  expect_equal(result$inner, hrm_results$inner)  # 4 < 18, so use HRM
-})
-
 test_that("add_quality_flags correctly identifies issues", {
   results <- data.frame(
     datetime = rep(Sys.time(), 5),
@@ -241,7 +231,7 @@ test_that("add_quality_flags correctly identifies issues", {
 test_that("all methods produce results", {
   heat_pulse_data <- create_mock_heat_pulse_data_for_vh()
 
-  all_methods <- c("HRM", "MHR", "HRMXa", "HRMXb", "Tmax_Coh", "Tmax_Klu", "DMA")
+  all_methods <- c("HRM", "MHR", "HRMXa", "HRMXb", "Tmax_Coh", "Tmax_Klu")
 
   # This might produce warnings due to mathematical constraints, but should not error
   result <- calc_heat_pulse_velocity(heat_pulse_data, methods = all_methods)
@@ -382,7 +372,7 @@ test_that("Integration test: complete workflow with realistic data", {
   heat_pulse_data$metadata$n_pulses <- 3
 
   # Process with multiple methods
-  result <- calc_heat_pulse_velocity(heat_pulse_data, methods = c("HRM", "MHR", "DMA"))
+  result <- calc_heat_pulse_velocity(heat_pulse_data, methods = c("HRM", "MHR", "Tmax_Klu"))
 
   expect_s3_class(result, "data.frame")
   expect_equal(length(unique(result$pulse_id)), 3)
@@ -436,4 +426,151 @@ test_that("Performance test: processing multiple pulses efficiently", {
   expect_lt(processing_time, 30)  # Should complete within 30 seconds
   expect_gt(nrow(result), 0)
   expect_equal(length(unique(result$pulse_id)), 5)
+})
+
+# sDMA Processing Tests
+test_that("HRM calculates Peclet numbers", {
+  heat_pulse_data <- create_mock_heat_pulse_data_for_vh()
+
+  # Calculate with HRM
+  result <- calc_heat_pulse_velocity(heat_pulse_data, methods = "HRM")
+
+  # Check that Peclet numbers are present for HRM
+  hrm_results <- result[result$method == "HRM", ]
+  expect_true("peclet_number" %in% names(hrm_results))
+  expect_true(all(!is.na(hrm_results$peclet_number)))
+  expect_true(all(is.numeric(hrm_results$peclet_number)))
+  expect_true(all(is.finite(hrm_results$peclet_number)))
+})
+
+test_that("apply_sdma_processing validates inputs correctly", {
+  heat_pulse_data <- create_mock_heat_pulse_data_for_vh()
+  vh_results <- calc_heat_pulse_velocity(heat_pulse_data, methods = c("HRM", "MHR"))
+
+  # Test missing HRM
+  vh_no_hrm <- vh_results[vh_results$method != "HRM", ]
+  expect_error(
+    apply_sdma_processing(vh_no_hrm, "MHR"),
+    "HRM results not found"
+  )
+
+  # Test missing Peclet numbers (simulate by removing them)
+  vh_no_peclet <- vh_results
+  vh_no_peclet$peclet_number <- NA
+  expect_error(
+    apply_sdma_processing(vh_no_peclet, "MHR"),
+    "do not contain Peclet numbers"
+  )
+
+  # Test missing secondary method
+  expect_error(
+    apply_sdma_processing(vh_results, "Tmax_Klu"),
+    "Secondary method.*not found"
+  )
+
+  # Test HRM as secondary method (should be rejected)
+  expect_error(
+    apply_sdma_processing(vh_results, "HRM"),
+    "Cannot use HRM as secondary method"
+  )
+})
+
+test_that("apply_sdma_processing creates correct sDMA results", {
+  heat_pulse_data <- create_mock_heat_pulse_data_for_vh()
+
+  # Calculate with HRM and MHR
+  vh_results <- calc_heat_pulse_velocity(heat_pulse_data, methods = c("HRM", "MHR"))
+  original_rows <- nrow(vh_results)
+
+  # Apply sDMA processing
+  vh_sdma <- apply_sdma_processing(vh_results, "MHR", show_progress = FALSE)
+
+  # Check structure
+  expect_s3_class(vh_sdma, "data.frame")
+  expect_gt(nrow(vh_sdma), original_rows)  # Should have more rows
+
+  # Check for sDMA method
+  expect_true("sDMA:MHR" %in% vh_sdma$method)
+
+  # Check that sDMA rows have selected_method populated
+  sdma_rows <- vh_sdma[vh_sdma$method == "sDMA:MHR", ]
+  expect_true(all(!is.na(sdma_rows$selected_method)))
+  expect_true(all(sdma_rows$selected_method %in% c("HRM", "MHR")))
+
+  # Check that sDMA rows have Peclet numbers
+  expect_true(all(!is.na(sdma_rows$peclet_number)))
+
+  # Verify switching logic: Pe < 1.0 should use HRM
+  hrm_selected <- sdma_rows[sdma_rows$selected_method == "HRM", ]
+  if (nrow(hrm_selected) > 0) {
+    expect_true(all(hrm_selected$peclet_number < 1.0))
+  }
+
+  # Verify switching logic: Pe >= 1.0 should use MHR
+  mhr_selected <- sdma_rows[sdma_rows$selected_method == "MHR", ]
+  if (nrow(mhr_selected) > 0) {
+    expect_true(all(mhr_selected$peclet_number >= 1.0))
+  }
+})
+
+test_that("apply_sdma_processing handles multiple secondary methods", {
+  heat_pulse_data <- create_mock_heat_pulse_data_for_vh()
+
+  # Calculate with HRM, MHR, and Tmax_Klu
+  vh_results <- calc_heat_pulse_velocity(
+    heat_pulse_data,
+    methods = c("HRM", "MHR", "Tmax_Klu")
+  )
+  original_rows <- nrow(vh_results)
+
+  # Apply sDMA processing with multiple secondary methods
+  vh_sdma <- apply_sdma_processing(
+    vh_results,
+    secondary_method = c("MHR", "Tmax_Klu"),
+    show_progress = FALSE
+  )
+
+  # Check structure
+  expect_s3_class(vh_sdma, "data.frame")
+  expect_gt(nrow(vh_sdma), original_rows)  # Should have more rows
+
+  # Check for both sDMA methods
+  expect_true("sDMA:MHR" %in% vh_sdma$method)
+  expect_true("sDMA:Tmax_Klu" %in% vh_sdma$method)
+
+  # Check that both sDMA methods have selected_method populated
+  sdma_mhr <- vh_sdma[vh_sdma$method == "sDMA:MHR", ]
+  sdma_tmax <- vh_sdma[vh_sdma$method == "sDMA:Tmax_Klu", ]
+
+  expect_true(all(!is.na(sdma_mhr$selected_method)))
+  expect_true(all(!is.na(sdma_tmax$selected_method)))
+
+  # Both should switch based on same Peclet threshold
+  expect_true(all(sdma_mhr$selected_method %in% c("HRM", "MHR")))
+  expect_true(all(sdma_tmax$selected_method %in% c("HRM", "Tmax_Klu")))
+})
+
+test_that("apply_sdma_processing preserves original results", {
+  heat_pulse_data <- create_mock_heat_pulse_data_for_vh()
+
+  # Calculate with HRM and MHR
+  vh_results <- calc_heat_pulse_velocity(heat_pulse_data, methods = c("HRM", "MHR"))
+
+  # Store original for comparison
+  original_hrm <- vh_results[vh_results$method == "HRM", ]
+  original_mhr <- vh_results[vh_results$method == "MHR", ]
+
+  # Apply sDMA processing
+  vh_sdma <- apply_sdma_processing(vh_results, "MHR", show_progress = FALSE)
+
+  # Check that original HRM and MHR results are still present and unchanged
+  new_hrm <- vh_sdma[vh_sdma$method == "HRM", ]
+  new_mhr <- vh_sdma[vh_sdma$method == "MHR", ]
+
+  expect_equal(nrow(new_hrm), nrow(original_hrm))
+  expect_equal(nrow(new_mhr), nrow(original_mhr))
+
+  # Check Vh values haven't changed
+  expect_equal(new_hrm$Vh_cm_hr, original_hrm$Vh_cm_hr)
+  expect_equal(new_mhr$Vh_cm_hr, original_mhr$Vh_cm_hr)
 })

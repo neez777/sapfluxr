@@ -15,14 +15,18 @@
 - **Multi-format Import**: Supports current JSON-like format and legacy formats from ICT SFM1x sensors
 - **Automatic Format Detection**: Intelligently detects data format without user specification
 - **Comprehensive Validation**: Built-in data quality checks and validation
-- **Multiple Calculation Methods**: Implements 7+ heat pulse velocity calculation methods:
-  - Heat Ratio Method (HRM)
+- **Multiple Calculation Methods**: Implements 6 core heat pulse velocity calculation methods:
+  - Heat Ratio Method (HRM) - includes Peclet number calculation
   - Maximum Heat Ratio (MHR)
   - Modified HRM variants (HRMXa, HRMXb)
   - T-max methods (Cohen, Kluitenberg)
-  - Dual Method Approach (DMA)
+- **Post-Processing Features**:
+  - Selectable DMA (sDMA) - Apply automatic method switching after calculation
+  - Choose your own secondary method for high-flow conditions
+  - Efficient: calculate base methods once, apply multiple sDMA variants
 - **Quality Control**: Automatic quality flagging and diagnostic tools
-- **Flexible Analysis**: Extensive utilities for filtering, summarizing, and exporting results
+- **Flexible Analysis**: Extensive utilities for filtering, summarising, and exporting results
+- **Advanced Visualisation**: Specialised plotting functions including dual-axis sDMA plots
 
 ## Installation
 
@@ -65,6 +69,8 @@ datetime,pulse_id,do,di,uo,ui,batt_volt,batt_current
 
 ## Heat Pulse Velocity Methods
 
+### Calculation Methods
+
 | Method | Description | Best For | Reference |
 |--------|-------------|----------|-----------|
 | **HRM** | Heat Ratio Method | Low flows, reverse flows | Burgess et al. (2001) |
@@ -72,7 +78,39 @@ datetime,pulse_id,do,di,uo,ui,batt_volt,batt_current
 | **HRMXa/b** | Modified HRM variants | Enhanced HRM accuracy | Burgess & Bleby (unpublished) |
 | **Tmax_Coh** | T-max Cohen method | High flows | Cohen et al. (1981) |
 | **Tmax_Klu** | T-max Kluitenberg method | High flows (adjusted) | Kluitenberg & Ham (2004) |
-| **DMA** | Dual Method Approach | Full range (automatic switching) | Forster (2020) |
+
+### Post-Processing: Dual Method Approach
+
+DMA (Dual Method Approach) is now applied as a post-processing step using `apply_sdma_processing()`, allowing flexible method selection after calculation.
+
+### Selectable DMA (sDMA)
+
+**New efficient workflow:** Calculate base methods once, then apply sDMA as post-processing.
+
+```r
+# Step 1: Calculate base methods (each calculated once)
+vh <- calc_heat_pulse_velocity(data, methods = c("HRM", "MHR", "Tmax_Klu"))
+
+# Step 2: Apply sDMA switching with your chosen secondary method
+vh_sdma <- apply_sdma_processing(vh, secondary_method = "MHR")
+
+# Now have: HRM, MHR, Tmax_Klu, sDMA:MHR (all in one tibble)
+
+# Or test multiple secondary methods at once
+vh_multi <- apply_sdma_processing(vh, secondary_method = c("MHR", "Tmax_Klu"))
+
+# Visualise with Peclet number
+plot_sdma_timeseries(vh_sdma, sdma_method = "sDMA:MHR")
+```
+
+**Available secondary methods**: MHR, Tmax_Coh, Tmax_Klu, HRMXa, HRMXb
+
+**Key features**:
+- Automatic switching at Pe = 1.0 threshold
+- Returns Peclet number for each measurement
+- Shows which method was actually used via `selected_method` column
+- Can be applied after corrections: `apply_hpv_corrections() %>% apply_sdma_processing()`
+- Dedicated dual-axis plotting function
 
 ## License
 

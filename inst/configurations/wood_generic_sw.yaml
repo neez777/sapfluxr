@@ -17,7 +17,7 @@ wood_property:
   basic_density: 350          # kg/m³, oven-dry mass / green volume
   moisture_content: 30        # %, moisture content on dry weight basis
   species: unknown            # species identification
-  wood_type: softwood         # softwood/hardwood classification
+  wood_type: 'softwood'       # softwood/hardwood classification
   temperature: 20             # °C, wood temperature during measurement
   comments: Typical values for temperate softwood species
 

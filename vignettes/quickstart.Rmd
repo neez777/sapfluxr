@@ -148,7 +148,7 @@ vh_results <- calc_heat_pulse_velocity(
 head(vh_results)
 ```
 
-### Available Methods
+### Available Calculation Methods
 
 | Method | Best For | Reference |
 |--------|----------|-----------|
@@ -157,7 +157,8 @@ head(vh_results)
 | **HRMXa/b** | Enhanced HRM accuracy | Burgess & Bleby (unpublished) |
 | **Tmax_Coh** | High flows | Cohen et al. (1981) |
 | **Tmax_Klu** | High flows (adjusted) | Kluitenberg & Ham (2004) |
-| **DMA** | Full range (auto-switching) | Forster (2020) |
+
+**Note:** DMA (Dual Method Approach) is applied as post-processing using `apply_sdma_processing()` - see section below.
 
 ### Understanding the Output
 
@@ -203,10 +204,18 @@ plot_heat_pulse_trace(
 )
 ```
 
-The shaded regions show which time points each method used for its calculation. This is invaluable for:
+The shaded regions and markers show which time points each method used for its calculation:
+- **HRM**: Grey shaded window showing averaging period
+- **HRMXa**: Blue shaded window showing averaging period
+- **HRMXb**: Green shaded window showing averaging period
+- **MHR**: Orange shaded window showing time span from upstream to downstream peak, with orange points and lines marking both upstream and downstream peaks
+- **Tmax methods**: Dark green vertical line and point marking time to maximum temperature
+
+This is invaluable for:
 - Understanding why methods give different results
 - Diagnosing problematic pulses
 - Validating calculation windows
+- Visualizing the temporal dynamics of heat pulse transport
 
 ### Method Comparison
 
@@ -218,6 +227,144 @@ plot_method_comparison(
   method2 = "MHR",
   sensor_position = "outer"
 )
+```
+
+## Selectable Dual Method Approach (sDMA)
+
+The **Selectable DMA** (sDMA) is an advanced post-processing method that allows you to choose which high-flow method to pair with HRM. This provides an automatic method selection based on flow conditions.
+
+### How sDMA Works
+
+sDMA automatically switches between two methods based on the **Peclet number (Pe)**:
+
+- **Pe < 1.0**: Uses HRM (optimal for low flows)
+- **Pe ≥ 1.0**: Uses your chosen secondary method (optimal for high flows)
+
+The Peclet number is calculated from the HRM velocity: `Pe = (Vh_HRM × probe_spacing) / (diffusivity × 3600)`
+
+### Why Post-Processing?
+
+**New Workflow (Efficient):**
+```{r eval=FALSE}
+# Step 1: Calculate base methods (each calculated once)
+vh <- calc_heat_pulse_velocity(
+  heat_pulse_data,
+  methods = c("HRM", "MHR", "Tmax_Klu")
+)
+
+# Step 2: Apply sDMA switching as post-processing
+vh_sdma <- apply_sdma_processing(vh, secondary_method = "MHR")
+
+# Now have: HRM, MHR, Tmax_Klu, sDMA:MHR (all in one tibble)
+```
+
+**Benefits:**
+- Each method calculated exactly once (no redundancy)
+- Can apply sDMA after corrections: `apply_hpv_corrections() %>% apply_sdma_processing()`
+- Can test multiple secondary methods without recalculating HRM
+- More explicit about what's happening
+
+### Using sDMA
+
+```{r}
+# Step 1: Calculate base methods including HRM (required for Peclet numbers)
+vh <- calc_heat_pulse_velocity(
+  heat_pulse_data,
+  methods = c("HRM", "MHR"),
+  show_progress = FALSE
+)
+
+# Step 2: Apply sDMA processing with MHR as secondary method
+vh_sdma <- apply_sdma_processing(
+  vh,
+  secondary_method = "MHR",
+  show_progress = FALSE
+)
+
+# View sDMA-specific columns
+head(vh_sdma[vh_sdma$method == "sDMA:MHR",
+             c("datetime", "method", "Vh_cm_hr",
+               "peclet_number", "selected_method")])
+```
+
+The `selected_method` column shows which method was actually used for each measurement (HRM or MHR).
+
+### Compare Multiple sDMA Variants
+
+You can test multiple secondary methods to find which works best for your data:
+
+```{r}
+# Calculate base methods once
+vh <- calc_heat_pulse_velocity(
+  heat_pulse_data,
+  methods = c("HRM", "MHR", "Tmax_Klu"),
+  show_progress = FALSE
+)
+
+# Apply sDMA with multiple secondary methods at once
+vh_multi_sdma <- apply_sdma_processing(
+  vh,
+  secondary_method = c("MHR", "Tmax_Klu"),
+  show_progress = FALSE
+)
+
+# Now have: HRM, MHR, Tmax_Klu, sDMA:MHR, sDMA:Tmax_Klu
+unique(vh_multi_sdma$method)
+
+# Summary by method
+aggregate(Vh_cm_hr ~ method, data = vh_multi_sdma, FUN = mean, na.rm = TRUE)
+```
+
+### Visualising sDMA Results
+
+The dedicated sDMA plotting function shows:
+
+- Velocity points colored by which method was selected (HRM vs secondary)
+- Peclet number on a secondary y-axis (grey line)
+- The Pe = 1.0 switching threshold (dashed horizontal line)
+- Legend includes both selected methods and the Peclet number line
+
+```{r fig.width=8, fig.height=6, eval=FALSE}
+# Plot sDMA time series with Peclet number
+plot_sdma_timeseries(
+  vh_sdma,
+  sdma_method = "sDMA:MHR",
+  sensor_position = "outer"
+)
+
+# Plot without Peclet number
+plot_sdma_timeseries(
+  vh_sdma,
+  sdma_method = "sDMA:MHR",
+  sensor_position = "outer",
+  show_peclet = FALSE
+)
+```
+
+The plot legend shows which method was used for each data point (and the Peclet number when `show_peclet = TRUE`), and the summary statistics tell you what percentage of measurements used HRM vs the secondary method.
+
+### When to Use sDMA
+
+Use sDMA when:
+
+- **You have variable flow conditions**: Data spans both low and high flow regimes
+- **You want method transparency**: sDMA shows exactly which method was used via `selected_method` column
+- **Tmax methods fail frequently**: Try `sDMA:MHR` as an alternative to standard DMA (which uses Tmax_Klu)
+- **You want to analyse flow regimes**: The `peclet_number` column reveals flow conditions over time
+
+### Advanced: sDMA After Corrections
+
+The post-processing approach allows you to apply sDMA after making probe corrections:
+
+```{r eval=FALSE}
+# Calculate base methods
+vh <- calc_heat_pulse_velocity(heat_pulse_data, methods = c("HRM", "MHR"))
+
+# Apply corrections (wound diameter, zero-flow, etc.)
+vh_corrected <- apply_hpv_corrections(vh, corrections)
+
+# Then apply sDMA to corrected results
+vh_sdma <- apply_sdma_processing(vh_corrected, secondary_method = "MHR")
 ```
 
 # Configurations
@@ -398,19 +545,55 @@ library(sapfluxr)
 # 1. Import
 heat_pulse_data <- read_heat_pulse_data("mydata.txt")
 
-# 2. Calculate
+# 2. Calculate with multiple methods including sDMA
 vh_results <- calc_heat_pulse_velocity(
   heat_pulse_data,
-  methods = c("HRM", "MHR", "DMA"),
+  methods = c("HRM", "MHR", "DMA", "sDMA:MHR"),
   wood_properties = "eucalyptus"
 )
 
 # 3. Visualise
-plot_vh_timeseries(vh_results)
+plot_vh_timeseries(vh_results, methods = c("HRM", "MHR", "DMA"))
 plot_heat_pulse_trace(heat_pulse_data, vh_results, pulse_id = 1)
+
+# 3b. Visualise sDMA specifically
+plot_sdma_timeseries(vh_results, sdma_method = "sDMA:MHR")
 
 # 4. Export
 write.csv(vh_results, "results.csv", row.names = FALSE)
+```
+
+## Common Workflows
+
+### Standard Analysis
+```r
+# Use proven methods for routine analysis
+vh_results <- calc_heat_pulse_velocity(
+  heat_pulse_data,
+  methods = c("HRM", "MHR", "DMA")
+)
+```
+
+### Method Comparison
+```r
+# Compare multiple methods to find the best for your data
+vh_results <- calc_heat_pulse_velocity(
+  heat_pulse_data,
+  methods = c("HRM", "MHR", "HRMXa", "Tmax_Klu", "DMA")
+)
+```
+
+### sDMA Optimisation
+```r
+# If standard DMA has issues, try different secondary methods
+vh_results <- calc_heat_pulse_velocity(
+  heat_pulse_data,
+  methods = c("DMA", "sDMA:MHR", "sDMA:Tmax_Klu", "sDMA:HRMXa")
+)
+
+# Visualise each variant
+plot_sdma_timeseries(vh_results, sdma_method = "sDMA:MHR")
+plot_sdma_timeseries(vh_results, sdma_method = "sDMA:HRMXa")
 ```
 
 # Getting Help

@@ -9,7 +9,19 @@
 #' @param heat_pulse_data A heat_pulse_data object from read_heat_pulse_data()
 #' @param pulse_ids Vector of pulse IDs to process. If NULL, processes all pulses.
 #' @param methods Character vector of methods to use. Options: "HRM", "MHR", "HRMXa", "HRMXb",
-#'   "Tmax_Coh", "Tmax_Klu", "DMA". Default: c("HRM", "MHR", "DMA")
+#'   "Tmax_Coh", "Tmax_Klu".
+#'
+#'   Note: HRM results include Peclet numbers which can be used for method switching.
+#'   Use apply_sdma_processing() to apply Dual Method Approach after calculation.
+#'
+#'   Examples:
+#'   \itemize{
+#'     \item \code{methods = c("HRM", "MHR")} - Basic comparison
+#'     \item \code{methods = c("HRM", "MHR", "Tmax_Klu")} - Multiple methods for post-hoc DMA
+#'     \item \code{methods = c("HRM", "HRMXa", "HRMXb")} - HRM variants
+#'   }
+#'
+#'   Default: c("HRM", "MHR")
 #' @param probe_config Probe configuration. Can be: ProbeConfiguration object, config name (e.g., "symmetrical"),
 #'   path to custom YAML, or NULL (uses default symmetric config)
 #' @param wood_properties Wood properties. Can be: WoodProperties object, config name (e.g., "eucalyptus"),
@@ -41,28 +53,38 @@
 #' @return A tibble containing calculated heat pulse velocities with columns:
 #'   \item{datetime}{Timestamp of measurement}
 #'   \item{pulse_id}{Pulse identification number}
-#'   \item{method}{Calculation method used}
+#'   \item{method}{Calculation method used (e.g., "HRM", "MHR")}
 #'   \item{sensor_position}{Inner or outer sensor position}
 #'   \item{Vh_cm_hr}{Heat pulse velocity in cm/hr}
-#'   \item{calc_window_start_sec}{Start of calculation window (seconds after pulse), for windowed methods like HRM}
-#'   \item{calc_window_end_sec}{End of calculation window (seconds after pulse), for windowed methods like HRM}
-#'   \item{calc_time_sec}{Specific time of calculation (seconds after pulse), for point methods like Tmax}
+#'   \item{calc_window_start_sec}{Start of calculation window (seconds after pulse). For HRM and HRMX: averaging window start. For MHR: time when upstream sensor reaches maximum. NA for Tmax methods.}
+#'   \item{calc_window_end_sec}{End of calculation window (seconds after pulse). For HRM and HRMX: averaging window end. For MHR: time when downstream sensor reaches maximum. NA for Tmax methods.}
+#'   \item{calc_time_sec}{Specific time of calculation (seconds after pulse). For Tmax methods: time to peak. For MHR: time when downstream sensor reaches maximum. NA for HRM/HRMX.}
+#'   \item{peclet_number}{Peclet number (dimensionless) for HRM results. Pe = (Vh × x) / (D × 3600). Used for method switching in apply_sdma_processing(). NA for non-HRM methods.}
+#'   \item{selected_method}{Reserved for future use (currently NA for all methods)}
 #'   \item{quality_flag}{Data quality indicator}
 #'
 #' @examples
 #' \dontrun{
-#' # Load data and calculate velocities with progress bars
+#' # Load data and calculate velocities with default methods
 #' heat_pulse_data <- read_heat_pulse_data("data.txt")
-#' progressr::with_progress({
-#'   results <- calc_heat_pulse_velocity(heat_pulse_data)
-#' })
+#' results <- calc_heat_pulse_velocity(heat_pulse_data)
 #'
 #' # Use specific methods and parameters
 #' params <- list(diffusivity = 0.003, probe_spacing = 0.6)
-#' progressr::with_progress({
-#'   results <- calc_heat_pulse_velocity(heat_pulse_data, methods = c("HRM", "MHR"),
-#'                                      parameters = params)
-#' })
+#' results <- calc_heat_pulse_velocity(heat_pulse_data,
+#'                                     methods = c("HRM", "MHR"),
+#'                                     parameters = params)
+#'
+#' # Calculate methods for post-hoc DMA processing
+#' results <- calc_heat_pulse_velocity(heat_pulse_data,
+#'                                     methods = c("HRM", "MHR", "Tmax_Klu"))
+#'
+#' # Apply DMA switching after calculation
+#' results_sdma <- apply_sdma_processing(results, secondary_method = "MHR")
+#'
+#' # Compare multiple DMA variants
+#' results_sdma1 <- apply_sdma_processing(results, secondary_method = "MHR")
+#' results_sdma2 <- apply_sdma_processing(results, secondary_method = "Tmax_Klu")
 #' }
 #'
 #' @references
@@ -76,7 +98,7 @@
 #' @export
 calc_heat_pulse_velocity <- function(heat_pulse_data,
                                      pulse_ids = NULL,
-                                     methods = c("HRM", "MHR", "DMA"),
+                                     methods = c("HRM", "MHR"),
                                      probe_config = NULL,
                                      wood_properties = NULL,
                                      parameters = NULL,
@@ -342,7 +364,7 @@ calc_vh_single_pulse <- function(pulse_data, pulse_id, parameters, methods, plot
 
   # Maximum Heat Ratio (MHR)
   if ("MHR" %in% methods) {
-    mhr_results <- calc_mhr(deltaT_do, deltaT_di, deltaT_uo, deltaT_ui, diffusivity, probe_spacing)
+    mhr_results <- calc_mhr(deltaT_do, deltaT_di, deltaT_uo, deltaT_ui, diffusivity, probe_spacing, pre_pulse)
     method_results[["MHR"]] <- mhr_results
   }
 
@@ -365,28 +387,16 @@ calc_vh_single_pulse <- function(pulse_data, pulse_id, parameters, methods, plot
     method_results[["Tmax_Klu"]] <- tmax_klu_results
   }
 
-  # Dual Method Approach (DMA)
-  if ("DMA" %in% methods) {
-    # Requires both HRM and Tmax_Klu
-    if (!"HRM" %in% method_results) {
-      hrm_results <- calc_hrm(dTratio_douo, dTratio_diui, HRM_period, diffusivity, probe_spacing, tp)
-      method_results[["HRM"]] <- hrm_results
-    }
-    if (!"Tmax_Klu" %in% method_results) {
-      tmax_klu_results <- calc_tmax_klu(deltaT_do, deltaT_di, diffusivity, probe_spacing, tp_1, pre_pulse)
-      method_results[["Tmax_Klu"]] <- tmax_klu_results
-    }
-
-    dma_results <- calc_dma(method_results[["HRM"]], method_results[["Tmax_Klu"]], diffusivity, probe_spacing)
-    method_results[["DMA"]] <- dma_results
-  }
-
   # Create output data frame
   datetime_pulse <- pulse_data$datetime[1]
   result_rows <- list()
 
   for (method_name in names(method_results)) {
     method_result <- method_results[[method_name]]
+
+    # Check if this is an sDMA method (has Peclet number data)
+    has_peclet <- !is.null(method_result$peclet_outer)
+
     result_rows[[paste0(method_name, "_outer")]] <- data.frame(
       datetime = datetime_pulse,
       pulse_id = pulse_id,
@@ -396,6 +406,8 @@ calc_vh_single_pulse <- function(pulse_data, pulse_id, parameters, methods, plot
       calc_window_start_sec = method_result$window_start_outer,
       calc_window_end_sec = method_result$window_end_outer,
       calc_time_sec = method_result$calc_time_outer,
+      peclet_number = if (has_peclet) method_result$peclet_outer else NA_real_,
+      selected_method = NA_character_,  # Only populated by apply_sdma_processing()
       stringsAsFactors = FALSE
     )
     result_rows[[paste0(method_name, "_inner")]] <- data.frame(
@@ -407,6 +419,8 @@ calc_vh_single_pulse <- function(pulse_data, pulse_id, parameters, methods, plot
       calc_window_start_sec = method_result$window_start_inner,
       calc_window_end_sec = method_result$window_end_inner,
       calc_time_sec = method_result$calc_time_inner,
+      peclet_number = if (has_peclet) method_result$peclet_inner else NA_real_,
+      selected_method = NA_character_,  # Only populated by apply_sdma_processing()
       stringsAsFactors = FALSE
     )
   }
@@ -493,9 +507,27 @@ calc_hrm <- function(dTratio_douo, dTratio_diui, HRM_period, diffusivity, probe_
     Vhi_HRM <- diffusivity / probe_spacing * log(dTratio_HRM_diui_mean) * 3600
   }
 
+  # Calculate Peclet number (dimensionless)
+  # Pe = (Vh × x) / (D × 3600)
+  # where Vh is in cm/hr, x in cm, D in cm²/s
+  # The 3600 converts D from cm²/s to cm²/hr to match Vh units
+  Pe_outer <- if (!is.na(Vho_HRM) && is.finite(Vho_HRM)) {
+    (Vho_HRM * probe_spacing) / (diffusivity * 3600)
+  } else {
+    NA_real_
+  }
+
+  Pe_inner <- if (!is.na(Vhi_HRM) && is.finite(Vhi_HRM)) {
+    (Vhi_HRM * probe_spacing) / (diffusivity * 3600)
+  } else {
+    NA_real_
+  }
+
   return(list(
     outer = Vho_HRM,
     inner = Vhi_HRM,
+    peclet_outer = Pe_outer,
+    peclet_inner = Pe_inner,
     window_start_outer = window_start,
     window_end_outer = window_end,
     window_start_inner = window_start,
@@ -507,7 +539,7 @@ calc_hrm <- function(dTratio_douo, dTratio_diui, HRM_period, diffusivity, probe_
 
 #' Calculate MHR velocities
 #' @keywords internal
-calc_mhr <- function(deltaT_do, deltaT_di, deltaT_uo, deltaT_ui, diffusivity, probe_spacing) {
+calc_mhr <- function(deltaT_do, deltaT_di, deltaT_uo, deltaT_ui, diffusivity, probe_spacing, pre_pulse) {
 
   # Input validation
   if (all(is.na(deltaT_do)) || all(is.na(deltaT_di)) ||
@@ -531,9 +563,17 @@ calc_mhr <- function(deltaT_do, deltaT_di, deltaT_uo, deltaT_ui, diffusivity, pr
   dTuo_max <- max(deltaT_uo, na.rm = TRUE)
   dTui_max <- max(deltaT_ui, na.rm = TRUE)
 
-  # Get time to maximum
-  tmo <- which.max(deltaT_do)
-  tmi <- which.max(deltaT_di)
+  # Get time indices to maximum for all 4 sensors
+  idx_do <- which.max(deltaT_do)  # Downstream outer
+  idx_di <- which.max(deltaT_di)  # Downstream inner
+  idx_uo <- which.max(deltaT_uo)  # Upstream outer
+  idx_ui <- which.max(deltaT_ui)  # Upstream inner
+
+  # Convert indices to seconds after pulse
+  time_do <- idx_do - pre_pulse
+  time_di <- idx_di - pre_pulse
+  time_uo <- idx_uo - pre_pulse
+  time_ui <- idx_ui - pre_pulse
 
   # Check for valid maximums
   if (any(c(dTdo_max, dTdi_max, dTuo_max, dTui_max) <= 0) ||
@@ -569,15 +609,24 @@ calc_mhr <- function(deltaT_do, deltaT_di, deltaT_uo, deltaT_ui, diffusivity, pr
     Vhi_MHR <- (diffusivity / probe_spacing) * log(dTdi_max_dTui_max) * 3600
   }
 
+  # Calculate window bounds (min and max of upstream/downstream peak times)
+  # For outer sensors
+  window_start_outer <- min(time_do, time_uo)
+  window_end_outer <- max(time_do, time_uo)
+
+  # For inner sensors
+  window_start_inner <- min(time_di, time_ui)
+  window_end_inner <- max(time_di, time_ui)
+
   return(list(
     outer = Vho_MHR,
     inner = Vhi_MHR,
-    window_start_outer = NA_real_,
-    window_end_outer = NA_real_,
-    window_start_inner = NA_real_,
-    window_end_inner = NA_real_,
-    calc_time_outer = tmo,
-    calc_time_inner = tmi
+    window_start_outer = window_start_outer,
+    window_end_outer = window_end_outer,
+    window_start_inner = window_start_inner,
+    window_end_inner = window_end_inner,
+    calc_time_outer = NA_real_,  # Downstream outer peak time
+    calc_time_inner = NA_real_   # Downstream inner peak time
   ))
 }
 
@@ -892,6 +941,199 @@ calc_tmax_klu <- function(deltaT_do, deltaT_di, diffusivity, probe_spacing, tp_1
   ))
 }
 
+#' Apply Selectable Dual Method Approach (sDMA) Processing
+#'
+#' Applies method switching based on Peclet number to create sDMA results.
+#' Switches between HRM (Pe < 1.0) and a user-specified secondary method (Pe >= 1.0).
+#' HRM results must already be calculated with Peclet numbers.
+#'
+#' @param vh_results Results tibble from calc_heat_pulse_velocity() containing HRM
+#'   and at least one secondary method
+#' @param secondary_method Character string or vector specifying secondary method(s).
+#'   Options: "MHR", "Tmax_Coh", "Tmax_Klu", "HRMXa", "HRMXb".
+#'   Can provide multiple methods to create multiple sDMA variants.
+#' @param show_progress Logical indicating whether to show progress bar. Default: TRUE
+#'
+#' @details
+#' This function requires:
+#' \itemize{
+#'   \item HRM results with Peclet numbers (from calc_heat_pulse_velocity with methods including "HRM")
+#'   \item At least one secondary method already calculated
+#' }
+#'
+#' The switching logic is:
+#' \itemize{
+#'   \item Pe < 1.0: Use HRM (low flows, HRM is accurate)
+#'   \item Pe >= 1.0: Use secondary method (high flows, secondary method more appropriate)
+#' }
+#'
+#' @return A vh_results tibble with additional rows for sDMA method(s).
+#'   Each sDMA method is labeled as "sDMA:SecondaryMethod" (e.g., "sDMA:MHR").
+#'   The selected_method column shows which method was actually used for each measurement.
+#'
+#' @examples
+#' \dontrun{
+#' # Calculate base methods
+#' heat_pulse_data <- read_heat_pulse_data("data.txt")
+#' vh <- calc_heat_pulse_velocity(heat_pulse_data,
+#'                                 methods = c("HRM", "MHR", "Tmax_Klu"))
+#'
+#' # Apply sDMA with MHR as secondary
+#' vh_sdma <- apply_sdma_processing(vh, secondary_method = "MHR")
+#'
+#' # Create multiple sDMA variants
+#' vh_sdma <- apply_sdma_processing(vh, secondary_method = c("MHR", "Tmax_Klu"))
+#'
+#' # Plot sDMA results
+#' plot_sdma_timeseries(vh_sdma, sdma_method = "sDMA:MHR")
+#' }
+#'
+#' @export
+apply_sdma_processing <- function(vh_results,
+                                  secondary_method,
+                                  show_progress = TRUE) {
+
+  # Validate input
+  if (!inherits(vh_results, "vh_results") && !inherits(vh_results, "data.frame")) {
+    stop("vh_results must be a results tibble from calc_heat_pulse_velocity()")
+  }
+
+  # Check that HRM exists
+  if (!"HRM" %in% unique(vh_results$method)) {
+    stop("HRM results not found in vh_results.\n",
+         "  sDMA requires HRM to be calculated first.\n",
+         "  Use: calc_heat_pulse_velocity(..., methods = c(\"HRM\", ...)")
+  }
+
+  # Check that HRM has Peclet numbers
+  hrm_data <- vh_results[vh_results$method == "HRM", ]
+  if (all(is.na(hrm_data$peclet_number))) {
+    stop("HRM results do not contain Peclet numbers.\n",
+         "  This may be from an older version. Please recalculate HRM results.")
+  }
+
+  # Validate secondary methods exist
+  available_methods <- unique(vh_results$method)
+  valid_secondary <- c("MHR", "Tmax_Coh", "Tmax_Klu", "HRMXa", "HRMXb")
+
+  for (sec_method in secondary_method) {
+    if (sec_method == "HRM") {
+      stop("Cannot use HRM as secondary method in sDMA.\n",
+           "  HRM is always the primary method (used when Pe < 1.0).")
+    }
+
+    if (!sec_method %in% valid_secondary) {
+      stop(sprintf("Invalid secondary method: '%s'\n  Valid options: %s",
+                   sec_method, paste(valid_secondary, collapse = ", ")))
+    }
+
+    if (!sec_method %in% available_methods) {
+      stop(sprintf("Secondary method '%s' not found in vh_results.\n", sec_method),
+           "  Available methods: ", paste(available_methods, collapse = ", "), "\n",
+           "  Calculate it first with calc_heat_pulse_velocity()")
+    }
+  }
+
+  # Get unique pulse IDs
+  pulse_ids <- unique(vh_results$pulse_id)
+  n_pulses <- length(pulse_ids)
+  n_methods <- length(secondary_method)
+
+  # Progress reporting setup
+  if (show_progress) {
+    p <- progressr::progressor(steps = n_pulses * n_methods)
+  }
+
+  # Process each secondary method
+  all_sdma_results <- list()
+
+  for (sec_method in secondary_method) {
+    sdma_method_name <- paste0("sDMA:", sec_method)
+
+    # Process each pulse
+    pulse_results <- list()
+
+    for (i in seq_along(pulse_ids)) {
+      pulse_id <- pulse_ids[i]
+
+      # Get HRM and secondary results for this pulse
+      hrm_outer <- vh_results[vh_results$pulse_id == pulse_id &
+                               vh_results$method == "HRM" &
+                               vh_results$sensor_position == "outer", ]
+      hrm_inner <- vh_results[vh_results$pulse_id == pulse_id &
+                               vh_results$method == "HRM" &
+                               vh_results$sensor_position == "inner", ]
+
+      sec_outer <- vh_results[vh_results$pulse_id == pulse_id &
+                               vh_results$method == sec_method &
+                               vh_results$sensor_position == "outer", ]
+      sec_inner <- vh_results[vh_results$pulse_id == pulse_id &
+                               vh_results$method == sec_method &
+                               vh_results$sensor_position == "inner", ]
+
+      # Apply switching logic for outer sensor
+      if (nrow(hrm_outer) > 0 && nrow(sec_outer) > 0) {
+        pe_outer <- hrm_outer$peclet_number[1]
+        use_hrm_outer <- !is.na(pe_outer) && pe_outer < 1.0
+
+        pulse_results[[paste0(pulse_id, "_outer")]] <- data.frame(
+          datetime = hrm_outer$datetime[1],
+          pulse_id = pulse_id,
+          method = sdma_method_name,
+          sensor_position = "outer",
+          Vh_cm_hr = if (use_hrm_outer) hrm_outer$Vh_cm_hr[1] else sec_outer$Vh_cm_hr[1],
+          calc_window_start_sec = if (use_hrm_outer) hrm_outer$calc_window_start_sec[1] else sec_outer$calc_window_start_sec[1],
+          calc_window_end_sec = if (use_hrm_outer) hrm_outer$calc_window_end_sec[1] else sec_outer$calc_window_end_sec[1],
+          calc_time_sec = if (use_hrm_outer) hrm_outer$calc_time_sec[1] else sec_outer$calc_time_sec[1],
+          peclet_number = pe_outer,
+          selected_method = if (use_hrm_outer) "HRM" else sec_method,
+          stringsAsFactors = FALSE
+        )
+      }
+
+      # Apply switching logic for inner sensor
+      if (nrow(hrm_inner) > 0 && nrow(sec_inner) > 0) {
+        pe_inner <- hrm_inner$peclet_number[1]
+        use_hrm_inner <- !is.na(pe_inner) && pe_inner < 1.0
+
+        pulse_results[[paste0(pulse_id, "_inner")]] <- data.frame(
+          datetime = hrm_inner$datetime[1],
+          pulse_id = pulse_id,
+          method = sdma_method_name,
+          sensor_position = "inner",
+          Vh_cm_hr = if (use_hrm_inner) hrm_inner$Vh_cm_hr[1] else sec_inner$Vh_cm_hr[1],
+          calc_window_start_sec = if (use_hrm_inner) hrm_inner$calc_window_start_sec[1] else sec_inner$calc_window_start_sec[1],
+          calc_window_end_sec = if (use_hrm_inner) hrm_inner$calc_window_end_sec[1] else sec_inner$calc_window_end_sec[1],
+          calc_time_sec = if (use_hrm_inner) hrm_inner$calc_time_sec[1] else sec_inner$calc_time_sec[1],
+          peclet_number = pe_inner,
+          selected_method = if (use_hrm_inner) "HRM" else sec_method,
+          stringsAsFactors = FALSE
+        )
+      }
+
+      if (show_progress) p()
+    }
+
+    # Combine all pulses for this sDMA method
+    sdma_df <- dplyr::bind_rows(pulse_results)
+    all_sdma_results[[sdma_method_name]] <- sdma_df
+  }
+
+  # Combine all sDMA results
+  sdma_combined <- dplyr::bind_rows(all_sdma_results)
+
+  # Add quality flags to sDMA results
+  sdma_combined <- add_quality_flags(sdma_combined)
+
+  # Combine with original results
+  result <- dplyr::bind_rows(vh_results, sdma_combined)
+
+  # Preserve class
+  class(result) <- class(vh_results)
+
+  return(result)
+}
+
 #' Calculate DMA velocities
 #' @keywords internal
 calc_dma <- function(hrm_results, tmax_klu_results, diffusivity, probe_spacing) {
@@ -931,6 +1173,117 @@ calc_dma <- function(hrm_results, tmax_klu_results, diffusivity, probe_spacing) 
     window_end_inner = if (use_hrm_inner) hrm_results$window_end_inner else tmax_klu_results$window_end_inner,
     calc_time_outer = if (use_hrm_outer) hrm_results$calc_time_outer else tmax_klu_results$calc_time_outer,
     calc_time_inner = if (use_hrm_inner) hrm_results$calc_time_inner else tmax_klu_results$calc_time_inner
+  ))
+}
+
+#' Parse sDMA Method String
+#'
+#' Parses a Selectable DMA method string (e.g., "sDMA:MHR") to extract the secondary method.
+#' Validates that the secondary method is valid and not HRM.
+#'
+#' @param method_string Character string of method name
+#' @return List with is_sdma (logical) and secondary_method (character or NULL)
+#' @keywords internal
+parse_sdma_method <- function(method_string) {
+  # Check if this is an sDMA method
+  if (!grepl("^sDMA:", method_string)) {
+    return(list(is_sdma = FALSE, secondary_method = NULL))
+  }
+
+  # Extract secondary method
+  secondary <- sub("^sDMA:", "", method_string)
+
+  # Validate: cannot use HRM as secondary
+  if (secondary == "HRM") {
+    stop("sDMA cannot use HRM as secondary method. HRM is always the primary method in sDMA.\n",
+         "  Use one of: MHR, Tmax_Coh, Tmax_Klu, HRMXa, HRMXb")
+  }
+
+  # Validate: must be a recognised method
+  valid_secondary <- c("MHR", "Tmax_Coh", "Tmax_Klu", "HRMXa", "HRMXb")
+
+  if (!secondary %in% valid_secondary) {
+    stop(sprintf("Invalid sDMA secondary method: '%s'\n  Valid options: %s",
+                 secondary, paste(valid_secondary, collapse = ", ")))
+  }
+
+  return(list(is_sdma = TRUE, secondary_method = secondary))
+}
+
+#' Calculate Selectable DMA velocities
+#'
+#' Calculates velocity using Selectable Dual Method Approach (sDMA), which switches
+#' between HRM and a user-specified secondary method based on Peclet number.
+#' Uses HRM when Pe < 1.0, otherwise uses the secondary method.
+#'
+#' @param hrm_results Results from calc_hrm()
+#' @param secondary_results Results from secondary method (e.g., calc_mhr())
+#' @param secondary_method_name Name of secondary method (e.g., "MHR")
+#' @param diffusivity Thermal diffusivity (cm²/s)
+#' @param probe_spacing Probe spacing (cm)
+#' @return List with velocity results, Peclet numbers, and selected methods
+#' @keywords internal
+calc_sdma <- function(hrm_results,
+                      secondary_results,
+                      secondary_method_name,
+                      diffusivity,
+                      probe_spacing) {
+
+  # Calculate Peclet number (dimensionless)
+  # Pe = (Vh × x) / (D × 3600)
+  # where Vh is in cm/hr, x in cm, D in cm²/s
+  # The 3600 converts D from cm²/s to cm²/hr to match Vh units
+  Pe_outer <- if (!is.na(hrm_results$outer) && is.finite(hrm_results$outer)) {
+    (hrm_results$outer * probe_spacing) / (diffusivity * 3600)
+  } else {
+    NA_real_
+  }
+
+  Pe_inner <- if (!is.na(hrm_results$inner) && is.finite(hrm_results$inner)) {
+    (hrm_results$inner * probe_spacing) / (diffusivity * 3600)
+  } else {
+    NA_real_
+  }
+
+  # Switching logic: Pe < 1.0 → HRM; Pe >= 1.0 → secondary method
+  # Outer sensor
+  if (is.na(hrm_results$outer) || !is.finite(hrm_results$outer)) {
+    Vho_sDMA <- secondary_results$outer
+    use_hrm_outer <- FALSE
+  } else if (Pe_outer < 1.0) {
+    Vho_sDMA <- hrm_results$outer
+    use_hrm_outer <- TRUE
+  } else {
+    Vho_sDMA <- secondary_results$outer
+    use_hrm_outer <- FALSE
+  }
+
+  # Inner sensor
+  if (is.na(hrm_results$inner) || !is.finite(hrm_results$inner)) {
+    Vhi_sDMA <- secondary_results$inner
+    use_hrm_inner <- FALSE
+  } else if (Pe_inner < 1.0) {
+    Vhi_sDMA <- hrm_results$inner
+    use_hrm_inner <- TRUE
+  } else {
+    Vhi_sDMA <- secondary_results$inner
+    use_hrm_inner <- FALSE
+  }
+
+  # Return results with Peclet numbers and selected methods
+  return(list(
+    outer = Vho_sDMA,
+    inner = Vhi_sDMA,
+    peclet_outer = Pe_outer,
+    peclet_inner = Pe_inner,
+    selected_method_outer = if (use_hrm_outer) "HRM" else secondary_method_name,
+    selected_method_inner = if (use_hrm_inner) "HRM" else secondary_method_name,
+    window_start_outer = if (use_hrm_outer) hrm_results$window_start_outer else secondary_results$window_start_outer,
+    window_end_outer = if (use_hrm_outer) hrm_results$window_end_outer else secondary_results$window_end_outer,
+    window_start_inner = if (use_hrm_inner) hrm_results$window_start_inner else secondary_results$window_start_inner,
+    window_end_inner = if (use_hrm_inner) hrm_results$window_end_inner else secondary_results$window_end_inner,
+    calc_time_outer = if (use_hrm_outer) hrm_results$calc_time_outer else secondary_results$calc_time_outer,
+    calc_time_inner = if (use_hrm_inner) hrm_results$calc_time_inner else secondary_results$calc_time_inner
   ))
 }
 

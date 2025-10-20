@@ -9,6 +9,7 @@ plot_heat_pulse_trace(
   vh_results,
   pulse_id,
   show_methods = NULL,
+  sensor_position = "both",
   pre_pulse = 30
 )
 }
@@ -22,10 +23,13 @@ plot_heat_pulse_trace(
 \item{show_methods}{Character vector of methods to show windows for.
 If NULL, shows all methods present in results. Default: NULL}
 
+\item{sensor_position}{Sensor position to show: "inner", "outer", or "both".
+If "both" (default), creates side-by-side plots for comparison. Default: "both"}
+
 \item{pre_pulse}{Number of seconds of pre-pulse data to show. Default: 30}
 }
 \value{
-A ggplot2 object
+A ggplot2 object (single plot) or patchwork object (side-by-side plots)
 }
 \description{
 Creates a diagnostic plot showing temperature traces for a single heat pulse
@@ -35,11 +39,18 @@ with calculation windows and timepoints overlaid for different methods.
 \dontrun{
 heat_pulse_data <- read_heat_pulse_data("data.txt")
 results <- calc_heat_pulse_velocity(heat_pulse_data)
+
+# Show both sensors side-by-side (default)
 plot_heat_pulse_trace(heat_pulse_data, results, pulse_id = 1)
+
+# Show only outer sensor
+plot_heat_pulse_trace(heat_pulse_data, results, pulse_id = 1,
+                      sensor_position = "outer")
 
 # Show only specific methods
 plot_heat_pulse_trace(heat_pulse_data, results, pulse_id = 1,
-                      show_methods = c("HRM", "Tmax_Coh"))
+                      show_methods = c("HRM", "Tmax_Coh"),
+                      sensor_position = "both")
 }
 
 }
