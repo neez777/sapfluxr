@@ -13,6 +13,10 @@ create_custom_wood_properties(
   dry_density = NULL,
   basic_density = NULL,
   moisture_content = NULL,
+  fresh_weight = NULL,
+  dry_weight = NULL,
+  fresh_volume = NULL,
+  dry_volume = NULL,
   wood_type = "softwood",
   temperature = 20,
   dbh = NULL,
@@ -22,7 +26,9 @@ create_custom_wood_properties(
   heartwood_radius = NULL,
   max_velocity_cm_hr = 200,
   min_velocity_cm_hr = -50,
-  temperature_range = c(-10, 60)
+  temperature_range = c(-10, 60),
+  assume_no_shrinkage = TRUE,
+  verbose = TRUE
 )
 }
 \arguments{
@@ -30,7 +36,7 @@ create_custom_wood_properties(
 
 \item{species}{Species identification}
 
-\item{thermal_diffusivity}{Thermal diffusivity (cm²/s). Required.}
+\item{thermal_diffusivity}{Thermal diffusivity (cm²/s). Default: 0.0025.}
 
 \item{thermal_conductivity}{Thermal conductivity (W/(m·K)). Optional.}
 
@@ -41,6 +47,14 @@ create_custom_wood_properties(
 \item{basic_density}{Basic density (kg/m³). Optional.}
 
 \item{moisture_content}{Moisture content (\%). Optional.}
+
+\item{fresh_weight}{Fresh/wet weight of wood sample (g). Optional.}
+
+\item{dry_weight}{Oven-dry weight of wood sample (g). Optional.}
+
+\item{fresh_volume}{Fresh/green volume of wood sample (cm³). Optional.}
+
+\item{dry_volume}{Dry volume of wood sample (cm³). Optional.}
 
 \item{wood_type}{Wood type ("softwood"/"hardwood"). Default: "softwood"}
 
@@ -61,34 +75,80 @@ create_custom_wood_properties(
 \item{min_velocity_cm_hr}{Minimum velocity threshold (cm/hr). Default: -50}
 
 \item{temperature_range}{Temperature range (°C). Default: c(-10, 60)}
+
+\item{assume_no_shrinkage}{Logical. If TRUE, assumes fresh_volume = dry_volume
+when deriving properties. This allows moisture content to be calculated from
+basic_density and dry_density alone. Default: TRUE.}
+
+\item{verbose}{Logical. If TRUE, prints information about derived properties.
+Default: TRUE.}
 }
 \value{
-WoodProperties R6 object
+WoodProperties R6 object with automatically derived missing properties
 }
 \description{
 Helper function to create a custom wood properties configuration in R
-without needing a YAML file. Useful for quick testing or one-off configurations.
+without needing a YAML file. Automatically derives missing properties from
+available measurements (e.g., calculates moisture content from densities).
+}
+\details{
+This function automatically calls \code{derive_wood_properties()} to fill in any
+missing wood property values from the measurements you provide. This is
+particularly useful when you have:
+\itemize{
+\item \strong{Both densities but no moisture content}: With \code{assume_no_shrinkage = TRUE},
+MC will be calculated as (ρ_fresh - ρ_dry) / ρ_dry × 100
+\item \strong{Weights but no densities}: Provide volume to calculate densities
+\item \strong{Partial measurements}: The function will derive as much as possible
+}
+
+The derivation respects the physical relationships between properties and will
+warn if values are inconsistent or outside typical ranges.
 }
 \examples{
 \dontrun{
-# Create custom wood properties
-custom_wood <- create_custom_wood_properties(
-  config_name = "My Custom Wood",
+# Example 1: Traditional usage with complete data
+wood1 <- create_custom_wood_properties(
+  config_name = "My Pine",
   species = "Pinus radiata",
   thermal_diffusivity = 0.0028,
   dry_density = 450,
   moisture_content = 35,
-  dbh = 45.2,
-  sapwood_depth = 3.5
+  dbh = 45.2
 )
 
-# Use in calculations
-results <- calc_heat_pulse_velocity(sap_data, wood_properties = custom_wood)
+# Example 2: Derive MC from two densities (no shrinkage assumption)
+wood2 <- create_custom_wood_properties(
+  config_name = "My Eucalypt",
+  species = "Eucalyptus",
+  basic_density = 380,    # kg/m³ (fresh density at constant volume)
+  dry_density = 450,      # kg/m³ (dry density at same volume)
+  assume_no_shrinkage = TRUE
+  # Automatically derives: MC = 18.4\%
+)
+
+# Example 3: From wood core measurements
+wood3 <- create_custom_wood_properties(
+  fresh_weight = 2.45,    # grams
+  dry_weight = 1.38,      # grams
+  fresh_volume = 2.73     # cm³
+  # Automatically derives: basic_density, moisture_content
+)
+
+# Example 4: Mix of measurements
+wood4 <- create_custom_wood_properties(
+  dry_density = 450,
+  moisture_content = 35,
+  dry_weight = 10,
+  assume_no_shrinkage = TRUE
+  # Automatically derives: fresh_weight, basic_density, volumes
+)
 }
 
 }
 \seealso{
 Other wood property functions: 
+\code{\link{derive_wood_properties}()},
 \code{\link{get_default_wood_properties}()},
 \code{\link{list_available_wood_properties}()},
 \code{\link{load_wood_properties}()}

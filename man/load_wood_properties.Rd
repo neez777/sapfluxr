@@ -50,6 +50,7 @@ wood <- load_wood_properties("path/to/my_tree.yaml")
 \seealso{
 Other wood property functions: 
 \code{\link{create_custom_wood_properties}()},
+\code{\link{derive_wood_properties}()},
 \code{\link{get_default_wood_properties}()},
 \code{\link{list_available_wood_properties}()}
 }

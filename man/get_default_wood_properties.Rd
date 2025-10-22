@@ -34,6 +34,7 @@ wood <- get_default_wood_properties(
 \seealso{
 Other wood property functions: 
 \code{\link{create_custom_wood_properties}()},
+\code{\link{derive_wood_properties}()},
 \code{\link{list_available_wood_properties}()},
 \code{\link{load_wood_properties}()}
 }
