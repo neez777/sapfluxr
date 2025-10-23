@@ -249,3 +249,304 @@ test_that("chunk size is set appropriately based on file size", {
                                  show_progress = FALSE, validate_data = FALSE)
   expect_equal(result_custom$metadata$chunk_size, 50000)
 })
+
+
+# ---- Clock Drift Correction Tests ----
+
+test_that("fix_clock_drift() corrects timestamps linearly", {
+  # Create test data with known drift
+  # Simulate 10 minutes of drift over 24 hours
+  start_time <- as.POSIXct("2025-01-15 08:00:00", tz = "UTC")
+  n_points <- 48  # 30-min intervals over 24 hours
+
+  # Create device times with linear drift
+  true_times <- seq(start_time, by = "30 min", length.out = n_points)
+
+  # Add linear drift: 0 at start, 10 minutes at end
+  drift_minutes <- seq(0, 10, length.out = n_points)
+  device_times <- true_times + drift_minutes * 60  # Convert to seconds
+
+  test_data <- data.frame(
+    datetime = device_times,
+    temperature = rnorm(n_points, 25, 2)
+  )
+
+  # Calibration point: at end of dataset
+  observed_device <- device_times[n_points]  # Device time at last point
+  observed_actual <- true_times[n_points]    # Actual time at last point
+
+  # Apply correction
+  corrected <- fix_clock_drift(
+    data = test_data,
+    device_time_col = "datetime",
+    observed_device_time = observed_device,
+    observed_actual_time = observed_actual
+  )
+
+  # Check that correction brings times close to true times
+  # Allow small numerical tolerance
+  max_error <- max(abs(as.numeric(corrected$datetime - true_times)))
+  expect_lt(max_error, 1)  # Less than 1 second error
+
+  # Check device_datetime column exists
+  expect_true("device_datetime" %in% names(corrected))
+
+  # Check original times preserved
+  expect_equal(corrected$device_datetime, device_times)
+
+  # Check attributes
+  expect_true(attr(corrected$datetime, "drift_corrected"))
+  expect_equal(attr(corrected$datetime, "total_drift_seconds"), -600)  # -10 minutes
+  expect_equal(attr(corrected$datetime, "calibration_date"), observed_actual)
+})
+
+
+test_that("fix_clock_drift() handles positive drift (device slow)", {
+  # Device is slow - shows earlier time than actual
+  start_time <- as.POSIXct("2025-01-15 08:00:00", tz = "UTC")
+  device_times <- seq(start_time, by = "1 hour", length.out = 10)
+
+  test_data <- data.frame(
+    datetime = device_times,
+    value = 1:10
+  )
+
+  # Device shows 17:00, actual is 18:00 (device is 1 hour slow)
+  observed_device <- as.POSIXct("2025-01-15 17:00:00", tz = "UTC")
+  observed_actual <- as.POSIXct("2025-01-15 18:00:00", tz = "UTC")
+
+  corrected <- fix_clock_drift(
+    test_data,
+    observed_device_time = observed_device,
+    observed_actual_time = observed_actual
+  )
+
+  # Corrected times should be later than or equal to device times
+  expect_true(all(corrected$datetime >= test_data$datetime))
+
+  # First point should have minimal correction (at dataset start, correction is 0)
+  expect_lt(
+    abs(as.numeric(difftime(corrected$datetime[1], test_data$datetime[1], units = "secs"))),
+    1  # Less than 1 second correction at start (essentially 0)
+  )
+
+  # Last point should have significant positive correction (closer to calibration)
+  last_idx <- nrow(test_data)
+  expect_gt(
+    as.numeric(difftime(corrected$datetime[last_idx], test_data$datetime[last_idx], units = "secs")),
+    3000  # More than 50 minutes correction near end
+  )
+})
+
+
+test_that("fix_clock_drift() handles negative drift (device fast)", {
+  # Device is fast - shows later time than actual
+  start_time <- as.POSIXct("2025-01-15 08:00:00", tz = "UTC")
+  device_times <- seq(start_time, by = "1 hour", length.out = 10)
+
+  test_data <- data.frame(
+    datetime = device_times,
+    value = 1:10
+  )
+
+  # Device shows 18:00, actual is 17:00 (device is 1 hour fast)
+  observed_device <- as.POSIXct("2025-01-15 18:00:00", tz = "UTC")
+  observed_actual <- as.POSIXct("2025-01-15 17:00:00", tz = "UTC")
+
+  corrected <- fix_clock_drift(
+    test_data,
+    observed_device_time = observed_device,
+    observed_actual_time = observed_actual
+  )
+
+  # Corrected times should be earlier than or equal to device times
+  expect_true(all(corrected$datetime <= test_data$datetime))
+
+  # First point should have minimal correction (at dataset start, correction is 0)
+  expect_lt(
+    abs(as.numeric(difftime(corrected$datetime[1], test_data$datetime[1], units = "secs"))),
+    1  # Less than 1 second correction at start (essentially 0)
+  )
+
+  # Last point should have significant negative correction (closer to calibration)
+  last_idx <- nrow(test_data)
+  expect_lt(
+    as.numeric(difftime(corrected$datetime[last_idx], test_data$datetime[last_idx], units = "secs")),
+    -3000  # More than 50 minutes negative correction near end
+  )
+})
+
+
+test_that("fix_clock_drift() detects already-corrected data", {
+  start_time <- as.POSIXct("2025-01-15 08:00:00", tz = "UTC")
+  test_data <- data.frame(
+    datetime = seq(start_time, by = "30 min", length.out = 10),
+    value = 1:10
+  )
+
+  observed_device <- as.POSIXct("2025-01-15 12:30:00", tz = "UTC")
+  observed_actual <- as.POSIXct("2025-01-15 12:20:00", tz = "UTC")
+
+  # Apply correction first time
+  corrected_once <- fix_clock_drift(
+    test_data,
+    observed_device_time = observed_device,
+    observed_actual_time = observed_actual
+  )
+
+  # Try to apply again - should warn and return unchanged
+  expect_warning(
+    corrected_twice <- fix_clock_drift(
+      corrected_once,
+      observed_device_time = observed_device,
+      observed_actual_time = observed_actual
+    ),
+    "Clock drift correction appears to have already been applied"
+  )
+
+  # Data should be unchanged
+  expect_equal(corrected_twice, corrected_once)
+})
+
+
+test_that("fix_clock_drift() warns about extrapolation", {
+  start_time <- as.POSIXct("2025-01-15 08:00:00", tz = "UTC")
+  test_data <- data.frame(
+    datetime = seq(start_time, by = "30 min", length.out = 20),
+    value = 1:20
+  )
+
+  # Calibration point is in the middle of the dataset
+  observed_device <- as.POSIXct("2025-01-15 12:00:00", tz = "UTC")
+  observed_actual <- as.POSIXct("2025-01-15 11:50:00", tz = "UTC")
+
+  # Should warn about extrapolation beyond calibration point
+  expect_warning(
+    corrected <- fix_clock_drift(
+      test_data,
+      observed_device_time = observed_device,
+      observed_actual_time = observed_actual
+    ),
+    "extrapolated beyond the calibration point"
+  )
+
+  # But should still return corrected data
+  expect_true("device_datetime" %in% names(corrected))
+})
+
+
+test_that("fix_clock_drift() validates inputs", {
+  test_data <- data.frame(
+    datetime = seq(as.POSIXct("2025-01-15 08:00:00", tz = "UTC"),
+                   by = "30 min", length.out = 10),
+    value = 1:10
+  )
+
+  observed_device <- as.POSIXct("2025-01-15 12:30:00", tz = "UTC")
+  observed_actual <- as.POSIXct("2025-01-15 12:20:00", tz = "UTC")
+
+  # Test non-data.frame input
+  expect_error(
+    fix_clock_drift(
+      data = as.list(test_data),
+      observed_device_time = observed_device,
+      observed_actual_time = observed_actual
+    ),
+    "'data' must be a data frame"
+  )
+
+  # Test invalid column name
+  expect_error(
+    fix_clock_drift(
+      data = test_data,
+      device_time_col = "nonexistent",
+      observed_device_time = observed_device,
+      observed_actual_time = observed_actual
+    ),
+    "Column 'nonexistent' not found"
+  )
+
+  # Test non-POSIXct observed times
+  expect_error(
+    fix_clock_drift(
+      data = test_data,
+      observed_device_time = "2025-01-15 12:30:00",
+      observed_actual_time = observed_actual
+    ),
+    "'observed_device_time' must be a POSIXct object"
+  )
+
+  expect_error(
+    fix_clock_drift(
+      data = test_data,
+      observed_device_time = observed_device,
+      observed_actual_time = "2025-01-15 12:20:00"
+    ),
+    "'observed_actual_time' must be a POSIXct object"
+  )
+})
+
+
+test_that("fix_clock_drift() handles calibration before dataset start", {
+  start_time <- as.POSIXct("2025-01-15 08:00:00", tz = "UTC")
+  test_data <- data.frame(
+    datetime = seq(start_time, by = "30 min", length.out = 10),
+    value = 1:10
+  )
+
+  # Calibration point before dataset start
+  observed_device <- as.POSIXct("2025-01-15 07:00:00", tz = "UTC")
+  observed_actual <- as.POSIXct("2025-01-15 06:50:00", tz = "UTC")
+
+  expect_error(
+    fix_clock_drift(
+      test_data,
+      observed_device_time = observed_device,
+      observed_actual_time = observed_actual
+    ),
+    "Calibration point must be after the dataset start time"
+  )
+})
+
+
+test_that("fix_clock_drift() works with custom column names", {
+  start_time <- as.POSIXct("2025-01-15 08:00:00", tz = "UTC")
+  test_data <- data.frame(
+    timestamp = seq(start_time, by = "30 min", length.out = 10),
+    value = 1:10
+  )
+
+  observed_device <- as.POSIXct("2025-01-15 12:30:00", tz = "UTC")
+  observed_actual <- as.POSIXct("2025-01-15 12:20:00", tz = "UTC")
+
+  corrected <- fix_clock_drift(
+    test_data,
+    device_time_col = "timestamp",
+    observed_device_time = observed_device,
+    observed_actual_time = observed_actual
+  )
+
+  expect_true("device_datetime" %in% names(corrected))
+  expect_true(attr(corrected$timestamp, "drift_corrected"))
+})
+
+
+test_that("fix_clock_drift() converts character times to POSIXct", {
+  start_time <- as.POSIXct("2025-01-15 08:00:00", tz = "UTC")
+  test_data <- data.frame(
+    datetime = format(seq(start_time, by = "30 min", length.out = 10)),
+    value = 1:10
+  )
+
+  observed_device <- as.POSIXct("2025-01-15 12:30:00", tz = "UTC")
+  observed_actual <- as.POSIXct("2025-01-15 12:20:00", tz = "UTC")
+
+  corrected <- fix_clock_drift(
+    test_data,
+    observed_device_time = observed_device,
+    observed_actual_time = observed_actual
+  )
+
+  expect_s3_class(corrected$datetime, "POSIXct")
+  expect_true("device_datetime" %in% names(corrected))
+})
