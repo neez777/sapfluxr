@@ -1075,3 +1075,202 @@ create_empty_heat_pulse_data <- function(tree_id, file_path) {
   class(result) <- c("heat_pulse_data", "list")
   return(result)
 }
+
+
+#' Fix Clock Drift in Device-Collected Data
+#'
+#' Corrects clock drift in device-collected data by applying a linear correction
+#' based on a single calibration point observed when the device is connected to
+#' a laptop or known accurate time source.
+#'
+#' @details
+#' This function assumes that:
+#' \itemize{
+#'   \item The device clock was accurate at the start of the dataset
+#'   \item Clock drift accumulated linearly over time
+#'   \item A single calibration point is available (observed when connecting device)
+#' }
+#'
+#' The correction is calculated as:
+#' \deqn{corrected\_time = device\_time + (drift \times proportion\_elapsed)}
+#'
+#' Where \code{drift} is the total drift at calibration, and \code{proportion_elapsed}
+#' is the fraction of time elapsed from dataset start to each measurement.
+#'
+#' **Important:** Original device timestamps are preserved in a new column called
+#' \code{device_datetime} so you can always revert the correction if needed.
+#'
+#' @param data A data frame containing the raw data
+#' @param device_time_col Character string naming the column containing device
+#'   timestamps (default: "datetime")
+#' @param observed_device_time POSIXct timestamp showing what the device clock
+#'   displayed at calibration point
+#' @param observed_actual_time POSIXct timestamp showing the actual correct time
+#'   at calibration point
+#'
+#' @return The input data frame with:
+#'   \itemize{
+#'     \item Original timestamps preserved in \code{device_datetime} column
+#'     \item Corrected timestamps in the original \code{device_time_col} column
+#'     \item Correction metadata stored as attributes on the corrected column
+#'   }
+#'
+#' @section Attributes:
+#' The corrected timestamp column will have the following attributes:
+#' \describe{
+#'   \item{drift_corrected}{Logical TRUE indicating correction was applied}
+#'   \item{total_drift_seconds}{Numeric total drift in seconds at calibration}
+#'   \item{calibration_date}{POSIXct actual time at calibration}
+#' }
+#'
+#' @section Warnings:
+#' \itemize{
+#'   \item If correction has already been applied, the function returns data
+#'         unchanged with a warning
+#'   \item If any timestamps are later than the calibration point, a warning is
+#'         issued that correction is being extrapolated
+#' }
+#'
+#' @examples
+#' \dontrun{
+#' # Create example data with clock drift
+#' # Device clock was 5 minutes fast by the end of a 24-hour period
+#' start_time <- as.POSIXct("2025-01-15 08:00:00", tz = "UTC")
+#' device_times <- seq(start_time, by = "30 min", length.out = 48)
+#'
+#' # Add simulated drift (5 minutes over 24 hours)
+#' drift_per_hour <- 5 / 24  # minutes per hour
+#' hours_elapsed <- seq(0, 23.5, by = 0.5)
+#' drift_minutes <- hours_elapsed * drift_per_hour
+#' device_times_with_drift <- device_times + drift_minutes * 60  # Convert to seconds
+#'
+#' example_data <- data.frame(
+#'   datetime = device_times_with_drift,
+#'   temperature = rnorm(48, mean = 25, sd = 2)
+#' )
+#'
+#' # At 24 hours, we connected the device and observed:
+#' # Device showed: 2025-01-16 08:05:00
+#' # Actual time was: 2025-01-16 08:00:00
+#' observed_device <- as.POSIXct("2025-01-16 08:05:00", tz = "UTC")
+#' observed_actual <- as.POSIXct("2025-01-16 08:00:00", tz = "UTC")
+#'
+#' # Apply correction
+#' corrected_data <- fix_clock_drift(
+#'   data = example_data,
+#'   device_time_col = "datetime",
+#'   observed_device_time = observed_device,
+#'   observed_actual_time = observed_actual
+#' )
+#'
+#' # Check correction
+#' head(corrected_data)
+#' attributes(corrected_data$datetime)
+#'
+#' # Original device times are preserved
+#' head(corrected_data$device_datetime)
+#' }
+#'
+#' @family data preprocessing functions
+#' @export
+fix_clock_drift <- function(data,
+                            device_time_col = "datetime",
+                            observed_device_time,
+                            observed_actual_time) {
+
+  # Input validation
+  if (!is.data.frame(data)) {
+    stop("'data' must be a data frame")
+  }
+
+  if (!is.character(device_time_col) || length(device_time_col) != 1) {
+    stop("'device_time_col' must be a single character string")
+  }
+
+  if (!device_time_col %in% names(data)) {
+    stop("Column '", device_time_col, "' not found in data")
+  }
+
+  if (!inherits(observed_device_time, "POSIXct")) {
+    stop("'observed_device_time' must be a POSIXct object")
+  }
+
+  if (!inherits(observed_actual_time, "POSIXct")) {
+    stop("'observed_actual_time' must be a POSIXct object")
+  }
+
+  # Check if correction already applied
+  has_device_datetime <- "device_datetime" %in% names(data)
+  has_drift_attr <- !is.null(attr(data[[device_time_col]], "drift_corrected"))
+
+  if (has_device_datetime && has_drift_attr) {
+    warning(
+      "Clock drift correction appears to have already been applied to this dataset. ",
+      "Original timestamps are in 'device_datetime' column."
+    )
+    return(data)
+  }
+
+  # Convert device_time_col to POSIXct if needed
+  if (!inherits(data[[device_time_col]], "POSIXct")) {
+    data[[device_time_col]] <- as.POSIXct(data[[device_time_col]])
+  }
+
+  # Preserve original timestamps
+  data$device_datetime <- data[[device_time_col]]
+
+  # Get dataset start time (assume device was accurate at start)
+  dataset_start <- min(data[[device_time_col]], na.rm = TRUE)
+
+  # Calculate total drift at calibration point
+  total_drift_seconds <- as.numeric(
+    difftime(observed_actual_time, observed_device_time, units = "secs")
+  )
+
+  # Calculate time span from start to calibration
+  total_time_span <- as.numeric(
+    difftime(observed_device_time, dataset_start, units = "secs")
+  )
+
+  if (total_time_span <= 0) {
+    stop(
+      "Calibration point must be after the dataset start time. ",
+      "Dataset start: ", format(dataset_start), ", ",
+      "Calibration: ", format(observed_device_time)
+    )
+  }
+
+  # Check for extrapolation beyond calibration point
+  max_device_time <- max(data[[device_time_col]], na.rm = TRUE)
+  if (max_device_time > observed_device_time) {
+    n_extrapolated <- sum(data[[device_time_col]] > observed_device_time, na.rm = TRUE)
+    warning(
+      "Clock drift correction is being extrapolated beyond the calibration point. ",
+      n_extrapolated, " timestamp(s) are later than the calibration point. ",
+      "Correction accuracy may be reduced for these points."
+    )
+  }
+
+  # Calculate proportional correction for each timestamp
+  time_from_start <- as.numeric(
+    difftime(data[[device_time_col]], dataset_start, units = "secs")
+  )
+
+  proportion_elapsed <- time_from_start / total_time_span
+
+  # Apply linear drift correction
+  correction_seconds <- total_drift_seconds * proportion_elapsed
+
+  # Create corrected timestamps
+  corrected_times <- data[[device_time_col]] + correction_seconds
+
+  # Replace original column with corrected times
+  data[[device_time_col]] <- corrected_times
+
+  # Add metadata attributes to corrected column
+  attr(data[[device_time_col]], "drift_corrected") <- TRUE
+  attr(data[[device_time_col]], "total_drift_seconds") <- total_drift_seconds
+  attr(data[[device_time_col]], "calibration_date") <- observed_actual_time
+
+  return(data)
+}
