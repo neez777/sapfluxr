@@ -408,6 +408,11 @@ calc_vh_single_pulse <- function(pulse_data, pulse_id, parameters, methods, plot
       calc_time_sec = method_result$calc_time_outer,
       peclet_number = if (has_peclet) method_result$peclet_outer else NA_real_,
       selected_method = NA_character_,  # Only populated by apply_sdma_processing()
+      # HRMXb-specific: separate downstream/upstream windows
+      downstream_window_start_sec = if (!is.null(method_result$downstream_window_start_outer)) method_result$downstream_window_start_outer else NA_real_,
+      downstream_window_end_sec = if (!is.null(method_result$downstream_window_end_outer)) method_result$downstream_window_end_outer else NA_real_,
+      upstream_window_start_sec = if (!is.null(method_result$upstream_window_start_outer)) method_result$upstream_window_start_outer else NA_real_,
+      upstream_window_end_sec = if (!is.null(method_result$upstream_window_end_outer)) method_result$upstream_window_end_outer else NA_real_,
       stringsAsFactors = FALSE
     )
     result_rows[[paste0(method_name, "_inner")]] <- data.frame(
@@ -421,6 +426,11 @@ calc_vh_single_pulse <- function(pulse_data, pulse_id, parameters, methods, plot
       calc_time_sec = method_result$calc_time_inner,
       peclet_number = if (has_peclet) method_result$peclet_inner else NA_real_,
       selected_method = NA_character_,  # Only populated by apply_sdma_processing()
+      # HRMXb-specific: separate downstream/upstream windows
+      downstream_window_start_sec = if (!is.null(method_result$downstream_window_start_inner)) method_result$downstream_window_start_inner else NA_real_,
+      downstream_window_end_sec = if (!is.null(method_result$downstream_window_end_inner)) method_result$downstream_window_end_inner else NA_real_,
+      upstream_window_start_sec = if (!is.null(method_result$upstream_window_start_inner)) method_result$upstream_window_start_inner else NA_real_,
+      upstream_window_end_sec = if (!is.null(method_result$upstream_window_end_inner)) method_result$upstream_window_end_inner else NA_real_,
       stringsAsFactors = FALSE
     )
   }
@@ -609,14 +619,16 @@ calc_mhr <- function(deltaT_do, deltaT_di, deltaT_uo, deltaT_ui, diffusivity, pr
     Vhi_MHR <- (diffusivity / probe_spacing) * log(dTdi_max_dTui_max) * 3600
   }
 
-  # Calculate window bounds (min and max of upstream/downstream peak times)
+  # For MHR: window_start = upstream peak, window_end = downstream peak
+  # (not min/max - specific to probe type per documentation)
+
   # For outer sensors
-  window_start_outer <- min(time_do, time_uo)
-  window_end_outer <- max(time_do, time_uo)
+  window_start_outer <- time_uo  # Upstream outer peak time
+  window_end_outer <- time_do    # Downstream outer peak time
 
   # For inner sensors
-  window_start_inner <- min(time_di, time_ui)
-  window_end_inner <- max(time_di, time_ui)
+  window_start_inner <- time_ui  # Upstream inner peak time
+  window_end_inner <- time_di    # Downstream inner peak time
 
   return(list(
     outer = Vho_MHR,
@@ -625,8 +637,8 @@ calc_mhr <- function(deltaT_do, deltaT_di, deltaT_uo, deltaT_ui, diffusivity, pr
     window_end_outer = window_end_outer,
     window_start_inner = window_start_inner,
     window_end_inner = window_end_inner,
-    calc_time_outer = NA_real_,  # Downstream outer peak time
-    calc_time_inner = NA_real_   # Downstream inner peak time
+    calc_time_outer = time_do,  # Downstream outer peak time
+    calc_time_inner = time_di   # Downstream inner peak time
   ))
 }
 
@@ -661,11 +673,24 @@ calc_hrmx <- function(deltaT_do, deltaT_di, deltaT_uo, deltaT_ui,
   dTuo_max <- max(deltaT_uo, na.rm = TRUE)
   dTui_max <- max(deltaT_ui, na.rm = TRUE)
 
-  # Calculate pre-max values
+  # Find indices of maximum temperature for each sensor
+  idx_do_max <- which.max(deltaT_do)
+  idx_di_max <- which.max(deltaT_di)
+  idx_uo_max <- which.max(deltaT_uo)
+  idx_ui_max <- which.max(deltaT_ui)
+
+  # Calculate pre-max values (only on rising limb BEFORE maximum)
   dTdo_premax <- c(NA, ifelse(diff(deltaT_do) > 0, deltaT_do[-1], NA))
+  dTdo_premax[idx_do_max:length(dTdo_premax)] <- NA  # Exclude points at or after max
+  
   dTdi_premax <- c(NA, ifelse(diff(deltaT_di) > 0, deltaT_di[-1], NA))
+  dTdi_premax[idx_di_max:length(dTdi_premax)] <- NA  # Exclude points at or after max
+  
   dTuo_premax <- c(NA, ifelse(diff(deltaT_uo) > 0, deltaT_uo[-1], NA))
+  dTuo_premax[idx_uo_max:length(dTuo_premax)] <- NA  # Exclude points at or after max
+  
   dTui_premax <- c(NA, ifelse(diff(deltaT_ui) > 0, deltaT_ui[-1], NA))
+  dTui_premax[idx_ui_max:length(dTui_premax)] <- NA  # Exclude points at or after max
 
   # Calculate window bounds
   dTdo_max_L <- dTdo_max * L
@@ -769,6 +794,23 @@ calc_hrmx <- function(deltaT_do, deltaT_di, deltaT_uo, deltaT_ui,
   hrmxb_window_start_inner <- if (length(hrmxb_inner_indices) > 0) tp[min(hrmxb_inner_indices)] else NA_real_
   hrmxb_window_end_inner <- if (length(hrmxb_inner_indices) > 0) tp[max(hrmxb_inner_indices)] else NA_real_
 
+  # For HRMXb, also store separate downstream and upstream windows
+  # (since they sample different time periods)
+  do_indices <- which(!is.na(dTdo_HRMX))
+  di_indices <- which(!is.na(dTdi_HRMX))
+  uo_indices <- which(!is.na(dTuo_HRMX))
+  ui_indices <- which(!is.na(dTui_HRMX))
+  
+  hrmxb_downstream_start_outer <- if (length(do_indices) > 0) tp[min(do_indices)] else NA_real_
+  hrmxb_downstream_end_outer <- if (length(do_indices) > 0) tp[max(do_indices)] else NA_real_
+  hrmxb_upstream_start_outer <- if (length(uo_indices) > 0) tp[min(uo_indices)] else NA_real_
+  hrmxb_upstream_end_outer <- if (length(uo_indices) > 0) tp[max(uo_indices)] else NA_real_
+  
+  hrmxb_downstream_start_inner <- if (length(di_indices) > 0) tp[min(di_indices)] else NA_real_
+  hrmxb_downstream_end_inner <- if (length(di_indices) > 0) tp[max(di_indices)] else NA_real_
+  hrmxb_upstream_start_inner <- if (length(ui_indices) > 0) tp[min(ui_indices)] else NA_real_
+  hrmxb_upstream_end_inner <- if (length(ui_indices) > 0) tp[max(ui_indices)] else NA_real_
+
   return(list(
     HRMXa = list(
       outer = Vho_HRMXa,
@@ -788,7 +830,16 @@ calc_hrmx <- function(deltaT_do, deltaT_di, deltaT_uo, deltaT_ui,
       window_start_inner = hrmxb_window_start_inner,
       window_end_inner = hrmxb_window_end_inner,
       calc_time_outer = NA_real_,
-      calc_time_inner = NA_real_
+      calc_time_inner = NA_real_,
+      # Separate windows for visualization
+      downstream_window_start_outer = hrmxb_downstream_start_outer,
+      downstream_window_end_outer = hrmxb_downstream_end_outer,
+      upstream_window_start_outer = hrmxb_upstream_start_outer,
+      upstream_window_end_outer = hrmxb_upstream_end_outer,
+      downstream_window_start_inner = hrmxb_downstream_start_inner,
+      downstream_window_end_inner = hrmxb_downstream_end_inner,
+      upstream_window_start_inner = hrmxb_upstream_start_inner,
+      upstream_window_end_inner = hrmxb_upstream_end_inner
     )
   ))
 }
@@ -1295,11 +1346,12 @@ calc_sdma <- function(hrm_results,
 add_quality_flags <- function(results) {
   results$quality_flag <- "OK"
 
-  # Flag extreme values
-  results$quality_flag[abs(results$Vh_cm_hr) > 200] <- "HIGH_VELOCITY"
-  results$quality_flag[is.infinite(results$Vh_cm_hr)] <- "INFINITE"
-  results$quality_flag[is.na(results$Vh_cm_hr)] <- "MISSING"
-  results$quality_flag[results$Vh_cm_hr < -50] <- "NEGATIVE_FLOW"
+  # Flag calculation issues (these indicate the calculation itself had problems)
+  # Using CALC_ prefix to distinguish from data quality issues added later
+  results$quality_flag[is.infinite(results$Vh_cm_hr)] <- "CALC_INFINITE"
+  results$quality_flag[is.na(results$Vh_cm_hr)] <- "CALC_FAILED"
+  results$quality_flag[abs(results$Vh_cm_hr) > 200] <- "CALC_EXTREME"
+  results$quality_flag[results$Vh_cm_hr < -50] <- "CALC_EXTREME"
 
   return(results)
 }

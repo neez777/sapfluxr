@@ -1,0 +1,507 @@
+---
+title: "Data Quality Control and Interpolation"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Data Quality Control and Interpolation}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 5
+)
+```
+
+```{r setup}
+library(sapfluxr)
+library(ggplot2)
+library(dplyr)
+```
+
+## Introduction
+
+Sap flow measurements exhibit strong **daily cyclical patterns** (high flow during day, low flow at night), which presents unique challenges for quality control. This vignette covers robust methods for:
+
+1. Detecting outliers using rolling median that adapts to daily cycles
+2. Identifying unlikely rapid changes in velocity (rate of change detection)
+3. Finding missing pulses and data gaps
+4. Flagging illogical or physically impossible values
+5. Cross-sensor consistency checks
+6. Interpolation strategies for missing data
+
+**Key Concept:** Standard outlier detection methods (z-score, IQR) would incorrectly flag normal daily variation as outliers. We use **rolling median detection** with MAD (Median Absolute Deviation) that adapts to local patterns and is robust to outliers.
+
+---
+
+## Common Data Quality Issues
+
+### 1. **Measurement Spikes/Outliers**
+
+**Cause:** Electrical interference, sensor malfunction, or logger issues
+
+**Characteristics:**
+- Sudden jumps in Vh values that don't match daily pattern
+- Affect one or more sensors
+- Often brief (1-3 measurements)
+- Return to expected pattern quickly
+
+**Example:**
+```
+Time        Sensor_5cm_Vh   Expected_Pattern   Issue
+06:00       2.3             2.2                Normal
+06:30       2.8             2.7                Normal (day starting)
+07:00       45.2            3.1                <- SPIKE (45 cm/hr is illogical)
+07:30       3.5             3.4                Normal (back to pattern)
+```
+
+### 2. **Rapid Unphysiological Changes**
+
+**Cause:** Sensor malfunction or calculation errors
+
+**Characteristics:**
+- Very large changes between consecutive measurements
+- Example: 4 cm/hr jump in 30 minutes (unlikely in real trees)
+- Sap flow changes gradually, following environmental drivers
+
+### 3. **Missing Pulses/Data Gaps**
+
+**Cause:** Logger failure, power interruption, data transmission errors
+
+**Characteristics:**
+- Complete absence of Vh data for expected timestamps
+- Gaps in time series (no rows for missing pulses)
+- May span hours to days
+
+**Impact:** Breaks time series continuity, affects daily integration
+
+### 4. **Illogical Values**
+
+**Cause:** Calculation errors, sensor malfunction, extreme conditions
+
+**Characteristics:**
+- Vh > 500 cm/hr (physically impossible for wood)
+- Vh > species maximum (e.g., > 200 cm/hr for eucalyptus)
+- Extremely negative flows (beyond probe sensitivity)
+
+### 5. **Cross-Sensor Anomalies**
+
+**Cause:** Single sensor malfunction while others perform normally
+
+**Characteristics:**
+- One sensor deviates significantly from others at same time
+- Other sensors show consistent pattern
+- Persistent over multiple measurements
+
+---
+
+## Quality Control Function: `flag_vh_quality()`
+
+### Overview
+
+The main function for quality control operates on **Vh results** (after HPV calculation), not raw temperature data.
+
+```{r eval=FALSE}
+qc_results <- flag_vh_quality(
+  vh_results,                      # From calc_heat_pulse_velocity()
+  wood_properties = NULL,          # Optional species thresholds
+  detect_missing_pulses = TRUE,    # Find gaps in time series
+  check_illogical = TRUE,          # Flag impossible values
+  detect_outliers = TRUE,          # Rolling median detection
+  rolling_window = 5,              # Window size (measurements)
+  rolling_threshold = 3,           # MAD threshold
+  detect_rate_of_change = TRUE,    # Flag rapid changes
+  max_change_cm_hr = 4,            # Maximum change between points
+  max_gap_to_fill_hours = 24,     # Only fill gaps < 24 hours
+  flag_negative = TRUE,            # Flag reverse flows as SUSPECT
+  check_cross_sensor = TRUE,       # Compare sensors at same time
+  verbose = TRUE                   # Print progress
+)
+```
+
+### Quality Flag Hierarchy (Most Severe Wins)
+
+1. **MISSING** - No data for expected pulse timestamp
+2. **ILLOGICAL** - Exceeds hard maximum (500 cm/hr) or species maximum
+3. **OUTLIER** - Statistical outlier detected by rolling median or cross-sensor comparison
+4. **SUSPECT** - Negative flow or cross-sensor anomaly
+5. **OK** - No issues detected
+
+### Detection Methods
+
+#### 1. Rolling Median Detection (Default)
+
+**How it works:**
+```r
+# For each point, use sliding window of surrounding points
+window <- 5 measurements  # ±2 around current point
+
+for (i in 1:n) {
+  local_median <- median(vh[(i-2):(i+2)])
+  local_mad <- mad(vh[(i-2):(i+2)])
+
+  if (abs(vh[i] - local_median) > 3 * local_mad) {
+    flag as OUTLIER
+  }
+}
+```
+
+**Advantages:**
+- No seasonal decomposition required (simpler approach)
+- Adapts to local patterns (day/night cycles handled automatically)
+- MAD is robust to outliers in the window
+- Fast computation
+
+**Parameters:**
+- `rolling_window = 5`: Number of points in window (default 5)
+- `rolling_threshold = 3`: MAD multiplier (default 3)
+
+#### 2. Rate of Change Detection
+
+**How it works:**
+```r
+# Check consecutive measurements for large jumps
+for (i in 2:n) {
+  change <- abs(vh[i] - vh[i-1])
+
+  if (change > max_change_cm_hr) {
+    flag as OUTLIER
+  }
+}
+```
+
+**Rationale:** Sap flow is driven by environmental factors (solar radiation, VPD) which change gradually. A 4 cm/hr jump between consecutive 30-minute measurements is unphysiological.
+
+**Parameters:**
+- `max_change_cm_hr = 4`: Maximum allowed change (default 4 cm/hr)
+
+#### 3. Cross-Sensor Detection
+
+**How it works:**
+```r
+# For each timestamp, compare all sensors:
+for (each datetime) {
+  sensors_at_time <- vh[datetime == t, all sensors]
+
+  sensor_median <- median(sensors_at_time)
+  sensor_mad <- mad(sensors_at_time)
+
+  # Flag sensors that deviate significantly:
+  outliers <- abs(vh - sensor_median) > 3 * sensor_mad
+}
+```
+
+**Advantages:**
+- Detects sensor-specific issues
+- Independent of temporal patterns
+- Useful when one sensor malfunctions
+
+**Best for:** Identifying failing sensors
+
+---
+
+## Practical Examples
+
+### Example 1: Basic Quality Control
+
+```{r eval=FALSE}
+# Load data and calculate Vh
+heat_pulse_data <- read_heat_pulse_data("field_data.txt")
+vh_results <- calc_heat_pulse_velocity(heat_pulse_data, methods = "HRM")
+
+# Run quality control with all defaults
+qc_results <- flag_vh_quality(vh_results)
+
+# View summary
+print(qc_results)
+
+# Check flag distribution
+table(qc_results$vh_flagged$quality_flag)
+```
+
+### Example 2: Species-Specific Thresholds
+
+```{r eval=FALSE}
+# Use species-specific maximum velocity
+qc_results <- flag_vh_quality(
+  vh_results,
+  wood_properties = "eucalyptus"  # max_velocity_cm_hr = 200
+)
+
+# Any Vh > 200 cm/hr will be flagged as ILLOGICAL
+illogical <- qc_results$vh_flagged %>%
+  filter(quality_flag == "ILLOGICAL")
+```
+
+### Example 3: Custom Detection Settings
+
+```{r eval=FALSE}
+# More sensitive detection
+qc_sensitive <- flag_vh_quality(
+  vh_results,
+  rolling_window = 5,              # Standard window
+  rolling_threshold = 2.5,         # More sensitive (default=3)
+  max_change_cm_hr = 3,            # Stricter change limit (default=4)
+  max_gap_to_fill_hours = 12      # Only fill small gaps
+)
+
+# More permissive detection
+qc_permissive <- flag_vh_quality(
+  vh_results,
+  rolling_threshold = 4,           # Less sensitive
+  max_change_cm_hr = 6,            # Allow larger changes
+  detect_rate_of_change = FALSE   # Skip rate of change check
+)
+```
+
+### Example 4: Analysing Gap Report
+
+```{r eval=FALSE}
+# Examine missing data gaps
+qc_results <- flag_vh_quality(vh_results, return_gap_report = TRUE)
+
+# View gap report
+print(qc_results$gap_report)
+
+# Check which gaps will be filled (< 24 hours)
+gaps_filled <- qc_results$gap_report %>%
+  filter(filled == TRUE)
+
+# Check which gaps are too large to fill
+gaps_not_filled <- qc_results$gap_report %>%
+  filter(filled == FALSE)
+```
+
+---
+
+## Handling Flagged Data
+
+### Option 1: Remove Outliers
+
+```{r eval=FALSE}
+# Keep only OK data
+vh_clean <- qc_results$vh_flagged %>%
+  filter(quality_flag == "OK")
+
+# Use for downstream analysis
+daily_sums <- vh_clean %>%
+  group_by(date = as.Date(datetime)) %>%
+  summarise(mean_vh = mean(Vh_cm_hr, na.rm = TRUE))
+```
+
+### Option 2: Keep Flags for Transparency
+
+```{r eval=FALSE}
+# Keep all data but track quality in plots
+vh_with_flags <- qc_results$vh_flagged
+
+# Visualise with quality flags
+ggplot(vh_with_flags, aes(x = datetime, y = Vh_cm_hr, color = quality_flag)) +
+  geom_point(alpha = 0.6) +
+  scale_color_manual(values = c(
+    "OK" = "darkgreen",
+    "OUTLIER" = "red",
+    "SUSPECT" = "orange",
+    "MISSING" = "grey",
+    "ILLOGICAL" = "purple"
+  )) +
+  theme_minimal() +
+  labs(title = "Vh Time Series with Quality Flags")
+```
+
+---
+
+## Understanding Detection Parameters
+
+### Rolling Window Size
+
+**Effect of window size:**
+- Smaller window (3): More sensitive to local spikes, may miss broader patterns
+- Medium window (5): **Recommended default** - balances local and broader patterns
+- Larger window (7-9): Smooths over longer periods, may miss isolated spikes
+
+**Choose based on:**
+- Measurement interval: 30-min data with window of 5 = ±1 hour context
+- Pattern scale: Daily cycles span ~48 measurements (30-min data)
+
+### Rolling Threshold (MAD multiplier)
+
+**Understanding the threshold:**
+- `threshold = 3`: Conservative (fewer false positives) - **recommended default**
+- `threshold = 2.5`: Moderately strict
+- `threshold = 2`: Strict (more false positives)
+- `threshold = 4`: Very permissive (may miss outliers)
+
+### Maximum Rate of Change
+
+**Physiological basis:**
+- Sap flow responds to solar radiation and VPD
+- These drivers change gradually over 30-minute intervals
+- Typical gradual change: 0.5-2 cm/hr per measurement
+- Suspicious change: > 4 cm/hr per measurement
+
+**Adjust based on:**
+- Species: Fast-responding species may need higher threshold
+- Interval: Longer intervals allow larger changes
+- Season: Rapid changes more common in growing season
+
+### Maximum Gap to Fill
+
+**Philosophy:** Only fill small gaps that can be reasonably interpolated
+
+- `max_gap_to_fill_hours = 24`: **Recommended default**
+- Gaps > 24 hours: Report only, don't add MISSING rows
+- Gaps <= 24 hours: Add MISSING rows for potential interpolation
+
+---
+
+## Visualising Quality Control Results
+
+### Time Series with Flags
+
+```{r eval=FALSE}
+library(ggplot2)
+
+# Plot Vh with quality flags
+ggplot(qc_results$vh_flagged, aes(x = datetime, y = Vh_cm_hr)) +
+  geom_point(aes(color = quality_flag), alpha = 0.6, size = 2) +
+  geom_line(data = filter(qc_results$vh_flagged, quality_flag == "OK"),
+            color = "grey30", alpha = 0.3) +
+  scale_color_manual(
+    values = c("OK" = "darkgreen", "OUTLIER" = "red",
+               "SUSPECT" = "orange", "MISSING" = "grey70",
+               "ILLOGICAL" = "purple"),
+    name = "Quality Flag"
+  ) +
+  labs(title = "Vh Time Series with Quality Flags",
+       x = "Date/Time",
+       y = "Vh (cm/hr)") +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+```
+
+### Daily Patterns by Quality
+
+```{r eval=FALSE}
+# Add hour of day for pattern visualisation
+vh_with_hour <- qc_results$vh_flagged %>%
+  mutate(hour = as.numeric(format(datetime, "%H")) +
+               as.numeric(format(datetime, "%M")) / 60)
+
+# Plot by quality flag
+ggplot(vh_with_hour, aes(x = hour, y = Vh_cm_hr, color = quality_flag)) +
+  geom_point(alpha = 0.3) +
+  facet_wrap(~quality_flag, ncol = 2) +
+  scale_x_continuous(breaks = seq(0, 24, 6)) +
+  labs(title = "Daily Patterns by Quality Flag",
+       x = "Hour of Day",
+       y = "Vh (cm/hr)") +
+  theme_minimal()
+```
+
+---
+
+## Troubleshooting
+
+### Too Many Outliers Detected
+
+**Possible causes:**
+1. Threshold too strict - Increase `rolling_threshold` to 3.5 or 4
+2. Window too small - Increase `rolling_window` to 7
+3. Data genuinely has many spikes - Visual inspection recommended
+
+**Solution:**
+```{r eval=FALSE}
+qc_results <- flag_vh_quality(
+  vh_results,
+  rolling_threshold = 3.5,
+  max_change_cm_hr = 5
+)
+```
+
+### Too Few Outliers Detected
+
+**Solution:**
+```{r eval=FALSE}
+qc_results <- flag_vh_quality(
+  vh_results,
+  rolling_threshold = 2.5,
+  max_change_cm_hr = 3
+)
+```
+
+### Missing Pulses Not Detected
+
+**Solution:**
+```{r eval=FALSE}
+# Manually specify expected interval
+qc_results <- flag_vh_quality(
+  vh_results,
+  expected_interval_hours = 0.5  # 30 minutes
+)
+```
+
+---
+
+## Best Practices
+
+### 1. Always Run QC Before Analysis
+
+```{r eval=FALSE}
+# Standard workflow:
+data <- read_heat_pulse_data("file.txt")
+vh <- calc_heat_pulse_velocity(data)
+qc <- flag_vh_quality(vh)  # <- CRITICAL STEP
+vh_clean <- qc$vh_flagged %>% filter(quality_flag == "OK")
+```
+
+### 2. Visual Verification
+
+```{r eval=FALSE}
+# ALWAYS plot your flagged data
+ggplot(qc$vh_flagged, aes(x = datetime, y = Vh_cm_hr, color = quality_flag)) +
+  geom_point() +
+  facet_wrap(~sensor_position, ncol = 1)
+```
+
+### 3. Keep Original Data
+
+```{r eval=FALSE}
+# Never overwrite original vh_results
+qc_results <- flag_vh_quality(vh_results)  # Original preserved
+vh_clean <- qc_results$vh_flagged %>% filter(quality_flag == "OK")
+```
+
+---
+
+## Summary
+
+- **Use `flag_vh_quality()`** on Vh results (not raw temperature data)
+- **Rolling median detection** adapts to local patterns without seasonal decomposition
+- **Rate of change detection** catches unphysiological rapid changes
+- **Default settings** work well for most cases (window=5, threshold=3, max_change=4)
+- **Quality flags** follow hierarchy: MISSING > ILLOGICAL > OUTLIER > SUSPECT > OK
+- **Always visually verify** flagged points before removing data
+- **Only fill small gaps** (default: <= 24 hours)
+
+### Quick Reference Card
+
+```{r eval=FALSE}
+# Standard workflow:
+qc <- flag_vh_quality(vh_results)                     # All defaults
+
+qc <- flag_vh_quality(vh_results,
+                      wood_properties = "eucalyptus") # Species thresholds
+
+qc <- flag_vh_quality(vh_results,
+                      rolling_threshold = 2.5,        # More sensitive
+                      max_change_cm_hr = 3)           # Stricter change limit
+
+# Use results:
+vh_clean <- qc$vh_flagged %>% filter(quality_flag == "OK")
+print(qc$gap_report)
+table(qc$vh_flagged$quality_flag)
+```
