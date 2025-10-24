@@ -1430,6 +1430,11 @@ add_quality_flags <- function(results) {
 
   return(results)
 }
+#' Get Default Calculation Parameters
+#'
+#' Returns a list of default calculation parameters for heat pulse velocity calculations.
+#'
+#' @return A named list containing default parameter values for HPV calculations
 #'
 #' @details
 #' Default parameters are:

@@ -12,19 +12,27 @@
 
 ## Key Features
 
+### Data Import & Preprocessing
 - **Multi-format Import**: Supports current JSON-like format and legacy formats from ICT SFM1x sensors
 - **Automatic Format Detection**: Intelligently detects data format without user specification
+- **Clock Drift Correction**: Fix device clock drift with linear interpolation from a single calibration point
 - **Comprehensive Validation**: Built-in data quality checks and validation
+
+### Heat Pulse Velocity Calculations
 - **Multiple Calculation Methods**: Implements 6 core heat pulse velocity calculation methods:
   - Heat Ratio Method (HRM) - includes Peclet number calculation
   - Maximum Heat Ratio (MHR)
   - Modified HRM variants (HRMXa, HRMXb)
   - T-max methods (Cohen, Kluitenberg)
-- **Post-Processing Features**:
-  - Selectable DMA (sDMA) - Apply automatic method switching after calculation
+
+### Post-Processing & Quality Control
+- **Selectable DMA (sDMA)**: Apply automatic method switching after calculation
   - Choose your own secondary method for high-flow conditions
   - Efficient: calculate base methods once, apply multiple sDMA variants
-- **Quality Control**: Automatic quality flagging and diagnostic tools
+- **Two-Tier Quality Flagging**: Comprehensive quality control system
+  - **CALC_ flags**: Calculation quality (FAILED, INFINITE, EXTREME)
+  - **DATA_ flags**: Data quality (MISSING, ILLOGICAL, OUTLIER, SUSPECT)
+  - Detects missing pulses, outliers, rate-of-change issues, cross-sensor anomalies
 - **Flexible Analysis**: Extensive utilities for filtering, summarising, and exporting results
 - **Advanced Visualisation**: Specialised plotting functions including dual-axis sDMA plots
 
@@ -111,6 +119,58 @@ plot_sdma_timeseries(vh_sdma, sdma_method = "sDMA:MHR")
 - Shows which method was actually used via `selected_method` column
 - Can be applied after corrections: `apply_hpv_corrections() %>% apply_sdma_processing()`
 - Dedicated dual-axis plotting function
+
+## Complete Workflow
+
+```r
+library(sapfluxr)
+
+# 1. Import data (auto-detects format)
+heat_pulse_data <- read_heat_pulse_data("mydata.txt")
+
+# 1a. (Optional) Fix clock drift if device clock was inaccurate
+heat_pulse_data$measurements <- fix_clock_drift(
+  heat_pulse_data$measurements,
+  device_time_col = "datetime",
+  observed_device_time = as.POSIXct("2025-01-16 08:05:00"),  # What device showed
+  observed_actual_time = as.POSIXct("2025-01-16 08:00:00")   # Actual correct time
+)
+
+# 2. Calculate heat pulse velocities
+vh_results <- calc_heat_pulse_velocity(
+  heat_pulse_data,
+  methods = c("HRM", "MHR", "HRMXa", "Tmax_Klu"),
+  wood_properties = "eucalyptus"
+)
+
+# 3. Apply comprehensive quality control
+qc_results <- flag_vh_quality(
+  vh_results,
+  wood_properties = "eucalyptus",
+  detect_missing_pulses = TRUE,
+  detect_outliers = TRUE,
+  detect_rate_of_change = TRUE
+)
+vh_flagged <- qc_results$vh_flagged
+
+# Check quality flags (two-tier system: CALC_ and DATA_ prefixes)
+table(vh_flagged$quality_flag)
+
+# View gap report
+print(qc_results$gap_report)
+
+# 4. (Optional) Apply sDMA post-processing
+vh_sdma <- apply_sdma_processing(vh_flagged, secondary_method = "MHR")
+
+# 5. Visualise results
+plot_vh_timeseries(vh_flagged, methods = c("HRM", "MHR", "HRMXa"))
+plot_heat_pulse_trace(heat_pulse_data, vh_flagged, pulse_id = 1)
+plot_sdma_timeseries(vh_sdma, sdma_method = "sDMA:MHR")
+
+# 6. Export clean data only
+clean_data <- vh_flagged[vh_flagged$quality_flag == "OK", ]
+write.csv(clean_data, "sap_velocity_clean.csv", row.names = FALSE)
+```
 
 ## License
 

@@ -1,21 +1,25 @@
 graph TB
-    Start([Raw SFM1x Data]) --> Import[Import Data<br/>Extract Temps & Diagnostics]
-    Import --> Setup[Setup Parameters<br/>thermal_diffusivity, probe_spacing,<br/>heat_pulse_duration, windows]
+    Start([Raw SFM1x Data]) --> Import[Import Data<br/>read_heat_pulse_data<br/>Extract Temps & Diagnostics]
+    Import --> ClockDrift{Clock Drift<br/>Detected?}
+    ClockDrift -->|Yes| FixDrift[Fix Clock Drift<br/>fix_clock_drift<br/>Linear interpolation from calibration point]
+    ClockDrift -->|No| Setup
+    FixDrift --> Setup[Setup Parameters<br/>thermal_diffusivity, probe_spacing,<br/>heat_pulse_duration, windows]
     Setup --> Baseline[Calculate Pre-Pulse Baseline<br/>Mean T during 0-30s]
     Baseline --> DeltaT[Calculate delta_T<br/>T - Baseline for each probe]
     DeltaT --> Ratios[Calculate Basic Ratios<br/>delta_T_downstream/delta_T_upstream for each pair]
 
-    Ratios --> Methods{Select Method}
+    Ratios --> Methods{Select Method<br/>calc_heat_pulse_velocity}
 
     Methods -->|HRM| HRM1[Extract Window 60-100s]
     HRM1 --> HRM2[Average Ratios in Window]
     HRM2 --> HRM3[Vh = thermal_diffusivity/probe_spacing × ln ratio × 3600]
-    HRM3 --> HRMOut[HRM Velocity]
+    HRM3 --> HRM4[Calculate Peclet Number<br/>Pe = Vh × x / D × 3600]
+    HRM4 --> HRMOut[HRM Velocity + Pe<br/>CALC_ quality flags applied]
 
     Methods -->|MHR| MHR1[Find delta_T_max for each probe]
     MHR1 --> MHR2[Calculate max ratio<br/>delta_T_downstream_max/delta_T_upstream_max]
     MHR2 --> MHR3[Vh = thermal_diffusivity/probe_spacing × ln max_ratio × 3600]
-    MHR3 --> MHROut[MHR Velocity]
+    MHR3 --> MHROut[MHR Velocity<br/>CALC_ quality flags applied]
 
     Methods -->|HRMX| HRMX1[Extract Pre-Max Values<br/>Only rising phase]
     HRMX1 --> HRMX2[Define Window<br/>hrmx_lower_threshold × delta_T_max to<br/>hrmx_upper_threshold × delta_T_max]
@@ -25,37 +29,41 @@ graph TB
     HRMXChoice -->|HRMXb| HRMXb[Ratio of averaged temps]
     HRMXa --> HRMX4[Vh = thermal_diffusivity/probe_spacing × ln ratio × 3600]
     HRMXb --> HRMX4
-    HRMX4 --> HRMXOut[HRMX Velocity]
+    HRMX4 --> HRMXOut[HRMX Velocity<br/>CALC_ quality flags applied]
 
     Methods -->|Tmax Cohen| TC1[Find time_to_max_temp]
     TC1 --> TC2[Vh = √ probe_spacing²-4×thermal_diffusivity×time_to_max / time_to_max]
-    TC2 --> TCOut[Tmax_Coh Velocity]
+    TC2 --> TCOut[Tmax_Coh Velocity<br/>CALC_ quality flags applied]
 
     Methods -->|Tmax Kluit| TK1[Find time_to_max_temp]
     TK1 --> TK2[Include heat_pulse_duration]
     TK2 --> TK3[Vh with finite pulse correction]
-    TK3 --> TKOut[Tmax_Klu Velocity]
+    TK3 --> TKOut[Tmax_Klu Velocity<br/>CALC_ quality flags applied]
 
-    HRMOut --> Correct
-    MHROut --> Correct
+    HRMOut --> QualityControl
+    MHROut --> QualityControl
+    HRMXOut --> QualityControl
+    TCOut --> QualityControl
+    TKOut --> QualityControl
 
-    HRMOut --> DMA
-    TKOut --> DMA
-	  TCOut --> DMA
-	  MHROut --> DMA
-	  HRMXOut --> DMA
-    DMA --> DMA1{Calculate Vh_critical_threshold<br/>thermal_diffusivity/probe_spacing × 3600}
-    DMA1 --> DMA2{Vh_HRM < Vh_critical_threshold?}
-    DMA2 -->|Yes: Low Flow| DMA3[Use HRM]
-    DMA2 -->|No: High Flow| DMA4[Use Tmax or MHR]
-    DMA3 --> DMAOut[DMA Velocity]
-    DMA4 --> DMAOut
+    QualityControl[Quality Control<br/>flag_vh_quality<br/>Apply DATA_ flags] --> QC1[Detect Missing Pulses<br/>DATA_MISSING]
+    QC1 --> QC2[Detect Illogical Values<br/>DATA_ILLOGICAL]
+    QC2 --> QC3[Detect Statistical Outliers<br/>Rolling Median + Rate of Change<br/>DATA_OUTLIER]
+    QC3 --> QC4[Detect Cross-Sensor Anomalies<br/>Negative Flows<br/>DATA_SUSPECT]
+    QC4 --> QCOut[Flagged Results<br/>Two-tier quality flags:<br/>CALC_ + DATA_]
 
-    HRMXOut --> Correct
-    TCOut --> Correct
-    DMAOut --> Correct
-    TKOut --> Correct
+    QCOut --> PostProcess{Apply Post-Processing?}
+    PostProcess -->|Yes: sDMA| SDMA[Selectable DMA<br/>apply_sdma_processing<br/>Secondary method choice]
+    PostProcess -->|No| Correct
 
+    SDMA --> SDMA1{Calculate Peclet Number<br/>From HRM results}
+    SDMA1 --> SDMA2{Pe < 1.0?}
+    SDMA2 -->|Yes: Low Flow| SDMA3[Use HRM]
+    SDMA2 -->|No: High Flow| SDMA4[Use Secondary Method<br/>MHR, Tmax_Klu, Tmax_Coh,<br/>HRMXa, or HRMXb]
+    SDMA3 --> SDMAOut[sDMA Velocity<br/>with selected_method column]
+    SDMA4 --> SDMAOut
+
+    SDMAOut --> Correct
     Correct[Apply Corrections] --> Space{Probe Spacing<br/>Correction Needed?}
     Space -->|Yes| SpaceCorr[Measure at Zero Flow<br/>Calculate probe_spacing_corrected]
     Space -->|No| Wound
@@ -65,12 +73,15 @@ graph TB
     Wound -->|No| Convert
     WoundCorr --> Convert[Convert to Sap Flux Density<br/>sap_flux_density = f moisture_content, Vh]
 
-    Convert --> Output[(Output Results<br/>Vh by method, depth,<br/>timestamp, diagnostics)]
+    Convert --> Output[(Output Results<br/>Vh by method, depth,<br/>timestamp, diagnostics,<br/>quality flags)]
 
     style Start fill:#e1f5ff
     style Output fill:#ffe1e1
     style Methods fill:#fff4e1
-    style DMA2 fill:#fff4e1
+    style SDMA2 fill:#fff4e1
     style HRMXChoice fill:#fff4e1
+    style ClockDrift fill:#ffe1ff
+    style QualityControl fill:#ffe1e1
+    style PostProcess fill:#fff4e1
     style Space fill:#e1ffe1
     style Wound fill:#e1ffe1
