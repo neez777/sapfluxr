@@ -1151,19 +1151,19 @@ plot_sdma_timeseries <- function(vh_results,
     p <- p + ggplot2::geom_segment(
       data = segments_data,
       ggplot2::aes(x = x, y = y, xend = xend, yend = yend, color = method),
-      linewidth = 0.8, alpha = 0.8
+      linewidth = 0.8#, alpha = 0.8
     )
   }
 
   # Add points on top
-  p <- p +
-    ggplot2::geom_point(ggplot2::aes(color = selected_method), size = 1, alpha = 0.5)
+#  p <- p +
+#    ggplot2::geom_point(ggplot2::aes(color = selected_method), size = 1, alpha = 0.5)
 
   # Add Peclet number line if requested (with legend entry)
   if (show_peclet) {
     p <- p +
       ggplot2::geom_line(ggplot2::aes(y = peclet_scaled, color = "Peclet Number"),
-                        linewidth = 0.8, alpha = 0.6) +
+                        linewidth = 0.5, alpha = 0.6) +
       ggplot2::geom_hline(yintercept = 1.0 * scale_factor + offset,
                          linetype = "dashed", color = "black", linewidth = 0.5) +
       ggplot2::scale_color_manual(
@@ -1243,4 +1243,33 @@ plot_sdma_timeseries <- function(vh_results,
   cat(strrep("=", 67), "\n\n")
 
   return(p)
+}
+
+
+#' Plot Pulse Temperature Traces (Basic Diagnostic)
+#'
+#' Simple diagnostic plot showing deltaT traces for all four sensors.
+#' This is an internal helper function used for quick diagnostics.
+#'
+#' @param pulse_data Pulse data subset
+#' @param deltaT_do Delta temperature for downstream outer sensor
+#' @param deltaT_di Delta temperature for downstream inner sensor
+#' @param deltaT_uo Delta temperature for upstream outer sensor
+#' @param deltaT_ui Delta temperature for upstream inner sensor
+#' @param pulse_id Pulse identifier
+#' @keywords internal
+plot_pulse_temps <- function(pulse_data, deltaT_do, deltaT_di, deltaT_uo, deltaT_ui, pulse_id) {
+  if (!requireNamespace("graphics", quietly = TRUE)) {
+    return()
+  }
+
+  graphics::plot(pulse_data$datetime, deltaT_do, type = "l", las = 1,
+                 xlab = "Time", ylab = expression(paste(Delta, 'T')),
+                 main = paste("Pulse", pulse_id),
+                 xlim = range(pulse_data$datetime, na.rm = TRUE),
+                 ylim = c(0, max(deltaT_do, deltaT_uo, deltaT_di, deltaT_ui, na.rm = TRUE)))
+  graphics::lines(pulse_data$datetime, deltaT_uo, lty = 2)
+  graphics::lines(pulse_data$datetime, deltaT_di, lty = 3)
+  graphics::lines(pulse_data$datetime, deltaT_ui, lty = 4)
+  graphics::legend("topleft", lty = c(1, 2, 3, 4), legend = c("DO", "UO", "DI", "UI"), bty = "n")
 }

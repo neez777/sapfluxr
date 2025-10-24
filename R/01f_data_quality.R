@@ -540,71 +540,76 @@ detect_and_fill_missing_pulses <- function(vh_results,
     }
   }
 
-  # Create complete time series
-  start_time <- min(vh_results$datetime, na.rm = TRUE)
-  end_time <- max(vh_results$datetime, na.rm = TRUE)
+  # Detect gaps by checking consecutive timestamps and interpolate linearly
+  # This approach handles clock drift naturally by using actual timing between measurements
+  actual_times <- sort(unique(vh_results$datetime))
+  missing_times <- c()
+  gap_info <- list()
+  gap_counter <- 0
 
-  expected_times <- seq(from = start_time,
-                        to = end_time,
-                        by = paste(expected_interval_hours * 60, "min"))
+  # Loop through consecutive pairs of actual measurements
+  for (i in seq_len(length(actual_times) - 1)) {
+    time_A <- actual_times[i]
+    time_B <- actual_times[i + 1]
 
-  # Find missing times
-  actual_times <- unique(vh_results$datetime)
+    # Calculate actual gap duration
+    gap_duration_hours <- as.numeric(difftime(time_B, time_A, units = "hours"))
 
-  is_matched <- function(expected_time, actual_times, tolerance_sec) {
-    time_diffs <- abs(as.numeric(difftime(actual_times, expected_time, units = "secs")))
-    any(time_diffs <= tolerance_sec)
+    # Determine if gap is larger than expected (with tolerance)
+    gap_threshold <- expected_interval_hours * 1.5
+
+    if (gap_duration_hours > gap_threshold) {
+      # Calculate number of missing pulses
+      n_missing <- round(gap_duration_hours / expected_interval_hours) - 1
+
+      if (n_missing > 0) {
+        # Linear interpolation: divide gap into equal intervals
+        # For 1 missing: midpoint
+        # For 2 missing: 1/3 and 2/3 points, etc.
+        interpolated_times <- time_A + (time_B - time_A) * (1:n_missing) / (n_missing + 1)
+
+        missing_times <- c(missing_times, interpolated_times)
+
+        # Track this gap for reporting
+        gap_counter <- gap_counter + 1
+        gap_info[[gap_counter]] <- list(
+          gap_start = time_A,
+          gap_end = time_B,
+          n_missing = n_missing,
+          duration_hours = gap_duration_hours,
+          interpolated_times = interpolated_times
+        )
+      }
+    }
   }
 
-  unmatched_mask <- !sapply(expected_times, is_matched,
-                            actual_times = actual_times,
-                            tolerance_sec = tolerance_seconds)
+  missing_times <- sort(missing_times)
 
-  missing_times <- expected_times[unmatched_mask]
-
-  # Generate gap report
+  # Generate gap report from gap_info
   gap_report <- NULL
-  if (length(missing_times) > 0) {
-    missing_times_sorted <- sort(missing_times)
-    time_diffs_missing <- c(Inf, diff(missing_times_sorted))
-    gap_starts_idx <- which(time_diffs_missing > expected_interval_hours * 1.5)
-
-    gaps <- lapply(seq_along(gap_starts_idx), function(i) {
-      if (i < length(gap_starts_idx)) {
-        gap_end_idx <- gap_starts_idx[i + 1] - 1
-      } else {
-        gap_end_idx <- length(missing_times_sorted)
-      }
-
-      gap_times <- missing_times_sorted[gap_starts_idx[i]:gap_end_idx]
-      gap_start <- min(gap_times)
-      gap_end <- max(gap_times)
-      n_missing <- length(gap_times)
-      duration_hours <- as.numeric(difftime(gap_end, gap_start, units = "hours")) + expected_interval_hours
-      filled <- duration_hours <= max_gap_to_fill_hours
-
+  if (length(gap_info) > 0) {
+    gaps <- lapply(gap_info, function(gap) {
+      filled <- gap$duration_hours <= max_gap_to_fill_hours
       data.frame(
-        gap_start = gap_start,
-        gap_end = gap_end,
-        n_missing = n_missing,
-        duration_hours = duration_hours,
+        gap_start = gap$gap_start,
+        gap_end = gap$gap_end,
+        n_missing = gap$n_missing,
+        duration_hours = gap$duration_hours,
         filled = filled
       )
     })
-
     gap_report <- do.call(rbind, gaps)
   }
 
   # Add rows for small gaps only
   vh_complete <- vh_results
 
-  if (add_rows && length(missing_times) > 0 && !is.null(gap_report)) {
+  if (add_rows && length(gap_info) > 0) {
+    # Collect times to fill from gaps that meet the max_gap_hours threshold
     times_to_fill <- c()
-    for (i in seq_len(nrow(gap_report))) {
-      if (gap_report$filled[i]) {
-        gap_times <- missing_times_sorted[missing_times_sorted >= gap_report$gap_start[i] &
-                                           missing_times_sorted <= gap_report$gap_end[i]]
-        times_to_fill <- c(times_to_fill, gap_times)
+    for (gap in gap_info) {
+      if (gap$duration_hours <= max_gap_to_fill_hours) {
+        times_to_fill <- c(times_to_fill, gap$interpolated_times)
       }
     }
 
@@ -651,10 +656,10 @@ detect_and_fill_missing_pulses <- function(vh_results,
     vh_complete = vh_complete,
     gap_report = gap_report,
     summary = list(
-      n_expected = length(expected_times),
       n_actual = length(actual_times),
       n_missing = length(missing_times),
       n_filled = if (!is.null(gap_report)) sum(gap_report$n_missing[gap_report$filled]) else 0,
+      n_gaps = length(gap_info),
       expected_interval_hours = expected_interval_hours
     )
   )

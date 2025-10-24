@@ -36,6 +36,16 @@
 #'   in interactive mode (default: TRUE). Set to FALSE for non-interactive scripts.
 #' @param plot_results Logical indicating whether to generate diagnostic plots
 #' @param show_progress Logical indicating whether to report progress (default: TRUE)
+#' @param fill_missing_pulses Logical indicating whether to auto-detect and fill missing pulses
+#'   in the time series (default: TRUE). Missing pulses are added as rows with Vh_cm_hr = NA
+#'   and quality_flag = "DATA_MISSING". This ensures complete time series for plotting and
+#'   interpolation.
+#' @param max_gap_hours Numeric maximum gap duration (hours) to fill with DATA_MISSING rows.
+#'   Gaps larger than this are reported in messages but not filled to avoid creating excessive
+#'   missing rows (default: 24 hours). Only applies if fill_missing_pulses = TRUE.
+#' @param interval_tolerance_seconds Numeric tolerance in seconds for matching pulse times.
+#'   Allows for clock drift and timing jitter (default: 5 seconds). Only applies if
+#'   fill_missing_pulses = TRUE.
 #'
 #' @details
 #' The parameters list should contain:
@@ -107,7 +117,10 @@ calc_heat_pulse_velocity <- function(heat_pulse_data,
                                      probe_corrections = NULL,
                                      confirm_parameters = TRUE,
                                      plot_results = FALSE,
-                                     show_progress = TRUE) {
+                                     show_progress = TRUE,
+                                     fill_missing_pulses = TRUE,
+                                     max_gap_hours = 24,
+                                     interval_tolerance_seconds = 5) {
 
   if (!inherits(heat_pulse_data, "heat_pulse_data")) {
     stop("Input must be a heat_pulse_data object from read_heat_pulse_data()")
@@ -285,6 +298,60 @@ calc_heat_pulse_velocity <- function(heat_pulse_data,
               "  3. Estimating wound diameter\n",
               "  4. Using apply_hpv_corrections() before flux calculations\n",
               "Set options(sapfluxr.suppress_correction_warnings = TRUE) to suppress this message.")
+    }
+  }
+
+  # Auto-fill missing pulses if requested
+  if (fill_missing_pulses && nrow(combined_results) > 1) {
+    # Check if there are enough unique datetimes for auto-detection
+    n_unique_times <- length(unique(combined_results$datetime))
+
+    if (n_unique_times >= 2) {
+      if (show_progress) {
+        message("\nDetecting missing pulses...")
+      }
+
+      tryCatch({
+        missing_pulse_results <- detect_and_fill_missing_pulses(
+          vh_results = combined_results,
+          expected_interval_hours = NULL,  # Auto-detect
+          tolerance_seconds = interval_tolerance_seconds,
+          add_rows = TRUE,
+          max_gap_to_fill_hours = max_gap_hours,
+          verbose = show_progress
+        )
+
+        combined_results <- missing_pulse_results$vh_complete
+
+        # Report any large gaps that weren't filled
+        if (!is.null(missing_pulse_results$gap_report) && nrow(missing_pulse_results$gap_report) > 0) {
+          large_gaps <- missing_pulse_results$gap_report[!missing_pulse_results$gap_report$filled, ]
+          if (nrow(large_gaps) > 0) {
+            message(sprintf("\nWarning: %d large gap(s) > %.1f hours detected but not filled:",
+                           nrow(large_gaps), max_gap_hours))
+            for (i in seq_len(nrow(large_gaps))) {
+              message(sprintf("  Gap %d: %s to %s (%.1f hours, %d missing pulses)",
+                             i,
+                             format(large_gaps$gap_start[i]),
+                             format(large_gaps$gap_end[i]),
+                             large_gaps$duration_hours[i],
+                             large_gaps$n_missing[i]))
+            }
+            message("  Increase max_gap_hours parameter to fill these gaps if desired.")
+          }
+        }
+
+        # Attach gap metadata as attribute
+        attr(combined_results, "missing_pulse_summary") <- missing_pulse_results$summary
+        attr(combined_results, "gap_report") <- missing_pulse_results$gap_report
+
+      }, error = function(e) {
+        if (show_progress) {
+          message(sprintf("Note: Could not auto-detect missing pulses (%s)", e$message))
+        }
+      })
+    } else if (show_progress) {
+      message("\nNote: Insufficient data for missing pulse detection (need at least 2 unique timestamps)")
     }
   }
 
@@ -1353,37 +1420,16 @@ add_quality_flags <- function(results) {
   results$quality_flag[abs(results$Vh_cm_hr) > 200] <- "CALC_EXTREME"
   results$quality_flag[results$Vh_cm_hr < -50] <- "CALC_EXTREME"
 
-  return(results)
-}
-
-#' Plot Temperature Differences for Diagnostic Purposes
-#'
-#' @param pulse_data Data for single pulse
-#' @param deltaT_do Delta temperatures for downstream outer
-#' @param deltaT_di Delta temperatures for downstream inner
-#' @param deltaT_uo Delta temperatures for upstream outer
-#' @param deltaT_ui Delta temperatures for upstream inner
-#' @param pulse_id Pulse ID for title
-#' @keywords internal
-plot_pulse_temps <- function(pulse_data, deltaT_do, deltaT_di, deltaT_uo, deltaT_ui, pulse_id) {
-  if (!requireNamespace("graphics", quietly = TRUE)) {
-    return()
+  # Flag data quality issues (only for values not already flagged)
+  # DATA_ILLOGICAL: exceeds hard maximum threshold (physically impossible)
+  ok_indices <- which(results$quality_flag == "OK")
+  illogical_indices <- ok_indices[abs(results$Vh_cm_hr[ok_indices]) > 500]
+  if (length(illogical_indices) > 0) {
+    results$quality_flag[illogical_indices] <- "DATA_ILLOGICAL"
   }
 
-  graphics::plot(pulse_data$datetime, deltaT_do, type = "l", las = 1,
-                 xlab = "Time", ylab = expression(paste(Delta, 'T')),
-                 main = paste("Pulse", pulse_id),
-                 xlim = range(pulse_data$datetime, na.rm = TRUE),
-                 ylim = c(0, max(deltaT_do, deltaT_uo, deltaT_di, deltaT_ui, na.rm = TRUE)))
-  graphics::lines(pulse_data$datetime, deltaT_uo, lty = 2)
-  graphics::lines(pulse_data$datetime, deltaT_di, lty = 3)
-  graphics::lines(pulse_data$datetime, deltaT_ui, lty = 4)
-  graphics::legend("topleft", lty = c(1, 2, 3, 4), legend = c("DO", "UO", "DI", "UI"), bty = "n")
-}#' Get Default Calculation Parameters
-#'
-#' Returns a list of default parameters for heat pulse velocity calculations.
-#'
-#' @return A list containing default calculation parameters
+  return(results)
+}
 #'
 #' @details
 #' Default parameters are:
@@ -1476,314 +1522,3 @@ validate_parameters <- function(parameters) {
   }
 }
 
-
-#' Format Parameter Summary for Display
-#'
-#' @param probe_config ProbeConfiguration object
-#' @param wood_properties WoodProperties object
-#' @param params List of calculation parameters
-#' @param methods Character vector of methods
-#' @param n_pulses Number of pulses to process
-#' @return Character string with formatted summary
-#' @keywords internal
-format_parameter_summary <- function(probe_config, wood_properties, params, methods, n_pulses) {
-
-  # Build header
-  header <- paste0(
-    "\n",
-    strrep("=", 67), "\n",
-    "  HEAT PULSE VELOCITY CALCULATION - PARAMETER SUMMARY\n",
-    strrep("=", 67), "\n\n"
-  )
-
-  # Probe configuration section
-  probe_section <- paste0(
-    "\U0001F4CD PROBE CONFIGURATION\n",
-    sprintf("  Name:               %s\n", probe_config$config_name),
-    sprintf("  Type:               %s\n", tools::toTitleCase(probe_config$config_type)),
-    sprintf("  Upstream spacing:   %.1f mm (%.2f cm)\n",
-            abs(probe_config$sensor_positions$upstream_outer) * 10,
-            abs(probe_config$sensor_positions$upstream_outer)),
-    sprintf("  Downstream spacing: %.1f mm (%.2f cm)\n",
-            abs(probe_config$sensor_positions$downstream_outer) * 10,
-            abs(probe_config$sensor_positions$downstream_outer)),
-    sprintf("  Pulse duration:     %s seconds\n", probe_config$heat_pulse_duration),
-    sprintf("  Compatible methods: %s\n", paste(probe_config$compatible_methods, collapse = ", ")),
-    sprintf("  Source:             %s\n\n",
-            ifelse(is.null(probe_config$yaml_source), "Programmatic",
-                   basename(probe_config$yaml_source)))
-  )
-
-  # Wood properties section
-  wood_section <- paste0(
-    "\U0001F333 WOOD PROPERTIES\n",
-    sprintf("  Configuration:      %s\n", wood_properties$config_name),
-    sprintf("  Species:            %s\n", wood_properties$species),
-    sprintf("  Thermal diffusivity: %.5f cm\U00B2/s\n", wood_properties$thermal_diffusivity),
-    sprintf("  Wood type:          %s\n", tools::toTitleCase(wood_properties$wood_type))
-  )
-
-  # Add optional wood properties
-  if (!is.null(wood_properties$moisture_content)) {
-    wood_section <- paste0(wood_section,
-                           sprintf("  Moisture content:   %.1f%%\n", wood_properties$moisture_content))
-  }
-  if (!is.null(wood_properties$tree_measurements$dbh)) {
-    wood_section <- paste0(wood_section,
-                           sprintf("  DBH:                %.1f cm\n", wood_properties$tree_measurements$dbh))
-  }
-  if (!is.null(wood_properties$tree_measurements$sapwood_depth)) {
-    wood_section <- paste0(wood_section,
-                           sprintf("  Sapwood depth:      %.2f cm\n", wood_properties$tree_measurements$sapwood_depth))
-  }
-
-  wood_section <- paste0(wood_section,
-                         sprintf("  Source:             %s\n\n",
-                                 ifelse(is.null(wood_properties$yaml_source), "Programmatic",
-                                        basename(wood_properties$yaml_source))))
-
-  # Calculation parameters section
-  calc_section <- paste0(
-    "\U00002699\U0000FE0F  CALCULATION PARAMETERS\n",
-    sprintf("  Methods:            %s\n", paste(methods, collapse = ", ")),
-    sprintf("  Diffusivity:        %.5f cm\U00B2/s (from wood properties)\n", params$diffusivity),
-    sprintf("  Probe spacing:      %.2f cm (from probe config)\n", params$probe_spacing),
-    sprintf("  Pre-pulse period:   %s sec\n", params$pre_pulse),
-    sprintf("  HRM window:         %s-%s sec\n", params$HRM_start, params$HRM_end),
-    sprintf("  Pulse duration:     %s sec (for Tmax_Klu)\n\n", params$tp_1)
-  )
-
-  # Processing section
-  est_time_min <- max(1, round(n_pulses * length(methods) * 0.001, 1))
-  processing_section <- paste0(
-    "\U0001F4CA PROCESSING\n",
-    sprintf("  Pulses to process:  %s\n", format(n_pulses, big.mark = ",")),
-    sprintf("  Estimated time:     ~%.1f minute%s\n\n",
-            est_time_min, ifelse(est_time_min == 1, "", "s"))
-  )
-
-  # Footer
-  footer <- paste0(strrep("=", 67), "\n")
-
-  # Combine all sections
-  summary <- paste0(header, probe_section, wood_section, calc_section, processing_section, footer)
-
-  return(summary)
-}
-
-
-#' Prompt User for Parameter Confirmation
-#'
-#' @param probe_config ProbeConfiguration object
-#' @param wood_properties WoodProperties object
-#' @param params List of calculation parameters
-#' @param methods Character vector of methods
-#' @param n_pulses Number of pulses
-#' @return Logical indicating whether user confirmed
-#' @keywords internal
-prompt_parameter_confirmation <- function(probe_config, wood_properties, params, methods, n_pulses) {
-
-  # Show summary
-  summary <- format_parameter_summary(probe_config, wood_properties, params, methods, n_pulses)
-  cat(summary)
-
-  # Prompt for confirmation
-  cat("\nAre these parameters correct? (yes/no): ")
-  response <- tolower(trimws(readline()))
-
-  if (response %in% c("y", "yes")) {
-    return(TRUE)
-  } else {
-    # Provide guidance
-    cat("\nTo modify these parameters:\n\n")
-    cat("1. PROBE CONFIGURATION:\n")
-    cat("   - Use different config: probe_config = \"asymmetrical\"\n")
-    cat("   - Load custom YAML: probe_config = load_probe_config(\"path/to/config.yaml\")\n")
-    cat("   - Create custom: probe_config = create_custom_probe_config(...)\n\n")
-
-    cat("2. WOOD PROPERTIES:\n")
-    cat("   - Use different config: wood_properties = \"eucalyptus\"\n")
-    cat("   - Load custom YAML: wood_properties = load_wood_properties(\"path/to/wood.yaml\")\n")
-    cat("   - Create custom: wood_properties = create_custom_wood_properties(...)\n")
-    cat("   - Override specific values: wood_properties = load_wood_properties(\"eucalyptus\",\n")
-    cat("                                 overrides = list(thermal_diffusivity = 0.003))\n\n")
-
-    cat("3. CALCULATION PARAMETERS:\n")
-    cat("   - Override diffusivity: diffusivity = 0.003\n")
-    cat("   - Override probe spacing: probe_spacing = 0.6\n")
-    cat("   - Override multiple: parameters = list(HRM_start = 70, HRM_end = 110)\n\n")
-
-    cat("4. METHODS:\n")
-    cat("   - Change methods: methods = c(\"HRM\", \"MHR\", \"Tmax_Coh\")\n\n")
-
-    cat("See ?calc_heat_pulse_velocity for full documentation.\n")
-
-    return(FALSE)
-  }
-}
-
-
-#' Print Calculation Summary
-#'
-#' Prints a summary of calculation results including success rates per method
-#'
-#' @param results Results tibble from calc_heat_pulse_velocity
-#' @param n_pulses Total number of pulses processed
-#' @keywords internal
-print_calculation_summary <- function(results, n_pulses) {
-
-  cat("\n")
-  cat(strrep("=", 67), "\n")
-  cat("  CALCULATION SUMMARY\n")
-  cat(strrep("=", 67), "\n\n")
-
-  cat(sprintf("Total pulses processed: %s\n\n", format(n_pulses, big.mark = ",")))
-
-  # Calculate success rates per method
-  methods <- unique(results$method)
-
-  cat("Success rates by method:\n")
-  cat(strrep("-", 67), "\n")
-  cat(sprintf("%-15s %10s %10s %10s\n", "Method", "Calculated", "Missing", "Success %"))
-  cat(strrep("-", 67), "\n")
-
-  for (method in methods) {
-    method_results <- results[results$method == method, ]
-    total <- nrow(method_results)
-    calculated <- sum(!is.na(method_results$Vh_cm_hr) & is.finite(method_results$Vh_cm_hr))
-    missing <- total - calculated
-    success_pct <- round(100 * calculated / total, 1)
-
-    cat(sprintf("%-15s %10s %10s %9.1f%%\n",
-                method,
-                format(calculated, big.mark = ","),
-                format(missing, big.mark = ","),
-                success_pct))
-  }
-
-  cat(strrep("-", 67), "\n\n")
-
-  # Quality flag summary
-  cat("Quality flags:\n")
-  flag_counts <- table(results$quality_flag)
-  for (flag in names(flag_counts)) {
-    cat(sprintf("  %-20s: %s\n", flag, format(flag_counts[flag], big.mark = ",")))
-  }
-
-  cat("\n")
-  cat(strrep("=", 67), "\n\n")
-}
-
-
-#' Create Test Sap Data Object
-#'
-#' Creates a properly formatted sap_data object for testing purposes.
-#'
-#' @param n_points Number of temperature measurements per pulse
-#' @param n_pulses Number of pulses to simulate
-#' @param add_noise Whether to add random noise to temperature readings
-#'
-#' @return A sap_data object compatible with package functions
-#'
-#' @keywords internal
-create_test_sap_data <- function(n_points = 120, n_pulses = 1, add_noise = TRUE) {
-
-  # Create test data for multiple pulses
-  all_measurements <- list()
-  all_diagnostics <- list()
-
-  for (pulse_num in 1:n_pulses) {
-    # Simulate a heat pulse response
-    time <- 1:n_points
-
-    # Pre-pulse temperatures (stable)
-    baseline_do <- 18.8
-    baseline_di <- 18.6
-    baseline_uo <- 18.9
-    baseline_ui <- 18.7
-
-    # Simulate heat pulse response (starts at point 31)
-    pulse_start <- 31
-
-    # Temperature responses
-    do <- rep(baseline_do, n_points)
-    di <- rep(baseline_di, n_points)
-    uo <- rep(baseline_uo, n_points)
-    ui <- rep(baseline_ui, n_points)
-
-    # Add heat pulse response
-    for (i in pulse_start:n_points) {
-      t_after_pulse <- i - pulse_start
-      if (t_after_pulse > 0) {
-        # Downstream sensors (higher response)
-        do[i] <- baseline_do + 1.5 * exp(-0.02 * t_after_pulse) * (1 - exp(-0.1 * t_after_pulse))
-        di[i] <- baseline_di + 1.2 * exp(-0.02 * t_after_pulse) * (1 - exp(-0.1 * t_after_pulse))
-
-        # Upstream sensors (delayed, lower response)
-        if (t_after_pulse > 5) {
-          uo[i] <- baseline_uo + 0.8 * exp(-0.015 * (t_after_pulse - 5)) * (1 - exp(-0.08 * (t_after_pulse - 5)))
-          ui[i] <- baseline_ui + 0.6 * exp(-0.015 * (t_after_pulse - 5)) * (1 - exp(-0.08 * (t_after_pulse - 5)))
-        }
-      }
-    }
-
-    # Add noise if requested
-    if (add_noise) {
-      noise_level <- 0.01
-      do <- do + rnorm(n_points, 0, noise_level)
-      di <- di + rnorm(n_points, 0, noise_level)
-      uo <- uo + rnorm(n_points, 0, noise_level)
-      ui <- ui + rnorm(n_points, 0, noise_level)
-    }
-
-    # Create timestamp
-    start_time <- as.POSIXct("2024-01-01 10:00:00") + (pulse_num - 1) * 1800  # 30 min apart
-    datetime <- start_time + time
-
-    # Create measurements data frame
-    measurements <- data.frame(
-      pulse_id = pulse_num,
-      datetime = datetime,
-      do = do,
-      di = di,
-      uo = uo,
-      ui = ui
-    )
-
-    # Create diagnostics data frame
-    diagnostics <- data.frame(
-      pulse_id = pulse_num,
-      batt_volt = 4.1,
-      batt_current = 15.0,
-      batt_temp = 25.0,
-      external_volt = 23.0,
-      external_current = 50.0
-    )
-
-    all_measurements[[pulse_num]] <- measurements
-    all_diagnostics[[pulse_num]] <- diagnostics
-  }
-
-  # Combine all data
-  combined_measurements <- do.call(rbind, all_measurements)
-  combined_diagnostics <- do.call(rbind, all_diagnostics)
-
-  # Create heat_pulse_data object structure
-  heat_pulse_data <- list(
-    measurements = combined_measurements,
-    diagnostics = combined_diagnostics,
-    metadata = list(
-      format = "test_format",
-      file_path = "test_data.txt",
-      import_time = Sys.time(),
-      n_pulses = n_pulses
-    ),
-    validation = list(
-      valid = TRUE,
-      issues = character(0)
-    )
-  )
-
-  class(heat_pulse_data) <- "heat_pulse_data"
-  return(heat_pulse_data)
-}
