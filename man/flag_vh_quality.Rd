@@ -9,18 +9,19 @@ flag_vh_quality(
   wood_properties = NULL,
   detect_missing_pulses = TRUE,
   expected_interval_hours = NULL,
+  interval_tolerance_seconds = 5,
   check_illogical = TRUE,
   hard_max_vh = 500,
   flag_negative = TRUE,
-  outlier_method = "all",
-  seasonal_period = NULL,
-  remainder_threshold = 3,
-  use_mad = TRUE,
-  hampel_window = 7,
-  hampel_threshold = 3,
+  detect_outliers = TRUE,
+  rolling_window = 5,
+  rolling_threshold = 3,
+  detect_rate_of_change = TRUE,
+  max_change_cm_hr = 4,
   check_cross_sensor = TRUE,
   cross_sensor_threshold = 3,
   add_rows_for_missing = TRUE,
+  max_gap_to_fill_hours = 24,
   return_gap_report = TRUE,
   verbose = TRUE
 )
@@ -37,32 +38,37 @@ for species-specific thresholds}
 \item{expected_interval_hours}{Numeric, expected hours between pulses.
 If NULL, auto-detected from data (default: NULL)}
 
+\item{interval_tolerance_seconds}{Numeric, tolerance in seconds for matching pulse times.
+Allows for clock drift and jitter (default: 5 seconds)}
+
 \item{check_illogical}{Logical, whether to check for physically impossible values (default: TRUE)}
 
 \item{hard_max_vh}{Numeric, absolute maximum Vh in cm/hr (default: 500)}
 
 \item{flag_negative}{Logical, whether to flag negative flows as SUSPECT (default: TRUE)}
 
-\item{outlier_method}{Character vector of methods: "stl", "mstl", "hampel".
-Use "all" for all methods (default: "all")}
+\item{detect_outliers}{Logical, whether to detect statistical outliers (default: TRUE)}
 
-\item{seasonal_period}{Integer, number of measurements per daily cycle.
-If NULL, auto-detected (default: NULL, typically 48 for 30-min data)}
+\item{rolling_window}{Integer, half-width of rolling window for median calculation
+(default: 5, meaning 11-point window)}
 
-\item{remainder_threshold}{Numeric, IQR or MAD multiplier for STL remainder outliers.
-3 = Tukey "far out" rule (default: 3)}
+\item{rolling_threshold}{Numeric, MAD multiplier for rolling median outlier detection.
+Points deviating more than threshold × MAD from rolling median are flagged (default: 3)}
 
-\item{use_mad}{Logical, use MAD instead of IQR for robustness (default: TRUE)}
+\item{detect_rate_of_change}{Logical, whether to detect excessive rate of change (default: TRUE)}
 
-\item{hampel_window}{Integer, half-width of Hampel filter window (default: 7)}
-
-\item{hampel_threshold}{Numeric, MAD multiplier for Hampel filter (default: 3)}
+\item{max_change_cm_hr}{Numeric, maximum allowed change in Vh between consecutive pulses (cm/hr).
+Default: 4 cm/hr - larger jumps are unlikely to be real sap flow changes}
 
 \item{check_cross_sensor}{Logical, detect cross-sensor inconsistencies (default: TRUE)}
 
 \item{cross_sensor_threshold}{Numeric, MAD multiplier for cross-sensor comparison (default: 3)}
 
 \item{add_rows_for_missing}{Logical, add rows for missing pulses (default: TRUE)}
+
+\item{max_gap_to_fill_hours}{Numeric, maximum gap duration (hours) to fill with MISSING rows.
+Gaps larger than this are reported but not filled to avoid creating excessive missing rows.
+Default: 24 hours}
 
 \item{return_gap_report}{Logical, include detailed gap report (default: TRUE)}
 
@@ -80,34 +86,62 @@ List containing:
 }
 \description{
 Comprehensive quality control for heat pulse velocity (Vh) results.
-Detects missing pulses, illogical values, and statistical outliers while
-accounting for the natural daily cyclical pattern in sap flow data.
+Detects missing pulses, illogical values, and statistical outliers using
+simple rolling median and rate of change detection.
 }
 \details{
-\strong{Quality Flag Hierarchy (most severe wins):}
-\enumerate{
-\item \strong{MISSING} - No data for expected pulse timestamp
-\item \strong{ILLOGICAL} - Exceeds hard_max_vh or species max_velocity_cm_hr
-\item \strong{OUTLIER} - Statistical outlier in STL/MSTL remainder or Hampel filter
-\item \strong{SUSPECT} - Negative flow (possible misalignment) or cross-sensor anomaly
-\item \strong{OK} - No issues detected
+\strong{Two-Tier Quality Flag System:}
+
+\strong{Tier 1 - Calculation Quality (CALC_ prefix):}
+Set during \code{calc_heat_pulse_velocity()}, indicates issues with the calculation itself:
+\itemize{
+\item \strong{CALC_FAILED} - Calculation returned NA (e.g., Tmax couldn't find peak)
+\item \strong{CALC_INFINITE} - Calculation returned Inf (division by zero, etc.)
+\item \strong{CALC_EXTREME} - Result outside physically realistic range (|Vh| > 200 or Vh < -50)
 }
+
+\strong{Tier 2 - Data Quality (DATA_ prefix):}
+Set during \code{flag_vh_quality()}, indicates issues with time series patterns:
+\itemize{
+\item \strong{DATA_MISSING} - No pulse recorded at expected timestamp (hardware/logging gap)
+\item \strong{DATA_ILLOGICAL} - Exceeds hard_max_vh or species max_velocity_cm_hr
+\item \strong{DATA_OUTLIER} - Statistical outlier (rolling median or rate of change)
+\item \strong{DATA_SUSPECT} - Negative flow or cross-sensor anomaly
+}
+
+\strong{OK} - No issues detected in either tier
+
+CALC_ flags are preserved when flag_vh_quality() is run. DATA_ flags are only
+applied to rows currently flagged as OK.
 
 \strong{Outlier Detection Methods:}
-\itemize{
-\item \strong{STL/MSTL}: Seasonal-Trend decomposition using LOESS. Decomposes data into
-Seasonal + Trend + Remainder components. Outliers detected in Remainder using
-Tukey's far-out rule (Q3 + 3×IQR) or MAD-based threshold.
-\item \strong{Hampel Filter}: Rolling median + MAD in sliding window. Detects isolated
-spikes by comparing each point to local median.
-\item \strong{Cross-Sensor}: Compares sensors at same timestamp. Flags sensors that
-deviate significantly from median across all sensors.
+\enumerate{
+\item \strong{Rolling Median}: Compares each point to the median of a sliding window.
+Points that deviate by more than \code{rolling_threshold × MAD} from the local
+median are flagged. This detects isolated spikes while respecting local
+trends and daily variation.
+\item \strong{Rate of Change}: Flags consecutive measurements that change by more than
+\code{max_change_cm_hr}. Sap flow typically changes gradually, so large jumps
+(e.g., > 4 cm/hr between 30-min intervals) are likely sensor errors.
+\item \strong{Cross-Sensor}: Compares sensors at the same timestamp. Sensors that deviate
+significantly from the median across all sensors are flagged as SUSPECT.
 }
 
-\strong{Why cyclical-aware detection matters:}
-Sap flow has strong daily cycles (high during day, low at night). Standard
-outlier detection would flag normal daily variation as outliers. These methods
-remove the daily cycle first, then detect true anomalies in the remainder.
+\strong{Why simple methods work:}
+Sap flow data typically has:
+\itemize{
+\item Regular measurement intervals (e.g., 30 min)
+\item Gradual changes in velocity (smooth daily cycles)
+\item Isolated outliers (sensor spikes, logging errors)
+}
+
+Rolling median and rate of change detection are sufficient to catch these issues
+without needing complex seasonal decomposition.
+
+\strong{Handling Large Gaps:}
+Gaps larger than \code{max_gap_to_fill_hours} are reported in the gap_report but
+NOT filled with MISSING rows to avoid creating thousands of missing entries.
+Only small gaps (< max_gap_to_fill_hours) are filled.
 }
 \examples{
 \dontrun{
@@ -127,9 +161,10 @@ qc_results <- flag_vh_quality(
 # Custom outlier detection
 qc_results <- flag_vh_quality(
   vh_results,
-  outlier_method = c("stl", "hampel"),
-  remainder_threshold = 2.5,  # More sensitive
-  hampel_window = 5
+  rolling_window = 7,           # Wider window
+  rolling_threshold = 2.5,      # More sensitive
+  max_change_cm_hr = 3,         # Stricter rate of change
+  max_gap_to_fill_hours = 12    # Don't fill gaps > 12 hours
 )
 
 # Check gap report

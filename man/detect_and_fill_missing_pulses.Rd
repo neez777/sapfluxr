@@ -7,7 +7,9 @@
 detect_and_fill_missing_pulses(
   vh_results,
   expected_interval_hours = NULL,
+  tolerance_seconds = 5,
   add_rows = TRUE,
+  max_gap_to_fill_hours = 24,
   verbose = FALSE
 )
 }
@@ -16,7 +18,11 @@ detect_and_fill_missing_pulses(
 
 \item{expected_interval_hours}{Expected interval between pulses (hours)}
 
+\item{tolerance_seconds}{Tolerance in seconds for matching pulse times}
+
 \item{add_rows}{Logical, whether to add rows for missing pulses}
+
+\item{max_gap_to_fill_hours}{Maximum gap size (hours) to fill}
 
 \item{verbose}{Logical, print messages}
 }

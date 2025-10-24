@@ -574,3 +574,390 @@ test_that("apply_sdma_processing preserves original results", {
   expect_equal(new_hrm$Vh_cm_hr, original_hrm$Vh_cm_hr)
   expect_equal(new_mhr$Vh_cm_hr, original_mhr$Vh_cm_hr)
 })
+
+
+# ---- Auto-Fill Missing Pulses Tests ----
+
+test_that("calc_heat_pulse_velocity auto-fills missing pulses by default", {
+  # Create data with missing pulses
+  heat_pulse_data <- create_mock_heat_pulse_data_for_vh()
+
+  # Remove some pulses to create gaps
+  measurements <- heat_pulse_data$measurements
+  diagnostics <- heat_pulse_data$diagnostics
+
+  # Remove pulse_id 2 and 4 (creating gaps in 1,2,3,4,5 sequence)
+  measurements <- measurements[measurements$pulse_id != 2, ]
+  measurements <- measurements[measurements$pulse_id != 4, ]
+  diagnostics <- diagnostics[diagnostics$pulse_id != 2, ]
+  diagnostics <- diagnostics[diagnostics$pulse_id != 4, ]
+
+  heat_pulse_data$measurements <- measurements
+  heat_pulse_data$diagnostics <- diagnostics
+
+  # Calculate with auto-fill enabled (default)
+  # Note: Mock data has same datetime for all pulses, so we need to add unique times
+  heat_pulse_data$measurements$datetime <- heat_pulse_data$measurements$datetime +
+    (heat_pulse_data$measurements$pulse_id - 1) * 1800  # 30 min intervals
+  heat_pulse_data$diagnostics$datetime <- heat_pulse_data$diagnostics$datetime +
+    (heat_pulse_data$diagnostics$pulse_id - 1) * 1800
+
+  vh_results <- calc_heat_pulse_velocity(
+    heat_pulse_data,
+    methods = "HRM",
+    fill_missing_pulses = TRUE,
+    show_progress = FALSE
+  )
+
+  # Should have DATA_MISSING flags for missing pulses
+  expect_true("DATA_MISSING" %in% vh_results$quality_flag)
+
+  # Check that missing pulse rows were added
+  missing_rows <- vh_results[vh_results$quality_flag == "DATA_MISSING", ]
+  expect_gt(nrow(missing_rows), 0)
+
+  # Missing rows should have NA for Vh_cm_hr
+  expect_true(all(is.na(missing_rows$Vh_cm_hr)))
+
+  # Should have gap metadata attached
+  expect_true(!is.null(attr(vh_results, "missing_pulse_summary")))
+  expect_true(!is.null(attr(vh_results, "gap_report")))
+})
+
+
+test_that("calc_heat_pulse_velocity can disable auto-fill", {
+  heat_pulse_data <- create_mock_heat_pulse_data_for_vh()
+
+  # Remove some pulses
+  measurements <- heat_pulse_data$measurements
+  diagnostics <- heat_pulse_data$diagnostics
+
+  # Add unique times first
+  measurements$datetime <- measurements$datetime + (measurements$pulse_id - 1) * 1800
+  diagnostics$datetime <- diagnostics$datetime + (diagnostics$pulse_id - 1) * 1800
+
+  measurements <- measurements[measurements$pulse_id != 2, ]
+  diagnostics <- diagnostics[diagnostics$pulse_id != 2, ]
+  heat_pulse_data$measurements <- measurements
+  heat_pulse_data$diagnostics <- diagnostics
+
+  # Calculate with auto-fill disabled
+  vh_results <- calc_heat_pulse_velocity(
+    heat_pulse_data,
+    methods = "HRM",
+    fill_missing_pulses = FALSE,
+    show_progress = FALSE
+  )
+
+  # Should NOT have DATA_MISSING flags
+  expect_false("DATA_MISSING" %in% vh_results$quality_flag)
+
+  # Should not have gap metadata
+  expect_null(attr(vh_results, "missing_pulse_summary"))
+  expect_null(attr(vh_results, "gap_report"))
+})
+
+
+test_that("auto-fill preserves multi-sensor structure", {
+  heat_pulse_data <- create_mock_heat_pulse_data_for_vh()
+
+  # Remove a pulse
+  measurements <- heat_pulse_data$measurements
+  diagnostics <- heat_pulse_data$diagnostics
+
+  # Add unique times first
+  measurements$datetime <- measurements$datetime + (measurements$pulse_id - 1) * 1800
+  diagnostics$datetime <- diagnostics$datetime + (diagnostics$pulse_id - 1) * 1800
+
+  measurements <- measurements[measurements$pulse_id != 3, ]
+  diagnostics <- diagnostics[diagnostics$pulse_id != 3, ]
+  heat_pulse_data$measurements <- measurements
+  heat_pulse_data$diagnostics <- diagnostics
+
+  # Calculate with HRM (produces outer and inner results)
+  vh_results <- calc_heat_pulse_velocity(
+    heat_pulse_data,
+    methods = "HRM",
+    fill_missing_pulses = TRUE,
+    show_progress = FALSE
+  )
+
+  # Missing pulse should have entries for both sensors
+  missing_rows <- vh_results[vh_results$quality_flag == "DATA_MISSING", ]
+
+  if (nrow(missing_rows) > 0) {
+    # Should have both outer and inner sensor positions
+    expect_true("outer" %in% missing_rows$sensor_position)
+    expect_true("inner" %in% missing_rows$sensor_position)
+  }
+})
+
+
+test_that("auto-fill preserves multi-method structure", {
+  heat_pulse_data <- create_mock_heat_pulse_data_for_vh()
+
+  # Remove a pulse
+  measurements <- heat_pulse_data$measurements
+  diagnostics <- heat_pulse_data$diagnostics
+
+  # Add unique times first
+  measurements$datetime <- measurements$datetime + (measurements$pulse_id - 1) * 1800
+  diagnostics$datetime <- diagnostics$datetime + (diagnostics$pulse_id - 1) * 1800
+
+  measurements <- measurements[measurements$pulse_id != 3, ]
+  diagnostics <- diagnostics[diagnostics$pulse_id != 3, ]
+  heat_pulse_data$measurements <- measurements
+  heat_pulse_data$diagnostics <- diagnostics
+
+  # Calculate with multiple methods
+  vh_results <- calc_heat_pulse_velocity(
+    heat_pulse_data,
+    methods = c("HRM", "MHR"),
+    fill_missing_pulses = TRUE,
+    show_progress = FALSE
+  )
+
+  # Missing pulse should have entries for both methods
+  missing_rows <- vh_results[vh_results$quality_flag == "DATA_MISSING", ]
+
+  if (nrow(missing_rows) > 0) {
+    # Should have both HRM and MHR methods
+    expect_true("HRM" %in% missing_rows$method)
+    expect_true("MHR" %in% missing_rows$method)
+  }
+})
+
+
+test_that("max_gap_hours parameter controls gap filling", {
+  # Create data with a large gap
+  start_time <- as.POSIXct("2025-01-15 08:00:00", tz = "UTC")
+
+  # Create measurements at 30-min intervals with a 5-hour gap
+  times <- c(
+    seq(start_time, by = "30 min", length.out = 5),           # 08:00 - 10:00
+    seq(start_time + 5*3600, by = "30 min", length.out = 5)   # 13:00 - 15:00 (5hr gap)
+  )
+
+  measurements <- data.frame(
+    pulse_id = 1:10,
+    datetime = rep(times, each = 30),
+    seconds_since_pulse = rep(1:30, times = 10),
+    do = rnorm(300, 18.5, 0.5),
+    di = rnorm(300, 18.4, 0.5),
+    uo = rnorm(300, 18.6, 0.5),
+    ui = rnorm(300, 18.3, 0.5)
+  )
+
+  diagnostics <- data.frame(
+    pulse_id = 1:10,
+    datetime = times,
+    batt_volt = rep(12, 10),
+    batt_current = rep(0.5, 10),
+    batt_temp = rep(25, 10),
+    external_volt = rep(12, 10),
+    external_current = rep(0.1, 10)
+  )
+
+  heat_pulse_data <- list(
+    measurements = measurements,
+    diagnostics = diagnostics,
+    metadata = list(
+      file_name = "test.txt",
+      format = "test",
+      import_time = Sys.time(),
+      n_pulses = 10
+    )
+  )
+  class(heat_pulse_data) <- c("heat_pulse_data", "list")
+
+  # Calculate with small max_gap_hours (shouldn't fill 5-hour gap)
+  vh_results_small_gap <- calc_heat_pulse_velocity(
+    heat_pulse_data,
+    methods = "HRM",
+    fill_missing_pulses = TRUE,
+    max_gap_hours = 2,  # Only fill gaps < 2 hours
+    show_progress = FALSE
+  )
+
+  # Calculate with large max_gap_hours (should fill 5-hour gap)
+  vh_results_large_gap <- calc_heat_pulse_velocity(
+    heat_pulse_data,
+    methods = "HRM",
+    fill_missing_pulses = TRUE,
+    max_gap_hours = 10,  # Fill gaps < 10 hours
+    show_progress = FALSE
+  )
+
+  # Small gap setting should have fewer DATA_MISSING than large gap setting
+  n_missing_small <- sum(vh_results_small_gap$quality_flag == "DATA_MISSING", na.rm = TRUE)
+  n_missing_large <- sum(vh_results_large_gap$quality_flag == "DATA_MISSING", na.rm = TRUE)
+
+  expect_lt(n_missing_small, n_missing_large)
+})
+
+
+test_that("gap_report attribute contains correct information", {
+  # Create data with known gaps
+  start_time <- as.POSIXct("2025-01-15 08:00:00", tz = "UTC")
+  times <- c(
+    seq(start_time, by = "30 min", length.out = 3),           # 08:00 - 09:00
+    seq(start_time + 2*3600, by = "30 min", length.out = 3)   # 10:00 - 11:00 (1hr gap)
+  )
+
+  measurements <- data.frame(
+    pulse_id = 1:6,
+    datetime = rep(times, each = 30),
+    seconds_since_pulse = rep(1:30, times = 6),
+    do = rnorm(180, 18.5, 0.5),
+    di = rnorm(180, 18.4, 0.5),
+    uo = rnorm(180, 18.6, 0.5),
+    ui = rnorm(180, 18.3, 0.5)
+  )
+
+  diagnostics <- data.frame(
+    pulse_id = 1:6,
+    datetime = times,
+    batt_volt = rep(12, 6),
+    batt_current = rep(0.5, 6),
+    batt_temp = rep(25, 6),
+    external_volt = rep(12, 6),
+    external_current = rep(0.1, 6)
+  )
+
+  heat_pulse_data <- list(
+    measurements = measurements,
+    diagnostics = diagnostics,
+    metadata = list(
+      file_name = "test.txt",
+      format = "test",
+      import_time = Sys.time(),
+      n_pulses = 6
+    )
+  )
+  class(heat_pulse_data) <- c("heat_pulse_data", "list")
+
+  vh_results <- calc_heat_pulse_velocity(
+    heat_pulse_data,
+    methods = "HRM",
+    fill_missing_pulses = TRUE,
+    max_gap_hours = 24,
+    show_progress = FALSE
+  )
+
+  # Check gap_report exists and has correct structure
+  gap_report <- attr(vh_results, "gap_report")
+  expect_false(is.null(gap_report))
+
+  if (!is.null(gap_report) && nrow(gap_report) > 0) {
+    expect_true("gap_start" %in% names(gap_report))
+    expect_true("gap_end" %in% names(gap_report))
+    expect_true("n_missing" %in% names(gap_report))
+    expect_true("duration_hours" %in% names(gap_report))
+    expect_true("filled" %in% names(gap_report))
+  }
+})
+
+
+test_that("missing_pulse_summary attribute is accurate", {
+  heat_pulse_data <- create_mock_heat_pulse_data_for_vh()
+
+  # Remove 2 pulses
+  measurements <- heat_pulse_data$measurements
+  diagnostics <- heat_pulse_data$diagnostics
+
+  # Add unique times first
+  measurements$datetime <- measurements$datetime + (measurements$pulse_id - 1) * 1800
+  diagnostics$datetime <- diagnostics$datetime + (diagnostics$pulse_id - 1) * 1800
+
+  measurements <- measurements[!measurements$pulse_id %in% c(2, 4), ]
+  diagnostics <- diagnostics[!diagnostics$pulse_id %in% c(2, 4), ]
+  heat_pulse_data$measurements <- measurements
+  heat_pulse_data$diagnostics <- diagnostics
+
+  vh_results <- calc_heat_pulse_velocity(
+    heat_pulse_data,
+    methods = "HRM",
+    fill_missing_pulses = TRUE,
+    show_progress = FALSE
+  )
+
+  summary <- attr(vh_results, "missing_pulse_summary")
+  expect_false(is.null(summary))
+
+  if (!is.null(summary)) {
+    expect_true("n_expected" %in% names(summary))
+    expect_true("n_actual" %in% names(summary))
+    expect_true("n_missing" %in% names(summary))
+    expect_true("n_filled" %in% names(summary))
+    expect_true("expected_interval_hours" %in% names(summary))
+
+    # Should detect the missing pulses
+    expect_gt(summary$n_missing, 0)
+  }
+})
+
+
+test_that("interval_tolerance_seconds allows for clock drift", {
+  # Create data with slight timing jitter
+  start_time <- as.POSIXct("2025-01-15 08:00:00", tz = "UTC")
+
+  # 30-min intervals with ±3 second jitter
+  times <- seq(start_time, by = "30 min", length.out = 5)
+  times <- times + runif(5, -3, 3)  # Add jitter
+
+  measurements <- data.frame(
+    pulse_id = 1:5,
+    datetime = rep(times, each = 30),
+    seconds_since_pulse = rep(1:30, times = 5),
+    do = rnorm(150, 18.5, 0.5),
+    di = rnorm(150, 18.4, 0.5),
+    uo = rnorm(150, 18.6, 0.5),
+    ui = rnorm(150, 18.3, 0.5)
+  )
+
+  diagnostics <- data.frame(
+    pulse_id = 1:5,
+    datetime = times,
+    batt_volt = rep(12, 5),
+    batt_current = rep(0.5, 5),
+    batt_temp = rep(25, 5),
+    external_volt = rep(12, 5),
+    external_current = rep(0.1, 5)
+  )
+
+  heat_pulse_data <- list(
+    measurements = measurements,
+    diagnostics = diagnostics,
+    metadata = list(
+      file_name = "test.txt",
+      format = "test",
+      import_time = Sys.time(),
+      n_pulses = 5
+    )
+  )
+  class(heat_pulse_data) <- c("heat_pulse_data", "list")
+
+  # With tight tolerance, might detect false missing pulses
+  vh_results_tight <- calc_heat_pulse_velocity(
+    heat_pulse_data,
+    methods = "HRM",
+    fill_missing_pulses = TRUE,
+    interval_tolerance_seconds = 1,  # Strict
+    show_progress = FALSE
+  )
+
+  # With loose tolerance, should not detect false missing pulses
+  vh_results_loose <- calc_heat_pulse_velocity(
+    heat_pulse_data,
+    methods = "HRM",
+    fill_missing_pulses = TRUE,
+    interval_tolerance_seconds = 10,  # Loose
+    show_progress = FALSE
+  )
+
+  # Loose tolerance should have fewer or equal DATA_MISSING
+  n_missing_tight <- sum(vh_results_tight$quality_flag == "DATA_MISSING", na.rm = TRUE)
+  n_missing_loose <- sum(vh_results_loose$quality_flag == "DATA_MISSING", na.rm = TRUE)
+
+  expect_lte(n_missing_loose, n_missing_tight)
+})

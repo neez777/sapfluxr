@@ -132,6 +132,42 @@ head(heat_pulse_data$measurements)
 head(heat_pulse_data$diagnostics)
 ```
 
+### (Optional) Correct for Clock Drift
+
+If you notice the device clock has drifted (common with long deployments), you can correct timestamps before processing:
+
+```{r eval=FALSE}
+# Example: Device was 5 minutes fast when retrieved on 2025-01-16 08:00:00
+# The device displayed 2025-01-16 08:05:00 at that moment
+
+# Fix clock drift in measurements data
+heat_pulse_data$measurements <- fix_clock_drift(
+  data = heat_pulse_data$measurements,
+  device_time_col = "datetime",
+  observed_device_time = as.POSIXct("2025-01-16 08:05:00", tz = "UTC"),
+  observed_actual_time = as.POSIXct("2025-01-16 08:00:00", tz = "UTC")
+)
+
+# Also fix diagnostics data
+heat_pulse_data$diagnostics <- fix_clock_drift(
+  data = heat_pulse_data$diagnostics,
+  device_time_col = "datetime",
+  observed_device_time = as.POSIXct("2025-01-16 08:05:00", tz = "UTC"),
+  observed_actual_time = as.POSIXct("2025-01-16 08:00:00", tz = "UTC")
+)
+
+# Original timestamps are preserved in 'device_datetime' column
+# Corrected timestamps replace the 'datetime' column
+```
+
+**How it works:**
+- Assumes the device clock was accurate at deployment (dataset start)
+- Applies a linear correction based on a single calibration point
+- Preserves original timestamps in a `device_datetime` column
+- Stores correction metadata as attributes for traceability
+
+See `?fix_clock_drift` for full details and advanced options.
+
 ## 2. Calculate Heat Pulse Velocity
 
 Calculate sap velocity using one or more established methods:
@@ -176,6 +212,92 @@ aggregate(Vh_cm_hr ~ method, data = vh_results, FUN = function(x) {
     n = sum(!is.na(x)))
 })
 ```
+
+### Two-Tier Quality Flag System
+
+sapfluxr uses a **two-tier quality flag system** to distinguish between different types of data issues:
+
+**Tier 1 - Calculation Quality (CALC_ prefix):**
+Set during `calc_heat_pulse_velocity()`, indicates issues with the calculation itself:
+
+- `CALC_FAILED` - Calculation returned NA (e.g., Tmax couldn't find peak)
+- `CALC_INFINITE` - Calculation returned Inf (division by zero, etc.)
+- `CALC_EXTREME` - Result outside physically realistic range
+
+**Tier 2 - Data Quality (DATA_ prefix):**
+Set during `flag_vh_quality()`, indicates issues with time series patterns:
+
+- `DATA_MISSING` - No pulse recorded at expected timestamp
+- `DATA_ILLOGICAL` - Exceeds hard maximum or species-specific thresholds
+- `DATA_OUTLIER` - Statistical outlier (rolling median or rate of change)
+- `DATA_SUSPECT` - Negative flow or cross-sensor anomaly
+
+**OK** - No issues detected in either tier
+
+```{r}
+# View only high-quality results
+good_results <- vh_results[vh_results$quality_flag == "OK", ]
+nrow(good_results)
+
+# View problematic results
+bad_results <- vh_results[vh_results$quality_flag != "OK", ]
+table(bad_results$quality_flag, bad_results$method)
+```
+
+## 2a. Quality Control and Outlier Detection
+
+After calculating velocities, apply comprehensive quality control to detect missing data, outliers, and suspicious patterns:
+
+```{r eval=FALSE}
+# Apply quality control with default settings
+qc_results <- flag_vh_quality(
+  vh_results,
+  wood_properties = "eucalyptus",  # Optional: species-specific thresholds
+  detect_missing_pulses = TRUE,
+  detect_outliers = TRUE,
+  detect_rate_of_change = TRUE
+)
+
+# View flagged data
+vh_flagged <- qc_results$vh_flagged
+table(vh_flagged$quality_flag)
+
+# View gap report (missing data periods)
+print(qc_results$gap_report)
+
+# View outlier summary
+print(qc_results$outlier_summary)
+```
+
+**What `flag_vh_quality()` detects:**
+
+1. **Missing Pulses** - Detects gaps in time series and optionally adds DATA_MISSING rows
+2. **Illogical Values** - Flags velocities exceeding hard maximum (500 cm/hr) or species-specific thresholds
+3. **Statistical Outliers** - Uses rolling median (default 11-point window) to detect spikes
+4. **Excessive Rate of Change** - Flags jumps > 4 cm/hr between consecutive measurements
+5. **Cross-Sensor Anomalies** - Compares sensors at same timestamp to detect sensor failures
+6. **Negative Flows** - Flags as SUSPECT (may be real reverse flows or sensor issues)
+
+**Customise detection sensitivity:**
+
+```{r eval=FALSE}
+# More sensitive outlier detection
+qc_results <- flag_vh_quality(
+  vh_results,
+  rolling_window = 7,           # Wider window (15 points total)
+  rolling_threshold = 2.5,      # More sensitive (default: 3 MAD)
+  max_change_cm_hr = 3,         # Stricter rate of change (default: 4)
+  max_gap_to_fill_hours = 12    # Don't fill gaps > 12 hours (default: 24)
+)
+```
+
+**Why simple methods work:**
+Sap flow data typically has regular measurement intervals and gradual changes. Rolling median and rate-of-change detection effectively catch sensor spikes and logging errors without needing complex seasonal decomposition.
+
+**Handling large gaps:**
+Gaps larger than `max_gap_to_fill_hours` are reported in `gap_report` but NOT filled with MISSING rows to avoid creating thousands of entries. Only small gaps are filled.
+
+See `?flag_vh_quality` for full details.
 
 ## 3. Visualise Results
 
@@ -514,12 +636,21 @@ vh_results <- calc_heat_pulse_velocity(
 
 ## Filter by Quality
 
+The two-tier quality flag system (CALC_ and DATA_ prefixes) helps identify different types of issues:
+
 ```{r}
-# Keep only high-quality results
+# Keep only high-quality results (no calculation or data issues)
 good_results <- vh_results[vh_results$quality_flag == "OK", ]
 
-# View problematic results
+# View all quality flags
 table(vh_results$quality_flag, vh_results$method)
+
+# Filter out calculation failures but keep data quality issues for manual review
+calc_ok <- vh_results[!grepl("^CALC_", vh_results$quality_flag), ]
+
+# After running flag_vh_quality(), you can filter by both tiers
+# qc_results <- flag_vh_quality(vh_results)
+# clean_data <- qc_results$vh_flagged[qc_results$vh_flagged$quality_flag == "OK", ]
 ```
 
 ## Export Results
@@ -539,28 +670,47 @@ saveRDS(list(
 # Workflow Summary
 
 ```r
-# Complete workflow
+# Complete workflow with all quality control steps
 library(sapfluxr)
 
 # 1. Import
 heat_pulse_data <- read_heat_pulse_data("mydata.txt")
 
-# 2. Calculate with multiple methods including sDMA
+# 1a. (Optional) Fix clock drift if detected
+# heat_pulse_data$measurements <- fix_clock_drift(
+#   heat_pulse_data$measurements,
+#   device_time_col = "datetime",
+#   observed_device_time = as.POSIXct("2025-01-16 08:05:00"),
+#   observed_actual_time = as.POSIXct("2025-01-16 08:00:00")
+# )
+
+# 2. Calculate velocities
 vh_results <- calc_heat_pulse_velocity(
   heat_pulse_data,
-  methods = c("HRM", "MHR", "DMA", "sDMA:MHR"),
+  methods = c("HRM", "MHR", "HRMXa", "Tmax_Klu"),
   wood_properties = "eucalyptus"
 )
 
+# 2a. Apply quality control
+qc_results <- flag_vh_quality(
+  vh_results,
+  wood_properties = "eucalyptus",
+  detect_missing_pulses = TRUE,
+  detect_outliers = TRUE
+)
+vh_flagged <- qc_results$vh_flagged
+
+# 2b. (Optional) Apply sDMA post-processing
+vh_sdma <- apply_sdma_processing(vh_flagged, secondary_method = "MHR")
+
 # 3. Visualise
-plot_vh_timeseries(vh_results, methods = c("HRM", "MHR", "DMA"))
-plot_heat_pulse_trace(heat_pulse_data, vh_results, pulse_id = 1)
+plot_vh_timeseries(vh_flagged, methods = c("HRM", "MHR", "HRMXa"))
+plot_heat_pulse_trace(heat_pulse_data, vh_flagged, pulse_id = 1)
+plot_sdma_timeseries(vh_sdma, sdma_method = "sDMA:MHR")
 
-# 3b. Visualise sDMA specifically
-plot_sdma_timeseries(vh_results, sdma_method = "sDMA:MHR")
-
-# 4. Export
-write.csv(vh_results, "results.csv", row.names = FALSE)
+# 4. Export (only OK quality data)
+clean_data <- vh_flagged[vh_flagged$quality_flag == "OK", ]
+write.csv(clean_data, "sap_velocity_clean.csv", row.names = FALSE)
 ```
 
 ## Common Workflows

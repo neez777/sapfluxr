@@ -1,0 +1,778 @@
+---
+title: "Data Quality Control and Interpolation"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Data Quality Control and Interpolation}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 5
+)
+```
+
+```{r setup}
+library(sapfluxr)
+library(ggplot2)
+library(dplyr)
+```
+
+## Introduction
+
+Sap flow measurements exhibit strong **daily cyclical patterns** (high flow during day, low flow at night), which presents unique challenges for quality control. This vignette covers cyclical-aware methods for:
+
+1. Detecting outliers while accounting for daily cycles
+2. Identifying missing pulses and data gaps
+3. Flagging illogical or physically impossible values
+4. Cross-sensor consistency checks
+5. Interpolation strategies for missing data
+
+**Key Concept:** Standard outlier detection methods (z-score, IQR) would incorrectly flag normal daily variation as outliers. We use **seasonal decomposition** to remove the daily cycle first, then detect true anomalies in the remainder.
+
+---
+
+## Common Data Quality Issues
+
+### 1. **Measurement Spikes/Outliers**
+
+**Cause:** Electrical interference, sensor malfunction, or logger issues
+
+**Characteristics:**
+- Sudden jumps in Vh values that don't match daily pattern
+- Affect one or more sensors
+- Often brief (1-3 measurements)
+- Return to expected pattern quickly
+
+**Example:**
+```
+Time        Sensor_5cm_Vh   Expected_Pattern   Issue
+06:00       2.3             2.2                Normal
+06:30       2.8             2.7                Normal (day starting)
+07:00       45.2            3.1                ← SPIKE (45 cm/hr is illogical)
+07:30       3.5             3.4                Normal (back to pattern)
+```
+
+### 2. **Missing Pulses/Data Gaps**
+
+**Cause:** Logger failure, power interruption, data transmission errors
+
+**Characteristics:**
+- Complete absence of Vh data for expected timestamps
+- Gaps in time series (no rows for missing pulses)
+- May span hours to days
+
+**Impact:** Breaks time series continuity, affects daily integration
+
+### 3. **Illogical Values**
+
+**Cause:** Calculation errors, sensor malfunction, extreme conditions
+
+**Characteristics:**
+- Vh > 500 cm/hr (physically impossible for wood)
+- Vh > species maximum (e.g., > 200 cm/hr for eucalyptus)
+- Extremely negative flows (beyond probe sensitivity)
+
+### 4. **Negative Flows (SUSPECT)**
+
+**Cause:** Probe misalignment, reverse sap flow, or low-flow HRM uncertainty
+
+**Characteristics:**
+- Negative Vh values (possible but uncommon)
+- More common in HRM data (method can detect reverse flow)
+- May indicate installation issues
+
+**Note:** Small negative values during low-flow periods can be legitimate, but large negative flows suggest misalignment.
+
+### 5. **Cross-Sensor Anomalies**
+
+**Cause:** Single sensor malfunction while others perform normally
+
+**Characteristics:**
+- One sensor deviates significantly from others at same time
+- Other sensors show consistent pattern
+- Persistent over multiple measurements
+
+---
+
+## Why Cyclical-Aware Detection Matters
+
+Sap flow has **strong daily cycles** driven by solar radiation and vapour pressure deficit:
+
+```
+  Vh (cm/hr)
+  30 |              ┌─────┐              ┌─────┐
+     |            ╱         ╲          ╱         ╲
+  20 |          ╱             ╲      ╱             ╲
+     |        ╱                 ╲  ╱                 ╲
+  10 |      ╱                     ╲                     ╲
+     |  ╱                           ╲                     ╲
+   0 |─────────────────────────────────────────────────────
+     0    6    12   18   24   30   36   42   48  Hours
+        Night  Day  Night      Night  Day  Night
+```
+
+**Problem with standard methods:**
+```r
+# Z-score method would incorrectly flag daytime peaks:
+z_score <- (vh_value - mean(all_vh)) / sd(all_vh)
+# Daytime values (20-30 cm/hr) would have z > 3!
+# Night-time values (0-5 cm/hr) would have z < -3!
+```
+
+**Solution: Decompose first, then detect anomalies**
+```
+Observed Vh = Daily Cycle + Trend + Remainder
+                   ↓
+             Remove these
+                   ↓
+         Only flag outliers in Remainder
+```
+
+---
+
+## Quality Control Function: `flag_vh_quality()`
+
+### Overview
+
+The main function for quality control operates on **Vh results** (after HPV calculation), not raw temperature data.
+
+```{r eval=FALSE}
+qc_results <- flag_vh_quality(
+  vh_results,                    # From calc_heat_pulse_velocity()
+  wood_properties = NULL,        # Optional species thresholds
+  detect_missing_pulses = TRUE,  # Find gaps in time series
+  check_illogical = TRUE,        # Flag impossible values
+  outlier_method = "all",        # Use all three detection methods
+  flag_negative = TRUE,          # Flag reverse flows as SUSPECT
+  check_cross_sensor = TRUE,     # Compare sensors at same time
+  verbose = TRUE                 # Print progress
+)
+```
+
+### Quality Flag Hierarchy (Most Severe Wins)
+
+1. **MISSING** - No data for expected pulse timestamp
+2. **ILLOGICAL** - Exceeds hard maximum (500 cm/hr) or species maximum
+3. **OUTLIER** - Statistical outlier detected by STL/MSTL/Hampel
+4. **SUSPECT** - Negative flow or cross-sensor anomaly
+5. **OK** - No issues detected
+
+### Outlier Detection Methods
+
+#### 1. STL/MSTL Decomposition (Recommended)
+
+**How it works:**
+```r
+# Seasonal-Trend decomposition using LOESS
+Vh(t) = Seasonal(t) + Trend(t) + Remainder(t)
+
+# For 30-min data:
+seasonal_period = 48  # measurements per day
+
+# Decompose using STL or MSTL
+decomp <- stl(vh_ts, s.window = "periodic", robust = TRUE)
+remainder <- decomp$time.series[, "remainder"]
+
+# Detect outliers in remainder using Tukey's far-out rule:
+Q1 <- quantile(remainder, 0.25)
+Q3 <- quantile(remainder, 0.75)
+IQR <- Q3 - Q1
+outliers <- remainder < (Q1 - 3×IQR) | remainder > (Q3 + 3×IQR)
+
+# Or use MAD (more robust):
+MAD <- mad(remainder)
+outliers <- |remainder - median(remainder)| > 3 × MAD
+```
+
+**Advantages:**
+- Explicitly models daily cycle
+- Robust to outliers during decomposition
+- Conservative threshold (3× far-out rule)
+- MSTL handles multiple seasonal periods (daily + weekly)
+
+**Best for:** General outlier detection with clear daily patterns
+
+#### 2. Hampel Filter
+
+**How it works:**
+```r
+# For each point, use sliding window of surrounding points
+window <- ±7 measurements  # e.g., ±3.5 hours
+
+for (i in 1:n) {
+  local_median <- median(vh[(i-7):(i+7)])
+  local_mad <- mad(vh[(i-7):(i+7)])
+
+  if (|vh[i] - local_median| > 3 × local_mad) {
+    flag as OUTLIER
+  }
+}
+```
+
+**Advantages:**
+- No decomposition required
+- Detects isolated spikes effectively
+- Adapts to local context
+- Fast computation
+
+**Best for:** Isolated spikes and short-term anomalies
+
+#### 3. Cross-Sensor Detection
+
+**How it works:**
+```r
+# For each timestamp, compare all sensors:
+for (each datetime) {
+  sensors_at_time <- vh[datetime == t, all sensors]
+
+  sensor_median <- median(sensors_at_time)
+  sensor_mad <- mad(sensors_at_time)
+
+  # Flag sensors that deviate significantly:
+  outliers <- |vh - sensor_median| > 3 × sensor_mad
+}
+```
+
+**Advantages:**
+- Detects sensor-specific issues
+- Independent of temporal patterns
+- Useful when one sensor malfunctions
+
+**Best for:** Identifying failing sensors
+
+---
+
+## Practical Examples
+
+### Example 1: Basic Quality Control
+
+```{r eval=FALSE}
+# Load data and calculate Vh
+heat_pulse_data <- read_heat_pulse_data("field_data.txt")
+vh_results <- calc_heat_pulse_velocity(heat_pulse_data, methods = "HRM")
+
+# Run quality control with all defaults
+qc_results <- flag_vh_quality(vh_results)
+
+# View summary
+print(qc_results)
+#> Vh Quality Control Results
+#> ==========================
+#>
+#> Flag Summary:
+#>      Var1 Freq
+#> 1      OK 1842
+#> 2 MISSING   48
+#> 3 OUTLIER   15
+#> 4 SUSPECT    3
+#>
+#> Missing Data: 2 gap(s) detected
+#>   Total missing pulses: 48
+#>   Longest gap: 24.0 hours
+
+# Check flag distribution
+table(qc_results$vh_flagged$quality_flag)
+#>      OK MISSING OUTLIER SUSPECT
+#>    1842      48      15       3
+```
+
+### Example 2: Species-Specific Thresholds
+
+```{r eval=FALSE}
+# Use species-specific maximum velocity
+qc_results <- flag_vh_quality(
+  vh_results,
+  wood_properties = "eucalyptus"  # max_velocity_cm_hr = 200
+)
+
+# Any Vh > 200 cm/hr will be flagged as ILLOGICAL
+illogical <- qc_results$vh_flagged %>%
+  filter(quality_flag == "ILLOGICAL")
+
+print(illogical)
+```
+
+### Example 3: Detecting a Known Spike
+
+```{r eval=FALSE}
+# You know there's a spike between 2024-12-09 06:00 and 12:00
+qc_results <- flag_vh_quality(
+  vh_results,
+  outlier_method = c("stl", "hampel"),  # Use both methods
+  remainder_threshold = 2.5,             # More sensitive (default=3)
+  hampel_window = 5                      # Smaller window for spikes
+)
+
+# Check flags during spike period
+spike_period <- qc_results$vh_flagged %>%
+  filter(datetime >= as.POSIXct("2024-12-09 06:00:00"),
+         datetime <= as.POSIXct("2024-12-09 12:00:00"))
+
+table(spike_period$quality_flag)
+#> OUTLIER      OK
+#>       8       4
+
+# Extract outlier details
+outliers_in_spike <- spike_period %>%
+  filter(quality_flag == "OUTLIER") %>%
+  select(datetime, sensor_position, Vh_cm_hr, quality_flag)
+
+print(outliers_in_spike)
+```
+
+### Example 4: Analysing Gap Report
+
+```{r eval=FALSE}
+# Examine missing data gaps
+qc_results <- flag_vh_quality(vh_results, return_gap_report = TRUE)
+
+# View gap report
+print(qc_results$gap_report)
+#>           gap_start             gap_end n_missing duration_hours
+#> 1 2024-12-05 02:00:00 2024-12-05 08:00:00        12           12.5
+#> 2 2024-12-08 14:00:00 2024-12-09 14:00:00        48           24.5
+
+# Identify largest gaps
+largest_gaps <- qc_results$gap_report %>%
+  arrange(desc(duration_hours)) %>%
+  head(5)
+
+print(largest_gaps)
+```
+
+### Example 5: Custom Outlier Detection
+
+```{r eval=FALSE}
+# Very strict detection (for critical analysis)
+qc_strict <- flag_vh_quality(
+  vh_results,
+  outlier_method = "all",           # All three methods
+  remainder_threshold = 2,          # Stricter (default=3)
+  use_mad = TRUE,                   # MAD more robust than IQR
+  hampel_threshold = 2.5,           # Stricter Hampel
+  cross_sensor_threshold = 2.5,     # Stricter cross-sensor
+  flag_negative = TRUE,             # Flag any negative
+  hard_max_vh = 300                 # Lower hard limit
+)
+
+# More permissive detection (for exploratory analysis)
+qc_permissive <- flag_vh_quality(
+  vh_results,
+  outlier_method = "stl",           # Only STL (most conservative)
+  remainder_threshold = 4,          # More permissive
+  flag_negative = FALSE,            # Allow negative flows
+  check_cross_sensor = FALSE        # Skip cross-sensor check
+)
+
+# Compare detection sensitivity
+cat("Strict outliers:", sum(qc_strict$vh_flagged$quality_flag == "OUTLIER"), "\n")
+cat("Permissive outliers:", sum(qc_permissive$vh_flagged$quality_flag == "OUTLIER"), "\n")
+```
+
+---
+
+## Handling Flagged Data
+
+### Option 1: Remove Outliers
+
+```{r eval=FALSE}
+# Keep only OK data
+vh_clean <- qc_results$vh_flagged %>%
+  filter(quality_flag == "OK")
+
+# Use for downstream analysis
+daily_sums <- vh_clean %>%
+  group_by(date = as.Date(datetime)) %>%
+  summarise(mean_vh = mean(Vh_cm_hr, na.rm = TRUE))
+```
+
+### Option 2: Exclude Specific Flags
+
+```{r eval=FALSE}
+# Keep everything except ILLOGICAL and OUTLIER
+vh_usable <- qc_results$vh_flagged %>%
+  filter(!quality_flag %in% c("ILLOGICAL", "OUTLIER"))
+
+# This keeps MISSING (for time series continuity) and SUSPECT
+```
+
+### Option 3: Interpolate Missing and Outliers
+
+```{r eval=FALSE}
+# Replace flagged values with NA before interpolation
+vh_for_interp <- qc_results$vh_flagged %>%
+  mutate(Vh_cm_hr = ifelse(quality_flag %in% c("OUTLIER", "ILLOGICAL"),
+                           NA,
+                           Vh_cm_hr))
+
+# Interpolate (linear for short gaps)
+vh_interpolated <- interpolate_missing_vh(
+  vh_for_interp,
+  max_gap_hours = 2,  # Only interpolate gaps < 2 hours
+  method = "linear"
+)
+
+# Check what was interpolated
+table(vh_interpolated$interpolated)
+```
+
+### Option 4: Keep Flags for Transparency
+
+```{r eval=FALSE}
+# Keep all data but track quality in reports
+vh_with_flags <- qc_results$vh_flagged
+
+# Use quality_flag in plots
+ggplot(vh_with_flags, aes(x = datetime, y = Vh_cm_hr, color = quality_flag)) +
+  geom_point(alpha = 0.6) +
+  scale_color_manual(values = c(
+    "OK" = "darkgreen",
+    "OUTLIER" = "red",
+    "SUSPECT" = "orange",
+    "MISSING" = "grey",
+    "ILLOGICAL" = "purple"
+  )) +
+  theme_minimal() +
+  labs(title = "Vh Time Series with Quality Flags",
+       color = "Quality")
+```
+
+---
+
+## Understanding Detection Parameters
+
+### Seasonal Period
+
+**Auto-detection:**
+```r
+# For 30-min data: 24 hours / 0.5 hours = 48 measurements per day
+# For 1-hour data: 24 hours / 1 hour = 24 measurements per day
+```
+
+**Manual specification:**
+```r
+qc_results <- flag_vh_quality(
+  vh_results,
+  seasonal_period = 48  # Explicitly set for 30-min data
+)
+```
+
+### Remainder Threshold
+
+**Understanding the threshold:**
+- `threshold = 3`: Tukey's "far out" rule (very conservative)
+- `threshold = 2.5`: Moderately strict
+- `threshold = 2`: Strict (more false positives)
+- `threshold = 4`: Very permissive (may miss outliers)
+
+**Rule of thumb:**
+- Use 3 for routine quality control (recommended)
+- Use 2-2.5 when you know data has issues
+- Use 4 for preliminary screening
+
+### MAD vs IQR
+
+**MAD (Median Absolute Deviation):**
+```r
+MAD = median(|x - median(x)|)
+```
+- More robust to outliers
+- Better for skewed distributions
+- **Recommended default**
+
+**IQR (Interquartile Range):**
+```r
+IQR = Q3 - Q1
+```
+- Classic Tukey method
+- Good for symmetric distributions
+- Slightly less robust
+
+---
+
+## Visualising Quality Control Results
+
+### Plot 1: Time Series with Flags
+
+```{r eval=FALSE}
+library(ggplot2)
+
+# Plot Vh with quality flags
+ggplot(qc_results$vh_flagged, aes(x = datetime, y = Vh_cm_hr)) +
+  geom_point(aes(color = quality_flag), alpha = 0.6, size = 2) +
+  geom_line(data = filter(qc_results$vh_flagged, quality_flag == "OK"),
+            color = "grey30", alpha = 0.3) +
+  scale_color_manual(
+    values = c("OK" = "darkgreen", "OUTLIER" = "red",
+               "SUSPECT" = "orange", "MISSING" = "grey70",
+               "ILLOGICAL" = "purple"),
+    name = "Quality Flag"
+  ) +
+  labs(title = "Vh Time Series with Quality Flags",
+       x = "Date/Time",
+       y = "Vh (cm/hr)") +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+```
+
+### Plot 2: Daily Patterns by Quality
+
+```{r eval=FALSE}
+# Add hour of day for pattern visualisation
+vh_with_hour <- qc_results$vh_flagged %>%
+  mutate(hour = as.numeric(format(datetime, "%H")) +
+               as.numeric(format(datetime, "%M")) / 60)
+
+# Plot by quality flag
+ggplot(vh_with_hour, aes(x = hour, y = Vh_cm_hr, color = quality_flag)) +
+  geom_point(alpha = 0.3) +
+  facet_wrap(~quality_flag, ncol = 2) +
+  scale_x_continuous(breaks = seq(0, 24, 6)) +
+  labs(title = "Daily Patterns by Quality Flag",
+       x = "Hour of Day",
+       y = "Vh (cm/hr)") +
+  theme_minimal()
+```
+
+### Plot 3: STL Decomposition (if available)
+
+```{r eval=FALSE}
+# If you want to see the decomposition components:
+# (This requires running STL separately for visualisation)
+
+library(forecast)
+
+vh_ok <- qc_results$vh_flagged %>%
+  filter(quality_flag == "OK", sensor_position == "5cm") %>%
+  arrange(datetime)
+
+vh_ts <- ts(vh_ok$Vh_cm_hr, frequency = 48)
+decomp <- stl(vh_ts, s.window = "periodic", robust = TRUE)
+
+plot(decomp, main = "STL Decomposition of Vh (5cm sensor)")
+```
+
+---
+
+## Troubleshooting
+
+### Too Many Outliers Detected
+
+**Possible causes:**
+1. Threshold too strict → Increase `remainder_threshold` to 3.5 or 4
+2. Daily pattern not well-defined → Check if seasonal_period is correct
+3. Data genuinely has many spikes → Visual inspection recommended
+
+**Solution:**
+```{r eval=FALSE}
+# Try more permissive settings
+qc_results <- flag_vh_quality(
+  vh_results,
+  outlier_method = "stl",  # Only STL (most conservative)
+  remainder_threshold = 3.5,
+  use_mad = TRUE
+)
+```
+
+### Too Few Outliers Detected
+
+**Possible causes:**
+1. Threshold too permissive → Decrease to 2.5 or 2
+2. Wrong outlier method → Try Hampel filter for isolated spikes
+3. Data is genuinely clean (rare!)
+
+**Solution:**
+```{r eval=FALSE}
+qc_results <- flag_vh_quality(
+  vh_results,
+  outlier_method = c("stl", "hampel"),  # Both methods
+  remainder_threshold = 2.5,
+  hampel_window = 5  # Smaller window = more sensitive
+)
+```
+
+### STL Decomposition Fails
+
+**Error:** `"STL decomposition failed"`
+
+**Causes:**
+- Not enough data (need >> seasonal_period observations)
+- Too many NAs in data
+- Irregular time series
+
+**Solutions:**
+```{r eval=FALSE}
+# 1. Use only Hampel filter (doesn't require decomposition)
+qc_results <- flag_vh_quality(vh_results, outlier_method = "hampel")
+
+# 2. Remove NAs first
+vh_clean <- vh_results %>% filter(!is.na(Vh_cm_hr))
+qc_results <- flag_vh_quality(vh_clean)
+
+# 3. Check data length
+cat("Number of observations:", nrow(vh_results), "\n")
+cat("Minimum needed:", 2 * 48, "\n")  # At least 2 days for 30-min data
+```
+
+### Missing Pulses Not Detected
+
+**Possible causes:**
+1. Pulse interval not regular
+2. Auto-detection failed
+
+**Solution:**
+```{r eval=FALSE}
+# Manually specify expected interval
+qc_results <- flag_vh_quality(
+  vh_results,
+  expected_interval_hours = 0.5  # 30 minutes
+)
+```
+
+---
+
+## Best Practices
+
+### 1. **Always Run QC Before Analysis**
+
+```{r eval=FALSE}
+# Standard workflow:
+data <- read_heat_pulse_data("file.txt")
+vh <- calc_heat_pulse_velocity(data)
+qc <- flag_vh_quality(vh)  # ← CRITICAL STEP
+vh_clean <- qc$vh_flagged %>% filter(quality_flag == "OK")
+# Now proceed with analysis on vh_clean
+```
+
+### 2. **Document Your QC Parameters**
+
+```{r eval=FALSE}
+# Save QC metadata with results
+qc_metadata <- qc$metadata
+saveRDS(qc_metadata, "analysis_qc_settings.rds")
+
+# Include in reports
+cat("Quality control performed on:", qc_metadata$timestamp, "\n")
+cat("Methods used:", paste(qc_metadata$methods_used, collapse = ", "), "\n")
+cat("Threshold:", qc_metadata$remainder_threshold, "\n")
+```
+
+### 3. **Visual Verification**
+
+```{r eval=FALSE}
+# ALWAYS plot your flagged data
+plot_vh_with_flags <- function(qc_results, date_range = NULL) {
+  data <- qc_results$vh_flagged
+
+  if (!is.null(date_range)) {
+    data <- data %>%
+      filter(datetime >= date_range[1], datetime <= date_range[2])
+  }
+
+  ggplot(data, aes(x = datetime, y = Vh_cm_hr, color = quality_flag)) +
+    geom_point(alpha = 0.6) +
+    scale_color_manual(values = c(
+      "OK" = "darkgreen", "OUTLIER" = "red",
+      "SUSPECT" = "orange", "MISSING" = "grey",
+      "ILLOGICAL" = "purple"
+    )) +
+    theme_minimal() +
+    labs(title = "Quality Control Results", x = "Time", y = "Vh (cm/hr)")
+}
+
+plot_vh_with_flags(qc_results)
+```
+
+### 4. **Keep Original Data**
+
+```{r eval=FALSE}
+# Never overwrite original vh_results
+qc_results <- flag_vh_quality(vh_results)  # Original preserved
+vh_clean <- qc_results$vh_flagged %>% filter(quality_flag == "OK")
+
+# If you need to revert or try different settings:
+qc_strict <- flag_vh_quality(vh_results, remainder_threshold = 2)
+qc_permissive <- flag_vh_quality(vh_results, remainder_threshold = 4)
+```
+
+### 5. **Species-Specific Settings**
+
+```{r eval=FALSE}
+# Use species thresholds when available
+qc_eucalyptus <- flag_vh_quality(
+  vh_results,
+  wood_properties = "eucalyptus"  # max_velocity_cm_hr = 200
+)
+
+qc_pine <- flag_vh_quality(
+  vh_results,
+  wood_properties = "pine"  # max_velocity_cm_hr = 150
+)
+```
+
+---
+
+## References
+
+### Cyclical Time Series Outlier Detection
+
+1. **STL Decomposition:**
+   - Cleveland et al. (1990). "STL: A Seasonal-Trend Decomposition Procedure Based on Loess." *Journal of Official Statistics*, 6(1), 3-73.
+
+2. **MSTL (Multiple Seasonal-Trend Decomposition):**
+   - Bandara, Hyndman & Bergmeir (2022). "MSTL: A Seasonal-Trend Decomposition Algorithm for Time Series with Multiple Seasonal Patterns." *International Journal of Operational Research*.
+
+3. **Hampel Filter:**
+   - Hampel (1974). "The influence curve and its role in robust estimation." *Journal of the American Statistical Association*, 69(346), 383-393.
+   - Pearson (2002). "Outlier detection in process data." In: *Applied Statistics for the Six Sigma Green Belt*.
+
+4. **Tukey's Outlier Rules:**
+   - Tukey (1977). *Exploratory Data Analysis*. Addison-Wesley.
+   - Outliers: Q1 - 1.5×IQR, Q3 + 1.5×IQR
+   - Far-out outliers: Q1 - 3×IQR, Q3 + 3×IQR (used in this package)
+
+5. **MAD (Median Absolute Deviation):**
+   - Leys et al. (2013). "Detecting outliers: Do not use standard deviation around the mean, use absolute deviation around the median." *Journal of Experimental Social Psychology*, 49(4), 764-766.
+
+### Sap Flow Quality Control
+
+6. **Sap Flow Data Quality:**
+   - Steppe et al. (2010). "Could rapid diameter changes be facilitated by a variable hydraulic conductance?" *Plant, Cell & Environment*, 33(2), 150-157.
+   - Mentions quality issues in heat pulse data
+
+7. **Heat Pulse Method Review:**
+   - Burgess et al. (2001). "An improved heat pulse method to measure low and reverse rates of sap flow in woody plants." *Tree Physiology*, 21(9), 589-598.
+
+---
+
+## Summary
+
+- **Use `flag_vh_quality()`** on Vh results (not raw temperature data)
+- **Cyclical-aware methods** (STL/MSTL/Hampel) account for daily sap flow patterns
+- **Default settings** work well for most cases (all three methods, threshold=3)
+- **Quality flags** follow hierarchy: MISSING > ILLOGICAL > OUTLIER > SUSPECT > OK
+- **Always visually verify** flagged points before removing data
+- **Document QC settings** for reproducible analysis
+
+### Quick Reference Card
+
+```r
+# Standard workflow:
+qc <- flag_vh_quality(vh_results)                   # All defaults
+qc <- flag_vh_quality(vh_results,
+                      wood_properties = "species")  # Species thresholds
+qc <- flag_vh_quality(vh_results,
+                      remainder_threshold = 2.5)    # More sensitive
+qc <- flag_vh_quality(vh_results,
+                      outlier_method = "hampel")    # Spikes only
+
+# Use results:
+vh_clean <- qc$vh_flagged %>% filter(quality_flag == "OK")
+print(qc$gap_report)
+table(qc$vh_flagged$quality_flag)
+```

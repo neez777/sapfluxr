@@ -11,7 +11,7 @@ detect_cross_sensor_outliers(vh_results, threshold = 3, flag_levels = "OK")
 
 \item{threshold}{Numeric, MAD multiplier for cross-sensor comparison}
 
-\item{flag_levels}{Character vector of flag levels to check (default: "OK")}
+\item{flag_levels}{Character vector of flag levels to check}
 }
 \value{
 Integer vector of row indices flagged as cross-sensor outliers

@@ -7,10 +7,10 @@
 get_default_parameters()
 }
 \value{
-A list containing default calculation parameters
+A named list containing default parameter values for HPV calculations
 }
 \description{
-Returns a list of default parameters for heat pulse velocity calculations.
+Returns a list of default calculation parameters for heat pulse velocity calculations.
 }
 \details{
 Default parameters are:

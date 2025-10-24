@@ -5,5 +5,5 @@
 \title{Data Quality Control Functions}
 \description{
 Quality control functions for heat pulse velocity (Vh) results.
-Detects missing data, illogical values, and outliers in cyclical time series.
+Detects missing data, illogical values, and outliers using simple rolling statistics.
 }

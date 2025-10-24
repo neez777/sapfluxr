@@ -16,7 +16,10 @@ calc_heat_pulse_velocity(
   probe_corrections = NULL,
   confirm_parameters = TRUE,
   plot_results = FALSE,
-  show_progress = TRUE
+  show_progress = TRUE,
+  fill_missing_pulses = TRUE,
+  max_gap_hours = 24,
+  interval_tolerance_seconds = 5
 )
 }
 \arguments{
@@ -61,6 +64,19 @@ in interactive mode (default: TRUE). Set to FALSE for non-interactive scripts.}
 \item{plot_results}{Logical indicating whether to generate diagnostic plots}
 
 \item{show_progress}{Logical indicating whether to report progress (default: TRUE)}
+
+\item{fill_missing_pulses}{Logical indicating whether to auto-detect and fill missing pulses
+in the time series (default: TRUE). Missing pulses are added as rows with Vh_cm_hr = NA
+and quality_flag = "DATA_MISSING". This ensures complete time series for plotting and
+interpolation.}
+
+\item{max_gap_hours}{Numeric maximum gap duration (hours) to fill with DATA_MISSING rows.
+Gaps larger than this are reported in messages but not filled to avoid creating excessive
+missing rows (default: 24 hours). Only applies if fill_missing_pulses = TRUE.}
+
+\item{interval_tolerance_seconds}{Numeric tolerance in seconds for matching pulse times.
+Allows for clock drift and timing jitter (default: 5 seconds). Only applies if
+fill_missing_pulses = TRUE.}
 }
 \value{
 A tibble containing calculated heat pulse velocities with columns:
