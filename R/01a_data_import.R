@@ -24,7 +24,8 @@ show_message <- function(msg, type = "message", duration = NULL) {
     # In Shiny, use showNotification
     if (requireNamespace("shiny", quietly = TRUE)) {
       # Remove emoji from Shiny notifications for cleaner display
-      clean_msg <- gsub("[\U0001F300-\U0001F9FF]", "", msg)
+      # Use iconv instead of regex to avoid Windows Unicode issues
+      clean_msg <- iconv(msg, to = "ASCII//TRANSLIT", sub = "")
       clean_msg <- trimws(clean_msg)
 
       shiny::showNotification(
