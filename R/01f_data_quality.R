@@ -46,9 +46,13 @@ NULL
 #'   Gaps larger than this are reported but not filled to avoid creating excessive missing rows.
 #'   Default: 24 hours
 #' @param return_gap_report Logical, include detailed gap report (default: TRUE)
+#' @param return_full_report Logical, return full report list or just flagged data frame (default: FALSE).
+#'   If FALSE, returns only the vh_flagged data frame. If TRUE, returns full list with gap_report,
+#'   outlier_summary, flag_counts, and metadata. Use FALSE for simple workflows and Shiny apps.
 #' @param verbose Logical, print progress messages (default: TRUE)
 #'
-#' @return List containing:
+#' @return If return_full_report = FALSE (default), returns data frame with quality_flag column added.
+#'   If return_full_report = TRUE, returns list containing:
 #'   \describe{
 #'     \item{vh_flagged}{Data frame with added quality_flag column}
 #'     \item{gap_report}{Data frame of missing data periods (if return_gap_report = TRUE)}
@@ -108,30 +112,32 @@ NULL
 #'
 #' @examples
 #' \dontrun{
-#' # Basic usage with all defaults
+#' # Basic usage - returns data frame with quality_flag column
 #' vh_results <- calc_heat_pulse_velocity(heat_pulse_data)
-#' qc_results <- flag_vh_quality(vh_results)
+#' vh_flagged <- flag_vh_quality(vh_results)
+#' table(vh_flagged$quality_flag)
 #'
-#' # View flagged data
+#' # Get full report for detailed analysis
+#' qc_results <- flag_vh_quality(vh_results, return_full_report = TRUE)
+#' print(qc_results)  # Shows summary
 #' table(qc_results$vh_flagged$quality_flag)
+#' print(qc_results$gap_report)
 #'
 #' # With species-specific thresholds
-#' qc_results <- flag_vh_quality(
+#' vh_flagged <- flag_vh_quality(
 #'   vh_results,
 #'   wood_properties = "eucalyptus"
 #' )
 #'
-#' # Custom outlier detection
+#' # Custom outlier detection with full report
 #' qc_results <- flag_vh_quality(
 #'   vh_results,
 #'   rolling_window = 7,           # Wider window
 #'   rolling_threshold = 2.5,      # More sensitive
 #'   max_change_cm_hr = 3,         # Stricter rate of change
-#'   max_gap_to_fill_hours = 12    # Don't fill gaps > 12 hours
+#'   max_gap_to_fill_hours = 12,   # Don't fill gaps > 12 hours
+#'   return_full_report = TRUE
 #' )
-#'
-#' # Check gap report
-#' print(qc_results$gap_report)
 #' }
 #'
 #' @seealso \code{\link{interpolate_missing_vh}}
@@ -155,6 +161,7 @@ flag_vh_quality <- function(vh_results,
                             add_rows_for_missing = TRUE,
                             max_gap_to_fill_hours = 24,
                             return_gap_report = TRUE,
+                            return_full_report = FALSE,
                             verbose = TRUE) {
 
   # Input validation
@@ -472,24 +479,29 @@ flag_vh_quality <- function(vh_results,
   }
 
   # Return results
-  result <- list(
-    vh_flagged = vh_results,
-    gap_report = if (return_gap_report) gap_report else NULL,
-    outlier_summary = detection_summary,
-    flag_counts = as.data.frame(flag_counts),
-    metadata = list(
-      rolling_window = rolling_window,
-      rolling_threshold = rolling_threshold,
-      max_change_cm_hr = max_change_cm_hr,
-      hard_max_vh = hard_max_vh,
-      species_max_vh = species_max_vh,
-      max_gap_to_fill_hours = max_gap_to_fill_hours,
-      timestamp = Sys.time()
+  if (return_full_report) {
+    # Full report with all diagnostics
+    result <- list(
+      vh_flagged = vh_results,
+      gap_report = if (return_gap_report) gap_report else NULL,
+      outlier_summary = detection_summary,
+      flag_counts = as.data.frame(flag_counts),
+      metadata = list(
+        rolling_window = rolling_window,
+        rolling_threshold = rolling_threshold,
+        max_change_cm_hr = max_change_cm_hr,
+        hard_max_vh = hard_max_vh,
+        species_max_vh = species_max_vh,
+        max_gap_to_fill_hours = max_gap_to_fill_hours,
+        timestamp = Sys.time()
+      )
     )
-  )
-
-  class(result) <- c("vh_quality_results", "list")
-  return(result)
+    class(result) <- c("vh_quality_results", "list")
+    return(result)
+  } else {
+    # Simple return - just the flagged data frame
+    return(vh_results)
+  }
 }
 
 

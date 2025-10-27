@@ -206,66 +206,106 @@ calc_heat_pulse_velocity <- function(heat_pulse_data,
   # This avoids scanning entire dataset for each pulse
   measurements_by_pulse <- split(measurements, measurements$pulse_id)
 
+  # Check if we're in a Shiny session (where caller manages progress wrapping)
+  in_shiny <- tryCatch({
+    !is.null(shiny::getDefaultReactiveDomain())
+  }, error = function(e) FALSE)
+
+  # If not in Shiny and progress is enabled, set up for R console
+  if (show_progress && !in_shiny) {
+    # R console: set up text progress bar and wrap in with_progress
+    progressr::handlers("txtprogressbar")
+
+    return(progressr::with_progress({
+      calc_heat_pulse_velocity_internal(
+        measurements_by_pulse, pulse_ids, params, methods, plot_results,
+        show_progress, fill_missing_pulses, max_gap_hours,
+        interval_tolerance_seconds, probe_corrections
+      )
+    }))
+  }
+
+  # In Shiny or progress disabled - just run directly
+  return(calc_heat_pulse_velocity_internal(
+    measurements_by_pulse, pulse_ids, params, methods, plot_results,
+    show_progress, fill_missing_pulses, max_gap_hours,
+    interval_tolerance_seconds, probe_corrections
+  ))
+}
+
+
+#' Internal calculation function (called with progress context already set up)
+#' @keywords internal
+calc_heat_pulse_velocity_internal <- function(measurements_by_pulse, pulse_ids,
+                                              params, methods, plot_results,
+                                              show_progress, fill_missing_pulses,
+                                              max_gap_hours, interval_tolerance_seconds,
+                                              probe_corrections) {
+
   # Process each pulse with progress reporting
   all_results <- list()
   successful_pulses <- 0
   n_pulses <- length(pulse_ids)
+  n_methods <- length(methods)
 
-  # Create progress reporter
+  # Create progress reporter with total steps = pulses * methods for granular feedback
+  total_steps <- n_pulses * n_methods
   p <- if (show_progress && n_pulses > 0) {
-    progressr::progressor(steps = n_pulses)
+    progressr::progressor(steps = total_steps)
   } else {
     NULL
   }
 
-  # Determine update frequency for progress reporting
-  update_interval <- if (n_pulses < 50) {
-    1   # Update every pulse for small datasets
-  } else if (n_pulses < 500) {
-    5   # Update every 5 pulses
-  } else if (n_pulses < 2000) {
-    20  # Update every 20 pulses
-  } else {
-    50  # Update every 50 pulses for large datasets
-  }
-
-  last_reported <- 0  # Track last reported position for accurate progress updates
+  # Throttle progress updates to avoid UI slowdown
+  update_frequency <- 100  # Update every 100 method calculations
+  methods_completed <- 0
+  methods_since_last_update <- 0
 
   for (i in seq_along(pulse_ids)) {
     pid <- pulse_ids[i]
 
     tryCatch({
-      pulse_result <- calc_vh_single_pulse(measurements_by_pulse[[as.character(pid)]],
-                                            pid, params, methods, plot_results)
+      # Pass progress reporter to single pulse function for per-method updates
+      pulse_result <- calc_vh_single_pulse(
+        measurements_by_pulse[[as.character(pid)]],
+        pid, params, methods, plot_results,
+        progress_fn = NULL,  # Don't report from inside function
+        pulse_num = i,
+        total_pulses = n_pulses
+      )
       all_results[[i]] <- pulse_result
       successful_pulses <- successful_pulses + 1
 
-      # Update progress
-      if (show_progress && !is.null(p) && (i %% update_interval == 0 || i == n_pulses)) {
-        # Calculate actual amount processed since last update
-        amount_to_report <- i - last_reported
-        p(amount = amount_to_report,
-          message = sprintf("Processing pulse %s / %s (%.0f%% complete, %s methods)",
-                           format(i, big.mark = ","),
-                           format(n_pulses, big.mark = ","),
-                           100 * i / n_pulses,
-                           paste(methods, collapse = ", ")))
-        last_reported <- i
+      # Track method completion and update progress periodically
+      methods_completed <- methods_completed + n_methods
+      methods_since_last_update <- methods_since_last_update + n_methods
+
+      # Update progress every 100 methods OR at the end
+      if (show_progress && !is.null(p) &&
+          (methods_since_last_update >= update_frequency || methods_completed == total_steps)) {
+        p(amount = methods_since_last_update,
+          message = sprintf("Processed %s / %s method calculations (%.1f%% complete)",
+                           format(methods_completed, big.mark = ","),
+                           format(total_steps, big.mark = ","),
+                           100 * methods_completed / total_steps))
+        methods_since_last_update <- 0
       }
 
     }, error = function(e) {
       message("Error processing pulse ", pid, ": ", e$message)
 
-      # Still update progress even on error
-      if (show_progress && !is.null(p) && (i %% update_interval == 0 || i == n_pulses)) {
-        # Calculate actual amount processed since last update
-        amount_to_report <- i - last_reported
-        p(amount = amount_to_report,
-          message = sprintf("Processing pulse %s / %s (%.0f%% complete)",
-                           format(i, big.mark = ","),
-                           format(n_pulses, big.mark = ","),
-                           100 * i / n_pulses))
-        last_reported <- i
+      # Still track progress for methods that would have been processed
+      methods_completed <- methods_completed + n_methods
+      methods_since_last_update <- methods_since_last_update + n_methods
+
+      if (show_progress && !is.null(p) &&
+          (methods_since_last_update >= update_frequency || methods_completed == total_steps)) {
+        p(amount = methods_since_last_update,
+          message = sprintf("Processed %s / %s method calculations (%.1f%% complete)",
+                           format(methods_completed, big.mark = ","),
+                           format(total_steps, big.mark = ","),
+                           100 * methods_completed / total_steps))
+        methods_since_last_update <- 0
       }
     })
   }
@@ -369,9 +409,13 @@ calc_heat_pulse_velocity <- function(heat_pulse_data,
 #' @param parameters List of parameters
 #' @param methods Character vector of methods
 #' @param plot_results Whether to plot results
+#' @param progress_fn Progress reporter function (optional)
+#' @param pulse_num Current pulse number (optional, for progress reporting)
+#' @param total_pulses Total number of pulses (optional, for progress reporting)
 #' @return Data frame with results for this pulse
 #' @keywords internal
-calc_vh_single_pulse <- function(pulse_data, pulse_id, parameters, methods, plot_results = FALSE) {
+calc_vh_single_pulse <- function(pulse_data, pulse_id, parameters, methods, plot_results = FALSE,
+                                  progress_fn = NULL, pulse_num = NULL, total_pulses = NULL) {
 
   # Data is already filtered by pulse_id, just validate
   if (is.null(pulse_data) || nrow(pulse_data) == 0) {
@@ -420,6 +464,28 @@ calc_vh_single_pulse <- function(pulse_data, pulse_id, parameters, methods, plot
   dTratio_douo <- deltaT_do / deltaT_uo
   dTratio_diui <- deltaT_di / deltaT_ui
 
+  # OPTIMISATION: Pre-compute peak information once (used by MHR, Tmax, HRMX)
+  # This avoids redundant max() and which.max() calls across multiple methods
+  peak_info <- list(
+    # Maximum values
+    dTdo_max = max(deltaT_do, na.rm = TRUE),
+    dTdi_max = max(deltaT_di, na.rm = TRUE),
+    dTuo_max = max(deltaT_uo, na.rm = TRUE),
+    dTui_max = max(deltaT_ui, na.rm = TRUE),
+
+    # Peak indices (which.max returns index in vector)
+    idx_do = which.max(deltaT_do),
+    idx_di = which.max(deltaT_di),
+    idx_uo = which.max(deltaT_uo),
+    idx_ui = which.max(deltaT_ui)
+  )
+
+  # Calculate peak times relative to pulse injection
+  peak_info$time_do <- peak_info$idx_do - pre_pulse
+  peak_info$time_di <- peak_info$idx_di - pre_pulse
+  peak_info$time_uo <- peak_info$idx_uo - pre_pulse
+  peak_info$time_ui <- peak_info$idx_ui - pre_pulse
+
   # Initialize results
   method_results <- list()
 
@@ -431,26 +497,34 @@ calc_vh_single_pulse <- function(pulse_data, pulse_id, parameters, methods, plot
 
   # Maximum Heat Ratio (MHR)
   if ("MHR" %in% methods) {
-    mhr_results <- calc_mhr(deltaT_do, deltaT_di, deltaT_uo, deltaT_ui, diffusivity, probe_spacing, pre_pulse)
+    mhr_results <- calc_mhr(deltaT_do, deltaT_di, deltaT_uo, deltaT_ui,
+                            diffusivity, probe_spacing, pre_pulse, peak_info)
     method_results[["MHR"]] <- mhr_results
   }
 
   # HRMX methods
   if ("HRMXa" %in% methods || "HRMXb" %in% methods) {
     hrmx_results <- calc_hrmx(deltaT_do, deltaT_di, deltaT_uo, deltaT_ui,
-                              dTratio_douo, dTratio_diui, L, H, diffusivity, probe_spacing, tp)
-    if ("HRMXa" %in% methods) method_results[["HRMXa"]] <- hrmx_results$HRMXa
-    if ("HRMXb" %in% methods) method_results[["HRMXb"]] <- hrmx_results$HRMXb
+                              dTratio_douo, dTratio_diui, L, H,
+                              diffusivity, probe_spacing, tp, peak_info)
+    if ("HRMXa" %in% methods) {
+      method_results[["HRMXa"]] <- hrmx_results$HRMXa
+    }
+    if ("HRMXb" %in% methods) {
+      method_results[["HRMXb"]] <- hrmx_results$HRMXb
+    }
   }
 
   # T-max methods
   if ("Tmax_Coh" %in% methods) {
-    tmax_coh_results <- calc_tmax_coh(deltaT_do, deltaT_di, diffusivity, probe_spacing, pre_pulse)
+    tmax_coh_results <- calc_tmax_coh(deltaT_do, deltaT_di, diffusivity,
+                                      probe_spacing, pre_pulse, peak_info)
     method_results[["Tmax_Coh"]] <- tmax_coh_results
   }
 
   if ("Tmax_Klu" %in% methods) {
-    tmax_klu_results <- calc_tmax_klu(deltaT_do, deltaT_di, diffusivity, probe_spacing, tp_1, pre_pulse)
+    tmax_klu_results <- calc_tmax_klu(deltaT_do, deltaT_di, diffusivity,
+                                      probe_spacing, tp_1, pre_pulse, peak_info)
     method_results[["Tmax_Klu"]] <- tmax_klu_results
   }
 
@@ -615,8 +689,9 @@ calc_hrm <- function(dTratio_douo, dTratio_diui, HRM_period, diffusivity, probe_
 }
 
 #' Calculate MHR velocities
+#' @param peak_info Pre-computed peak information from calc_vh_single_pulse
 #' @keywords internal
-calc_mhr <- function(deltaT_do, deltaT_di, deltaT_uo, deltaT_ui, diffusivity, probe_spacing, pre_pulse) {
+calc_mhr <- function(deltaT_do, deltaT_di, deltaT_uo, deltaT_ui, diffusivity, probe_spacing, pre_pulse, peak_info) {
 
   # Input validation
   if (all(is.na(deltaT_do)) || all(is.na(deltaT_di)) ||
@@ -634,23 +709,16 @@ calc_mhr <- function(deltaT_do, deltaT_di, deltaT_uo, deltaT_ui, diffusivity, pr
     ))
   }
 
-  # Find maximum temperature increases and their timing
-  dTdo_max <- max(deltaT_do, na.rm = TRUE)
-  dTdi_max <- max(deltaT_di, na.rm = TRUE)
-  dTuo_max <- max(deltaT_uo, na.rm = TRUE)
-  dTui_max <- max(deltaT_ui, na.rm = TRUE)
+  # Use pre-computed peak information (OPTIMISATION: avoids redundant scans)
+  dTdo_max <- peak_info$dTdo_max
+  dTdi_max <- peak_info$dTdi_max
+  dTuo_max <- peak_info$dTuo_max
+  dTui_max <- peak_info$dTui_max
 
-  # Get time indices to maximum for all 4 sensors
-  idx_do <- which.max(deltaT_do)  # Downstream outer
-  idx_di <- which.max(deltaT_di)  # Downstream inner
-  idx_uo <- which.max(deltaT_uo)  # Upstream outer
-  idx_ui <- which.max(deltaT_ui)  # Upstream inner
-
-  # Convert indices to seconds after pulse
-  time_do <- idx_do - pre_pulse
-  time_di <- idx_di - pre_pulse
-  time_uo <- idx_uo - pre_pulse
-  time_ui <- idx_ui - pre_pulse
+  time_do <- peak_info$time_do
+  time_di <- peak_info$time_di
+  time_uo <- peak_info$time_uo
+  time_ui <- peak_info$time_ui
 
   # Check for valid maximums
   if (any(c(dTdo_max, dTdi_max, dTuo_max, dTui_max) <= 0) ||
@@ -710,9 +778,10 @@ calc_mhr <- function(deltaT_do, deltaT_di, deltaT_uo, deltaT_ui, diffusivity, pr
 }
 
 #' Calculate HRMX velocities
+#' @param peak_info Pre-computed peak information from calc_vh_single_pulse
 #' @keywords internal
 calc_hrmx <- function(deltaT_do, deltaT_di, deltaT_uo, deltaT_ui,
-                      dTratio_douo, dTratio_diui, L, H, diffusivity, probe_spacing, tp) {
+                      dTratio_douo, dTratio_diui, L, H, diffusivity, probe_spacing, tp, peak_info) {
 
   # Input validation
   if (all(is.na(deltaT_do)) || all(is.na(deltaT_di)) ||
@@ -734,17 +803,16 @@ calc_hrmx <- function(deltaT_do, deltaT_di, deltaT_uo, deltaT_ui,
     ))
   }
 
-  # Calculate max temperatures
-  dTdo_max <- max(deltaT_do, na.rm = TRUE)
-  dTdi_max <- max(deltaT_di, na.rm = TRUE)
-  dTuo_max <- max(deltaT_uo, na.rm = TRUE)
-  dTui_max <- max(deltaT_ui, na.rm = TRUE)
+  # Use pre-computed peak information (OPTIMISATION: avoids redundant scans)
+  dTdo_max <- peak_info$dTdo_max
+  dTdi_max <- peak_info$dTdi_max
+  dTuo_max <- peak_info$dTuo_max
+  dTui_max <- peak_info$dTui_max
 
-  # Find indices of maximum temperature for each sensor
-  idx_do_max <- which.max(deltaT_do)
-  idx_di_max <- which.max(deltaT_di)
-  idx_uo_max <- which.max(deltaT_uo)
-  idx_ui_max <- which.max(deltaT_ui)
+  idx_do_max <- peak_info$idx_do
+  idx_di_max <- peak_info$idx_di
+  idx_uo_max <- peak_info$idx_uo
+  idx_ui_max <- peak_info$idx_ui
 
   # Calculate pre-max values (only on rising limb BEFORE maximum)
   dTdo_premax <- c(NA, ifelse(diff(deltaT_do) > 0, deltaT_do[-1], NA))
@@ -912,8 +980,9 @@ calc_hrmx <- function(deltaT_do, deltaT_di, deltaT_uo, deltaT_ui,
 }
 
 #' Calculate Tmax Cohen velocities
+#' @param peak_info Pre-computed peak information from calc_vh_single_pulse
 #' @keywords internal
-calc_tmax_coh <- function(deltaT_do, deltaT_di, diffusivity, probe_spacing, pre_pulse) {
+calc_tmax_coh <- function(deltaT_do, deltaT_di, diffusivity, probe_spacing, pre_pulse, peak_info) {
 
   # Validate inputs
   if (!is.numeric(deltaT_do) || !is.numeric(deltaT_di)) {
@@ -929,9 +998,9 @@ calc_tmax_coh <- function(deltaT_do, deltaT_di, diffusivity, probe_spacing, pre_
                 issue = "no_valid_data"))
   }
 
-  # Find time to maximum (adjust for pre-pulse period)
-  tmo <- which.max(deltaT_do) - pre_pulse
-  tmi <- which.max(deltaT_di) - pre_pulse
+  # Use pre-computed peak times (OPTIMISATION: avoids redundant which.max() calls)
+  tmo <- peak_info$time_do
+  tmi <- peak_info$time_di
 
   # Check for valid time to maximum
   if (tmo <= 0 || tmi <= 0) {
@@ -975,8 +1044,9 @@ calc_tmax_coh <- function(deltaT_do, deltaT_di, diffusivity, probe_spacing, pre_
 }
 
 #' Calculate Tmax Kluitenberg velocities
+#' @param peak_info Pre-computed peak information from calc_vh_single_pulse
 #' @keywords internal
-calc_tmax_klu <- function(deltaT_do, deltaT_di, diffusivity, probe_spacing, tp_1, pre_pulse) {
+calc_tmax_klu <- function(deltaT_do, deltaT_di, diffusivity, probe_spacing, tp_1, pre_pulse, peak_info) {
 
   # Validate inputs
   if (!is.numeric(deltaT_do) || !is.numeric(deltaT_di)) {
@@ -996,9 +1066,9 @@ calc_tmax_klu <- function(deltaT_do, deltaT_di, diffusivity, probe_spacing, tp_1
                 issue = "no_valid_data"))
   }
 
-  # Find time to maximum (adjust for pre-pulse period)
-  tmo <- which.max(deltaT_do) - pre_pulse
-  tmi <- which.max(deltaT_di) - pre_pulse
+  # Use pre-computed peak times (OPTIMISATION: avoids redundant which.max() calls)
+  tmo <- peak_info$time_do
+  tmi <- peak_info$time_di
 
   # Check if time to max > pulse duration (required for Kluitenberg method)
   if (tmo <= tp_1) {
@@ -1070,6 +1140,9 @@ calc_tmax_klu <- function(deltaT_do, deltaT_di, diffusivity, probe_spacing, tp_1
 #' @param secondary_method Character string or vector specifying secondary method(s).
 #'   Options: "MHR", "Tmax_Coh", "Tmax_Klu", "HRMXa", "HRMXb".
 #'   Can provide multiple methods to create multiple sDMA variants.
+#' @param skip_low_peclet Logical indicating whether to automatically skip sDMA when
+#'   all Peclet numbers are <= 1. If NULL (default), will prompt user interactively.
+#'   Set to TRUE to skip without prompting, FALSE to always calculate.
 #' @param show_progress Logical indicating whether to show progress bar. Default: TRUE
 #'
 #' @details
@@ -1096,8 +1169,14 @@ calc_tmax_klu <- function(deltaT_do, deltaT_di, diffusivity, probe_spacing, tp_1
 #' vh <- calc_heat_pulse_velocity(heat_pulse_data,
 #'                                 methods = c("HRM", "MHR", "Tmax_Klu"))
 #'
-#' # Apply sDMA with MHR as secondary
+#' # Apply sDMA with MHR as secondary (will check Peclet numbers first)
 #' vh_sdma <- apply_sdma_processing(vh, secondary_method = "MHR")
+#'
+#' # Skip sDMA automatically if all Peclet <= 1 (non-interactive)
+#' vh_sdma <- apply_sdma_processing(vh, secondary_method = "MHR", skip_low_peclet = TRUE)
+#'
+#' # Force sDMA calculation even if Peclet numbers are low
+#' vh_sdma <- apply_sdma_processing(vh, secondary_method = "MHR", skip_low_peclet = FALSE)
 #'
 #' # Create multiple sDMA variants
 #' vh_sdma <- apply_sdma_processing(vh, secondary_method = c("MHR", "Tmax_Klu"))
@@ -1109,6 +1188,7 @@ calc_tmax_klu <- function(deltaT_do, deltaT_di, diffusivity, probe_spacing, tp_1
 #' @export
 apply_sdma_processing <- function(vh_results,
                                   secondary_method,
+                                  skip_low_peclet = NULL,
                                   show_progress = TRUE) {
 
   # Validate input
@@ -1128,6 +1208,46 @@ apply_sdma_processing <- function(vh_results,
   if (all(is.na(hrm_data$peclet_number))) {
     stop("HRM results do not contain Peclet numbers.\n",
          "  This may be from an older version. Please recalculate HRM results.")
+  }
+
+  # Check Peclet number range to determine if sDMA is necessary
+  max_peclet <- max(hrm_data$peclet_number, na.rm = TRUE)
+
+  if (!is.na(max_peclet) && max_peclet <= 1.0) {
+    # All Peclet numbers are <= 1, so sDMA would never switch to secondary method
+    message("\n", strrep("=", 67))
+    message("  sDMA PECLET NUMBER CHECK")
+    message(strrep("=", 67))
+    message(sprintf("\nMaximum Peclet number: %.3f", max_peclet))
+    message("\nAll Peclet numbers are <= 1.0, which means:")
+    message("  • HRM is valid for all measurements (low flow conditions)")
+    message("  • sDMA would never switch to the secondary method")
+    message("  • The sDMA results would be identical to HRM results")
+    message("\nCalculating sDMA is unnecessary in this case.")
+
+    # Determine whether to skip based on parameter or user input
+    should_skip <- if (!is.null(skip_low_peclet)) {
+      skip_low_peclet
+    } else if (interactive()) {
+      # Interactive prompt
+      cat("\nDo you want to skip sDMA calculation? (yes/no): ")
+      response <- tolower(trimws(readline()))
+      response %in% c("y", "yes")
+    } else {
+      # Non-interactive default: skip
+      message("\nSkipping sDMA calculation (non-interactive mode).")
+      message("Set skip_low_peclet = FALSE to force calculation.\n")
+      TRUE
+    }
+
+    if (should_skip) {
+      message("\nsDMA calculation skipped. Returning original results.\n")
+      message(strrep("=", 67), "\n")
+      return(vh_results)
+    } else {
+      message("\nProceeding with sDMA calculation as requested.\n")
+      message(strrep("=", 67), "\n")
+    }
   }
 
   # Validate secondary methods exist
@@ -1157,10 +1277,51 @@ apply_sdma_processing <- function(vh_results,
   n_pulses <- length(pulse_ids)
   n_methods <- length(secondary_method)
 
+  # OPTIMISATION: Pre-split results by pulse_id and method once (massive speedup!)
+  # This avoids scanning entire dataset for each pulse
+  results_by_pulse <- split(vh_results, list(vh_results$pulse_id, vh_results$method))
+
+  # Check if we're in a Shiny session (where caller manages progress wrapping)
+  in_shiny <- tryCatch({
+    !is.null(shiny::getDefaultReactiveDomain())
+  }, error = function(e) FALSE)
+
+  # If not in Shiny and progress is enabled, set up for R console
+  if (show_progress && !in_shiny) {
+    # R console: set up text progress bar and wrap in with_progress
+    progressr::handlers("txtprogressbar")
+
+    return(progressr::with_progress({
+      apply_sdma_processing_internal(
+        vh_results, results_by_pulse, pulse_ids, n_pulses, n_methods,
+        secondary_method, show_progress
+      )
+    }))
+  }
+
+  # In Shiny or progress disabled - just run directly
+  return(apply_sdma_processing_internal(
+    vh_results, results_by_pulse, pulse_ids, n_pulses, n_methods,
+    secondary_method, show_progress
+  ))
+}
+
+
+#' Internal sDMA processing function (called with progress context already set up)
+#' @keywords internal
+apply_sdma_processing_internal <- function(vh_results, results_by_pulse, pulse_ids,
+                                           n_pulses, n_methods, secondary_method,
+                                           show_progress) {
+
   # Progress reporting setup
   if (show_progress) {
     p <- progressr::progressor(steps = n_pulses * n_methods)
   }
+
+  # Throttle progress updates
+  update_frequency <- 100
+  methods_completed <- 0
+  methods_since_last_update <- 0
 
   # Process each secondary method
   all_sdma_results <- list()
@@ -1174,20 +1335,23 @@ apply_sdma_processing <- function(vh_results,
     for (i in seq_along(pulse_ids)) {
       pulse_id <- pulse_ids[i]
 
-      # Get HRM and secondary results for this pulse
-      hrm_outer <- vh_results[vh_results$pulse_id == pulse_id &
-                               vh_results$method == "HRM" &
-                               vh_results$sensor_position == "outer", ]
-      hrm_inner <- vh_results[vh_results$pulse_id == pulse_id &
-                               vh_results$method == "HRM" &
-                               vh_results$sensor_position == "inner", ]
+      # Get HRM and secondary results for this pulse using pre-split data
+      hrm_key <- paste(pulse_id, "HRM", sep = ".")
+      sec_key <- paste(pulse_id, sec_method, sep = ".")
 
-      sec_outer <- vh_results[vh_results$pulse_id == pulse_id &
-                               vh_results$method == sec_method &
-                               vh_results$sensor_position == "outer", ]
-      sec_inner <- vh_results[vh_results$pulse_id == pulse_id &
-                               vh_results$method == sec_method &
-                               vh_results$sensor_position == "inner", ]
+      hrm_data <- results_by_pulse[[hrm_key]]
+      sec_data <- results_by_pulse[[sec_key]]
+
+      # Skip if data missing
+      if (is.null(hrm_data) || is.null(sec_data)) {
+        next
+      }
+
+      # Split by sensor position (only 2 rows each, very fast)
+      hrm_outer <- hrm_data[hrm_data$sensor_position == "outer", ]
+      hrm_inner <- hrm_data[hrm_data$sensor_position == "inner", ]
+      sec_outer <- sec_data[sec_data$sensor_position == "outer", ]
+      sec_inner <- sec_data[sec_data$sensor_position == "inner", ]
 
       # Apply switching logic for outer sensor
       if (nrow(hrm_outer) > 0 && nrow(sec_outer) > 0) {
@@ -1229,7 +1393,19 @@ apply_sdma_processing <- function(vh_results,
         )
       }
 
-      if (show_progress) p()
+      # Update throttled progress
+      methods_completed <- methods_completed + 1
+      methods_since_last_update <- methods_since_last_update + 1
+
+      if (show_progress && (methods_since_last_update >= update_frequency ||
+                            methods_completed == n_pulses * n_methods)) {
+        p(amount = methods_since_last_update,
+          message = sprintf("sDMA: Processed %s / %s pulses (%.1f%% complete)",
+                           format(methods_completed, big.mark = ","),
+                           format(n_pulses * n_methods, big.mark = ","),
+                           100 * methods_completed / (n_pulses * n_methods)))
+        methods_since_last_update <- 0
+      }
     }
 
     # Combine all pulses for this sDMA method
