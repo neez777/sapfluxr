@@ -169,7 +169,24 @@ test_that("calc_mhr produces reasonable results", {
   delatT_uo <- c(NA, NA, 0.2, 0.4, 0.8, 0.6, 0.4)
   delatT_ui <- c(NA, NA, 0.1, 0.3, 0.6, 0.5, 0.3)
 
-  result <- calc_mhr(delatT_do, delatT_di, delatT_uo, delatT_ui, 0.0025, 0.5, pre_pulse = 2)
+  # Pre-compute peak information (required by optimized calc_mhr)
+  peak_info <- list(
+    dTdo_max = max(delatT_do, na.rm = TRUE),
+    dTdi_max = max(delatT_di, na.rm = TRUE),
+    dTuo_max = max(delatT_uo, na.rm = TRUE),
+    dTui_max = max(delatT_ui, na.rm = TRUE),
+    idx_do = which.max(delatT_do),
+    idx_di = which.max(delatT_di),
+    idx_uo = which.max(delatT_uo),
+    idx_ui = which.max(delatT_ui)
+  )
+  pre_pulse <- 2
+  peak_info$time_do <- peak_info$idx_do - pre_pulse
+  peak_info$time_di <- peak_info$idx_di - pre_pulse
+  peak_info$time_uo <- peak_info$idx_uo - pre_pulse
+  peak_info$time_ui <- peak_info$idx_ui - pre_pulse
+
+  result <- calc_mhr(delatT_do, delatT_di, delatT_uo, delatT_ui, 0.0025, 0.5, pre_pulse, peak_info)
 
   expect_type(result, "list")
   expect_true(all(c("outer", "inner") %in% names(result)))
@@ -186,7 +203,18 @@ test_that("calc_tmax_coh produces reasonable results", {
   delatT_do <- c(rep(NA, 3), 0.5, 1.0, 1.5, 1.2, 0.8, 0.5)  # Max at position 6 (index)
   delatT_di <- c(rep(NA, 3), 0.3, 0.8, 1.2, 1.0, 0.6, 0.3)  # Max at position 6 (index)
 
-  result <- calc_tmax_coh(delatT_do, delatT_di, 0.0025, 0.5, 3)
+  # Pre-compute peak information (required by optimized calc_tmax_coh)
+  peak_info <- list(
+    dTdo_max = max(delatT_do, na.rm = TRUE),
+    dTdi_max = max(delatT_di, na.rm = TRUE),
+    idx_do = which.max(delatT_do),
+    idx_di = which.max(delatT_di)
+  )
+  pre_pulse <- 3
+  peak_info$time_do <- peak_info$idx_do - pre_pulse
+  peak_info$time_di <- peak_info$idx_di - pre_pulse
+
+  result <- calc_tmax_coh(delatT_do, delatT_di, 0.0025, 0.5, pre_pulse, peak_info)
 
   expect_type(result, "list")
   expect_true(all(c("outer", "inner") %in% names(result)))
@@ -201,7 +229,18 @@ test_that("calc_tmax_klu produces reasonable results", {
   delatT_do <- c(rep(NA, 3), 0.5, 1.0, 1.5, 1.2, 0.8)  # Max at position 6
   delatT_di <- c(rep(NA, 3), 0.3, 0.8, 1.2, 1.0, 0.6)  # Max at position 6
 
-  result <- calc_tmax_klu(delatT_do, delatT_di, 0.0025, 0.5, 2, 3)
+  # Pre-compute peak information (required by optimized calc_tmax_klu)
+  peak_info <- list(
+    dTdo_max = max(delatT_do, na.rm = TRUE),
+    dTdi_max = max(delatT_di, na.rm = TRUE),
+    idx_do = which.max(delatT_do),
+    idx_di = which.max(delatT_di)
+  )
+  pre_pulse <- 3
+  peak_info$time_do <- peak_info$idx_do - pre_pulse
+  peak_info$time_di <- peak_info$idx_di - pre_pulse
+
+  result <- calc_tmax_klu(delatT_do, delatT_di, 0.0025, 0.5, 2, pre_pulse, peak_info)
 
   expect_type(result, "list")
   expect_true(all(c("outer", "inner") %in% names(result)))
@@ -482,8 +521,8 @@ test_that("apply_sdma_processing creates correct sDMA results", {
   vh_results <- calc_heat_pulse_velocity(heat_pulse_data, methods = c("HRM", "MHR"))
   original_rows <- nrow(vh_results)
 
-  # Apply sDMA processing
-  vh_sdma <- apply_sdma_processing(vh_results, "MHR", show_progress = FALSE)
+  # Apply sDMA processing (force calculation even if Pe low)
+  vh_sdma <- apply_sdma_processing(vh_results, "MHR", skip_low_peclet = FALSE, show_progress = FALSE)
 
   # Check structure
   expect_s3_class(vh_sdma, "data.frame")
@@ -523,10 +562,11 @@ test_that("apply_sdma_processing handles multiple secondary methods", {
   )
   original_rows <- nrow(vh_results)
 
-  # Apply sDMA processing with multiple secondary methods
+  # Apply sDMA processing with multiple secondary methods (force calculation)
   vh_sdma <- apply_sdma_processing(
     vh_results,
     secondary_method = c("MHR", "Tmax_Klu"),
+    skip_low_peclet = FALSE,
     show_progress = FALSE
   )
 
@@ -560,8 +600,8 @@ test_that("apply_sdma_processing preserves original results", {
   original_hrm <- vh_results[vh_results$method == "HRM", ]
   original_mhr <- vh_results[vh_results$method == "MHR", ]
 
-  # Apply sDMA processing
-  vh_sdma <- apply_sdma_processing(vh_results, "MHR", show_progress = FALSE)
+  # Apply sDMA processing (force calculation)
+  vh_sdma <- apply_sdma_processing(vh_results, "MHR", skip_low_peclet = FALSE, show_progress = FALSE)
 
   # Check that original HRM and MHR results are still present and unchanged
   new_hrm <- vh_sdma[vh_sdma$method == "HRM", ]
@@ -579,10 +619,33 @@ test_that("apply_sdma_processing preserves original results", {
 # ---- Auto-Fill Missing Pulses Tests ----
 
 test_that("calc_heat_pulse_velocity auto-fills missing pulses by default", {
-  # Create data with missing pulses
+  # Create data with multiple pulses
   heat_pulse_data <- create_mock_heat_pulse_data_for_vh()
 
-  # Remove some pulses to create gaps
+  # Add more pulses first (need at least 5 to create meaningful gaps)
+  base_measurements <- heat_pulse_data$measurements
+  base_diagnostics <- heat_pulse_data$diagnostics
+
+  all_measurements <- list()
+  all_diagnostics <- list()
+
+  for (i in 1:5) {
+    new_measurements <- base_measurements
+    new_measurements$pulse_id <- i
+    new_measurements$datetime <- new_measurements$datetime + (i-1) * 1800  # 30 min intervals
+    all_measurements[[i]] <- new_measurements
+
+    new_diagnostics <- base_diagnostics
+    new_diagnostics$pulse_id <- i
+    new_diagnostics$datetime <- new_diagnostics$datetime[1] + (i-1) * 1800
+    all_diagnostics[[i]] <- new_diagnostics
+  }
+
+  heat_pulse_data$measurements <- do.call(rbind, all_measurements)
+  heat_pulse_data$diagnostics <- do.call(rbind, all_diagnostics)
+  heat_pulse_data$metadata$n_pulses <- 5
+
+  # NOW remove some pulses to create gaps
   measurements <- heat_pulse_data$measurements
   diagnostics <- heat_pulse_data$diagnostics
 
@@ -596,12 +659,6 @@ test_that("calc_heat_pulse_velocity auto-fills missing pulses by default", {
   heat_pulse_data$diagnostics <- diagnostics
 
   # Calculate with auto-fill enabled (default)
-  # Note: Mock data has same datetime for all pulses, so we need to add unique times
-  heat_pulse_data$measurements$datetime <- heat_pulse_data$measurements$datetime +
-    (heat_pulse_data$measurements$pulse_id - 1) * 1800  # 30 min intervals
-  heat_pulse_data$diagnostics$datetime <- heat_pulse_data$diagnostics$datetime +
-    (heat_pulse_data$diagnostics$pulse_id - 1) * 1800
-
   vh_results <- calc_heat_pulse_velocity(
     heat_pulse_data,
     methods = "HRM",
@@ -661,13 +718,32 @@ test_that("calc_heat_pulse_velocity can disable auto-fill", {
 test_that("auto-fill preserves multi-sensor structure", {
   heat_pulse_data <- create_mock_heat_pulse_data_for_vh()
 
+  # Add more pulses first (need at least 5)
+  base_measurements <- heat_pulse_data$measurements
+  base_diagnostics <- heat_pulse_data$diagnostics
+
+  all_measurements <- list()
+  all_diagnostics <- list()
+
+  for (i in 1:5) {
+    new_measurements <- base_measurements
+    new_measurements$pulse_id <- i
+    new_measurements$datetime <- new_measurements$datetime + (i-1) * 1800
+    all_measurements[[i]] <- new_measurements
+
+    new_diagnostics <- base_diagnostics
+    new_diagnostics$pulse_id <- i
+    new_diagnostics$datetime <- new_diagnostics$datetime[1] + (i-1) * 1800
+    all_diagnostics[[i]] <- new_diagnostics
+  }
+
+  heat_pulse_data$measurements <- do.call(rbind, all_measurements)
+  heat_pulse_data$diagnostics <- do.call(rbind, all_diagnostics)
+  heat_pulse_data$metadata$n_pulses <- 5
+
   # Remove a pulse
   measurements <- heat_pulse_data$measurements
   diagnostics <- heat_pulse_data$diagnostics
-
-  # Add unique times first
-  measurements$datetime <- measurements$datetime + (measurements$pulse_id - 1) * 1800
-  diagnostics$datetime <- diagnostics$datetime + (diagnostics$pulse_id - 1) * 1800
 
   measurements <- measurements[measurements$pulse_id != 3, ]
   diagnostics <- diagnostics[diagnostics$pulse_id != 3, ]
@@ -696,13 +772,32 @@ test_that("auto-fill preserves multi-sensor structure", {
 test_that("auto-fill preserves multi-method structure", {
   heat_pulse_data <- create_mock_heat_pulse_data_for_vh()
 
+  # Add more pulses first (need at least 5)
+  base_measurements <- heat_pulse_data$measurements
+  base_diagnostics <- heat_pulse_data$diagnostics
+
+  all_measurements <- list()
+  all_diagnostics <- list()
+
+  for (i in 1:5) {
+    new_measurements <- base_measurements
+    new_measurements$pulse_id <- i
+    new_measurements$datetime <- new_measurements$datetime + (i-1) * 1800
+    all_measurements[[i]] <- new_measurements
+
+    new_diagnostics <- base_diagnostics
+    new_diagnostics$pulse_id <- i
+    new_diagnostics$datetime <- new_diagnostics$datetime[1] + (i-1) * 1800
+    all_diagnostics[[i]] <- new_diagnostics
+  }
+
+  heat_pulse_data$measurements <- do.call(rbind, all_measurements)
+  heat_pulse_data$diagnostics <- do.call(rbind, all_diagnostics)
+  heat_pulse_data$metadata$n_pulses <- 5
+
   # Remove a pulse
   measurements <- heat_pulse_data$measurements
   diagnostics <- heat_pulse_data$diagnostics
-
-  # Add unique times first
-  measurements$datetime <- measurements$datetime + (measurements$pulse_id - 1) * 1800
-  diagnostics$datetime <- diagnostics$datetime + (diagnostics$pulse_id - 1) * 1800
 
   measurements <- measurements[measurements$pulse_id != 3, ]
   diagnostics <- diagnostics[diagnostics$pulse_id != 3, ]
@@ -861,13 +956,32 @@ test_that("gap_report attribute contains correct information", {
 test_that("missing_pulse_summary attribute is accurate", {
   heat_pulse_data <- create_mock_heat_pulse_data_for_vh()
 
+  # Add more pulses first (need at least 5)
+  base_measurements <- heat_pulse_data$measurements
+  base_diagnostics <- heat_pulse_data$diagnostics
+
+  all_measurements <- list()
+  all_diagnostics <- list()
+
+  for (i in 1:5) {
+    new_measurements <- base_measurements
+    new_measurements$pulse_id <- i
+    new_measurements$datetime <- new_measurements$datetime + (i-1) * 1800
+    all_measurements[[i]] <- new_measurements
+
+    new_diagnostics <- base_diagnostics
+    new_diagnostics$pulse_id <- i
+    new_diagnostics$datetime <- new_diagnostics$datetime[1] + (i-1) * 1800
+    all_diagnostics[[i]] <- new_diagnostics
+  }
+
+  heat_pulse_data$measurements <- do.call(rbind, all_measurements)
+  heat_pulse_data$diagnostics <- do.call(rbind, all_diagnostics)
+  heat_pulse_data$metadata$n_pulses <- 5
+
   # Remove 2 pulses
   measurements <- heat_pulse_data$measurements
   diagnostics <- heat_pulse_data$diagnostics
-
-  # Add unique times first
-  measurements$datetime <- measurements$datetime + (measurements$pulse_id - 1) * 1800
-  diagnostics$datetime <- diagnostics$datetime + (diagnostics$pulse_id - 1) * 1800
 
   measurements <- measurements[!measurements$pulse_id %in% c(2, 4), ]
   diagnostics <- diagnostics[!diagnostics$pulse_id %in% c(2, 4), ]
