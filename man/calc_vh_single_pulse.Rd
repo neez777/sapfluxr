@@ -9,7 +9,10 @@ calc_vh_single_pulse(
   pulse_id,
   parameters,
   methods,
-  plot_results = FALSE
+  plot_results = FALSE,
+  progress_fn = NULL,
+  pulse_num = NULL,
+  total_pulses = NULL
 )
 }
 \arguments{
@@ -22,6 +25,12 @@ calc_vh_single_pulse(
 \item{methods}{Character vector of methods}
 
 \item{plot_results}{Whether to plot results}
+
+\item{progress_fn}{Progress reporter function (optional)}
+
+\item{pulse_num}{Current pulse number (optional, for progress reporting)}
+
+\item{total_pulses}{Total number of pulses (optional, for progress reporting)}
 }
 \value{
 Data frame with results for this pulse

@@ -11,8 +11,12 @@ calc_mhr(
   deltaT_ui,
   diffusivity,
   probe_spacing,
-  pre_pulse
+  pre_pulse,
+  peak_info
 )
+}
+\arguments{
+\item{peak_info}{Pre-computed peak information from calc_vh_single_pulse}
 }
 \description{
 Calculate MHR velocities

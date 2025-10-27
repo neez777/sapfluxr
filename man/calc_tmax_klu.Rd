@@ -10,8 +10,12 @@ calc_tmax_klu(
   diffusivity,
   probe_spacing,
   tp_1,
-  pre_pulse
+  pre_pulse,
+  peak_info
 )
+}
+\arguments{
+\item{peak_info}{Pre-computed peak information from calc_vh_single_pulse}
 }
 \description{
 Calculate Tmax Kluitenberg velocities

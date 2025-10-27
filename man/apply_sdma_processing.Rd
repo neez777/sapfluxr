@@ -4,7 +4,12 @@
 \alias{apply_sdma_processing}
 \title{Apply Selectable Dual Method Approach (sDMA) Processing}
 \usage{
-apply_sdma_processing(vh_results, secondary_method, show_progress = TRUE)
+apply_sdma_processing(
+  vh_results,
+  secondary_method,
+  skip_low_peclet = NULL,
+  show_progress = TRUE
+)
 }
 \arguments{
 \item{vh_results}{Results tibble from calc_heat_pulse_velocity() containing HRM
@@ -13,6 +18,10 @@ and at least one secondary method}
 \item{secondary_method}{Character string or vector specifying secondary method(s).
 Options: "MHR", "Tmax_Coh", "Tmax_Klu", "HRMXa", "HRMXb".
 Can provide multiple methods to create multiple sDMA variants.}
+
+\item{skip_low_peclet}{Logical indicating whether to automatically skip sDMA when
+all Peclet numbers are <= 1. If NULL (default), will prompt user interactively.
+Set to TRUE to skip without prompting, FALSE to always calculate.}
 
 \item{show_progress}{Logical indicating whether to show progress bar. Default: TRUE}
 }
@@ -46,8 +55,14 @@ heat_pulse_data <- read_heat_pulse_data("data.txt")
 vh <- calc_heat_pulse_velocity(heat_pulse_data,
                                 methods = c("HRM", "MHR", "Tmax_Klu"))
 
-# Apply sDMA with MHR as secondary
+# Apply sDMA with MHR as secondary (will check Peclet numbers first)
 vh_sdma <- apply_sdma_processing(vh, secondary_method = "MHR")
+
+# Skip sDMA automatically if all Peclet <= 1 (non-interactive)
+vh_sdma <- apply_sdma_processing(vh, secondary_method = "MHR", skip_low_peclet = TRUE)
+
+# Force sDMA calculation even if Peclet numbers are low
+vh_sdma <- apply_sdma_processing(vh, secondary_method = "MHR", skip_low_peclet = FALSE)
 
 # Create multiple sDMA variants
 vh_sdma <- apply_sdma_processing(vh, secondary_method = c("MHR", "Tmax_Klu"))

@@ -23,6 +23,7 @@ flag_vh_quality(
   add_rows_for_missing = TRUE,
   max_gap_to_fill_hours = 24,
   return_gap_report = TRUE,
+  return_full_report = FALSE,
   verbose = TRUE
 )
 }
@@ -72,10 +73,15 @@ Default: 24 hours}
 
 \item{return_gap_report}{Logical, include detailed gap report (default: TRUE)}
 
+\item{return_full_report}{Logical, return full report list or just flagged data frame (default: FALSE).
+If FALSE, returns only the vh_flagged data frame. If TRUE, returns full list with gap_report,
+outlier_summary, flag_counts, and metadata. Use FALSE for simple workflows and Shiny apps.}
+
 \item{verbose}{Logical, print progress messages (default: TRUE)}
 }
 \value{
-List containing:
+If return_full_report = FALSE (default), returns data frame with quality_flag column added.
+If return_full_report = TRUE, returns list containing:
 \describe{
 \item{vh_flagged}{Data frame with added quality_flag column}
 \item{gap_report}{Data frame of missing data periods (if return_gap_report = TRUE)}
@@ -145,30 +151,32 @@ Only small gaps (< max_gap_to_fill_hours) are filled.
 }
 \examples{
 \dontrun{
-# Basic usage with all defaults
+# Basic usage - returns data frame with quality_flag column
 vh_results <- calc_heat_pulse_velocity(heat_pulse_data)
-qc_results <- flag_vh_quality(vh_results)
+vh_flagged <- flag_vh_quality(vh_results)
+table(vh_flagged$quality_flag)
 
-# View flagged data
+# Get full report for detailed analysis
+qc_results <- flag_vh_quality(vh_results, return_full_report = TRUE)
+print(qc_results)  # Shows summary
 table(qc_results$vh_flagged$quality_flag)
+print(qc_results$gap_report)
 
 # With species-specific thresholds
-qc_results <- flag_vh_quality(
+vh_flagged <- flag_vh_quality(
   vh_results,
   wood_properties = "eucalyptus"
 )
 
-# Custom outlier detection
+# Custom outlier detection with full report
 qc_results <- flag_vh_quality(
   vh_results,
   rolling_window = 7,           # Wider window
   rolling_threshold = 2.5,      # More sensitive
   max_change_cm_hr = 3,         # Stricter rate of change
-  max_gap_to_fill_hours = 12    # Don't fill gaps > 12 hours
+  max_gap_to_fill_hours = 12,   # Don't fill gaps > 12 hours
+  return_full_report = TRUE
 )
-
-# Check gap report
-print(qc_results$gap_report)
 }
 
 }

@@ -15,8 +15,12 @@ calc_hrmx(
   H,
   diffusivity,
   probe_spacing,
-  tp
+  tp,
+  peak_info
 )
+}
+\arguments{
+\item{peak_info}{Pre-computed peak information from calc_vh_single_pulse}
 }
 \description{
 Calculate HRMX velocities
