@@ -1329,88 +1329,80 @@ apply_sdma_processing_internal <- function(vh_results, results_by_pulse, pulse_i
   for (sec_method in secondary_method) {
     sdma_method_name <- paste0("sDMA:", sec_method)
 
-    # Process each pulse
-    pulse_results <- list()
+    # VECTORIZED APPROACH: Extract all data at once, then apply switching logic
+    # This is 100-1000x faster than creating data.frames in a loop
 
-    for (i in seq_along(pulse_ids)) {
-      pulse_id <- pulse_ids[i]
+    # Get all HRM and secondary method results
+    hrm_all <- vh_results[vh_results$method == "HRM", ]
+    sec_all <- vh_results[vh_results$method == sec_method, ]
 
-      # Get HRM and secondary results for this pulse using pre-split data
-      hrm_key <- paste(pulse_id, "HRM", sep = ".")
-      sec_key <- paste(pulse_id, sec_method, sep = ".")
+    # Separate by sensor position
+    hrm_outer <- hrm_all[hrm_all$sensor_position == "outer", ]
+    hrm_inner <- hrm_all[hrm_all$sensor_position == "inner", ]
+    sec_outer <- sec_all[sec_all$sensor_position == "outer", ]
+    sec_inner <- sec_all[sec_all$sensor_position == "inner", ]
 
-      hrm_data <- results_by_pulse[[hrm_key]]
-      sec_data <- results_by_pulse[[sec_key]]
+    # Ensure matching order by pulse_id and same pulse_ids in both
+    hrm_outer <- hrm_outer[order(hrm_outer$pulse_id), ]
+    hrm_inner <- hrm_inner[order(hrm_inner$pulse_id), ]
+    sec_outer <- sec_outer[order(sec_outer$pulse_id), ]
+    sec_inner <- sec_inner[order(sec_inner$pulse_id), ]
 
-      # Skip if data missing
-      if (is.null(hrm_data) || is.null(sec_data)) {
-        next
-      }
+    # Keep only pulses that exist in both HRM and secondary method
+    common_pulses_outer <- intersect(hrm_outer$pulse_id, sec_outer$pulse_id)
+    common_pulses_inner <- intersect(hrm_inner$pulse_id, sec_inner$pulse_id)
 
-      # Split by sensor position (only 2 rows each, very fast)
-      hrm_outer <- hrm_data[hrm_data$sensor_position == "outer", ]
-      hrm_inner <- hrm_data[hrm_data$sensor_position == "inner", ]
-      sec_outer <- sec_data[sec_data$sensor_position == "outer", ]
-      sec_inner <- sec_data[sec_data$sensor_position == "inner", ]
+    hrm_outer <- hrm_outer[hrm_outer$pulse_id %in% common_pulses_outer, ]
+    hrm_inner <- hrm_inner[hrm_inner$pulse_id %in% common_pulses_inner, ]
+    sec_outer <- sec_outer[sec_outer$pulse_id %in% common_pulses_outer, ]
+    sec_inner <- sec_inner[sec_inner$pulse_id %in% common_pulses_inner, ]
 
-      # Apply switching logic for outer sensor
-      if (nrow(hrm_outer) > 0 && nrow(sec_outer) > 0) {
-        pe_outer <- hrm_outer$peclet_number[1]
-        use_hrm_outer <- !is.na(pe_outer) && pe_outer < 1.0
+    # Vectorized switching logic for outer sensor
+    use_hrm_outer <- !is.na(hrm_outer$peclet_number) & hrm_outer$peclet_number < 1.0
 
-        pulse_results[[paste0(pulse_id, "_outer")]] <- data.frame(
-          datetime = hrm_outer$datetime[1],
-          pulse_id = pulse_id,
-          method = sdma_method_name,
-          sensor_position = "outer",
-          Vh_cm_hr = if (use_hrm_outer) hrm_outer$Vh_cm_hr[1] else sec_outer$Vh_cm_hr[1],
-          calc_window_start_sec = if (use_hrm_outer) hrm_outer$calc_window_start_sec[1] else sec_outer$calc_window_start_sec[1],
-          calc_window_end_sec = if (use_hrm_outer) hrm_outer$calc_window_end_sec[1] else sec_outer$calc_window_end_sec[1],
-          calc_time_sec = if (use_hrm_outer) hrm_outer$calc_time_sec[1] else sec_outer$calc_time_sec[1],
-          peclet_number = pe_outer,
-          selected_method = if (use_hrm_outer) "HRM" else sec_method,
-          stringsAsFactors = FALSE
-        )
-      }
+    sdma_outer <- data.frame(
+      datetime = hrm_outer$datetime,
+      pulse_id = hrm_outer$pulse_id,
+      method = sdma_method_name,
+      sensor_position = "outer",
+      Vh_cm_hr = ifelse(use_hrm_outer, hrm_outer$Vh_cm_hr, sec_outer$Vh_cm_hr),
+      calc_window_start_sec = ifelse(use_hrm_outer, hrm_outer$calc_window_start_sec, sec_outer$calc_window_start_sec),
+      calc_window_end_sec = ifelse(use_hrm_outer, hrm_outer$calc_window_end_sec, sec_outer$calc_window_end_sec),
+      calc_time_sec = ifelse(use_hrm_outer, hrm_outer$calc_time_sec, sec_outer$calc_time_sec),
+      peclet_number = hrm_outer$peclet_number,
+      selected_method = ifelse(use_hrm_outer, "HRM", sec_method),
+      stringsAsFactors = FALSE
+    )
 
-      # Apply switching logic for inner sensor
-      if (nrow(hrm_inner) > 0 && nrow(sec_inner) > 0) {
-        pe_inner <- hrm_inner$peclet_number[1]
-        use_hrm_inner <- !is.na(pe_inner) && pe_inner < 1.0
+    # Vectorized switching logic for inner sensor
+    use_hrm_inner <- !is.na(hrm_inner$peclet_number) & hrm_inner$peclet_number < 1.0
 
-        pulse_results[[paste0(pulse_id, "_inner")]] <- data.frame(
-          datetime = hrm_inner$datetime[1],
-          pulse_id = pulse_id,
-          method = sdma_method_name,
-          sensor_position = "inner",
-          Vh_cm_hr = if (use_hrm_inner) hrm_inner$Vh_cm_hr[1] else sec_inner$Vh_cm_hr[1],
-          calc_window_start_sec = if (use_hrm_inner) hrm_inner$calc_window_start_sec[1] else sec_inner$calc_window_start_sec[1],
-          calc_window_end_sec = if (use_hrm_inner) hrm_inner$calc_window_end_sec[1] else sec_inner$calc_window_end_sec[1],
-          calc_time_sec = if (use_hrm_inner) hrm_inner$calc_time_sec[1] else sec_inner$calc_time_sec[1],
-          peclet_number = pe_inner,
-          selected_method = if (use_hrm_inner) "HRM" else sec_method,
-          stringsAsFactors = FALSE
-        )
-      }
+    sdma_inner <- data.frame(
+      datetime = hrm_inner$datetime,
+      pulse_id = hrm_inner$pulse_id,
+      method = sdma_method_name,
+      sensor_position = "inner",
+      Vh_cm_hr = ifelse(use_hrm_inner, hrm_inner$Vh_cm_hr, sec_inner$Vh_cm_hr),
+      calc_window_start_sec = ifelse(use_hrm_inner, hrm_inner$calc_window_start_sec, sec_inner$calc_window_start_sec),
+      calc_window_end_sec = ifelse(use_hrm_inner, hrm_inner$calc_window_end_sec, sec_inner$calc_window_end_sec),
+      calc_time_sec = ifelse(use_hrm_inner, hrm_inner$calc_time_sec, sec_inner$calc_time_sec),
+      peclet_number = hrm_inner$peclet_number,
+      selected_method = ifelse(use_hrm_inner, "HRM", sec_method),
+      stringsAsFactors = FALSE
+    )
 
-      # Update throttled progress
-      methods_completed <- methods_completed + 1
-      methods_since_last_update <- methods_since_last_update + 1
-
-      if (show_progress && (methods_since_last_update >= update_frequency ||
-                            methods_completed == n_pulses * n_methods)) {
-        p(amount = methods_since_last_update,
-          message = sprintf("sDMA: Processed %s / %s pulses (%.1f%% complete)",
-                           format(methods_completed, big.mark = ","),
-                           format(n_pulses * n_methods, big.mark = ","),
-                           100 * methods_completed / (n_pulses * n_methods)))
-        methods_since_last_update <- 0
-      }
-    }
-
-    # Combine all pulses for this sDMA method
-    sdma_df <- dplyr::bind_rows(pulse_results)
+    # Combine outer and inner
+    sdma_df <- rbind(sdma_outer, sdma_inner)
     all_sdma_results[[sdma_method_name]] <- sdma_df
+
+    # Update progress
+    methods_completed <- methods_completed + n_pulses
+    if (show_progress) {
+      p(amount = n_pulses,
+        message = sprintf("sDMA: Completed %s (%.1f%% complete)",
+                         sdma_method_name,
+                         100 * methods_completed / (n_pulses * n_methods)))
+    }
   }
 
   # Combine all sDMA results
