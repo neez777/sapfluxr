@@ -84,10 +84,11 @@ NULL
 #'
 #' **Outlier Detection Methods:**
 #'
-#' 1. **Rolling Median**: Compares each point to the median of a sliding window.
-#'    Points that deviate by more than \code{rolling_threshold × MAD} from the local
-#'    median are flagged. This detects isolated spikes while respecting local
-#'    trends and daily variation.
+#' 1. **Rolling Mean**: Compares each point to the mean of a sliding window.
+#'    Points that deviate by more than \code{rolling_threshold × SD} from the local
+#'    mean are flagged. This detects isolated spikes while respecting local
+#'    trends and daily variation. Default threshold of 3 corresponds to 99.7%
+#'    confidence interval.
 #'
 #' 2. **Rate of Change**: Flags consecutive measurements that change by more than
 #'    \code{max_change_cm_hr}. Sap flow typically changes gradually, so large jumps
@@ -102,7 +103,7 @@ NULL
 #' - Gradual changes in velocity (smooth daily cycles)
 #' - Isolated outliers (sensor spikes, logging errors)
 #'
-#' Rolling median and rate of change detection are sufficient to catch these issues
+#' Rolling mean and rate of change detection are sufficient to catch these issues
 #' without needing complex seasonal decomposition.
 #'
 #' **Handling Large Gaps:**
@@ -303,7 +304,7 @@ flag_vh_quality <- function(vh_results,
 
         if (verbose) message(sprintf("    Checking %s", paste(group_label, collapse=", ")))
 
-        rolling_outliers <- detect_outliers_rolling_median(
+        rolling_outliers <- detect_outliers_rolling_mean(
           vh_results$Vh_cm_hr[group_indices],
           window = rolling_window,
           threshold = rolling_threshold
@@ -320,7 +321,7 @@ flag_vh_quality <- function(vh_results,
       ok_indices <- which(vh_results$quality_flag == "OK")
 
       if (length(ok_indices) >= 2 * rolling_window + 1) {
-        rolling_outliers <- detect_outliers_rolling_median(
+        rolling_outliers <- detect_outliers_rolling_mean(
           vh_results$Vh_cm_hr[ok_indices],
           window = rolling_window,
           threshold = rolling_threshold
@@ -700,14 +701,14 @@ detect_illogical_values <- function(vh_values, hard_max = 500, species_max = NUL
 }
 
 
-#' Detect Outliers Using Rolling Median
+#' Detect Outliers Using Rolling Mean
 #'
 #' @param vh_values Numeric vector of Vh values
 #' @param window Integer, half-width of rolling window
-#' @param threshold Numeric, MAD multiplier
+#' @param threshold Numeric, standard deviation multiplier (default 3 = 99.7% confidence)
 #' @return Integer vector of outlier indices
 #' @keywords internal
-detect_outliers_rolling_median <- function(vh_values, window = 5, threshold = 3) {
+detect_outliers_rolling_mean <- function(vh_values, window = 5, threshold = 3) {
   n <- length(vh_values)
   outlier_indices <- integer(0)
 
@@ -719,11 +720,12 @@ detect_outliers_rolling_median <- function(vh_values, window = 5, threshold = 3)
     if (is.na(vh_values[i])) next
 
     window_data <- vh_values[(i - window):(i + window)]
-    window_median <- median(window_data, na.rm = TRUE)
-    window_mad <- mad(window_data, na.rm = TRUE)
+    window_mean <- mean(window_data, na.rm = TRUE)
+    window_sd <- sd(window_data, na.rm = TRUE)
 
-    if (!is.na(window_mad) && window_mad > 0) {
-      deviation <- abs(vh_values[i] - window_median) / window_mad
+    # Check if we have valid mean and SD
+    if (!is.na(window_mean) && !is.na(window_sd) && window_sd > 0) {
+      deviation <- abs(vh_values[i] - window_mean) / window_sd
 
       if (deviation > threshold) {
         outlier_indices <- c(outlier_indices, i)

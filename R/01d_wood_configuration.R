@@ -2,6 +2,126 @@
 # Wood Properties Configuration System
 # Manages wood thermal and physical properties for sap flow calculations
 
+# Hardcoded fallback defaults ----
+
+#' Get Hardcoded Wood Properties Defaults
+#'
+#' Returns hardcoded wood properties data as a list matching YAML structure.
+#' This serves as a fallback if YAML files cannot be found.
+#'
+#' @param config_name Name of configuration ("generic_sw", "eucalyptus", "pine")
+#' @return List with wood properties data
+#' @keywords internal
+get_hardcoded_wood_defaults <- function(config_name = "generic_sw") {
+
+  if (config_name == "generic_sw") {
+    # Generic Softwood Properties
+    list(
+      metadata = list(
+        config_name = "Typical Softwood Properties",
+        description = "Default wood properties for temperate softwood species",
+        version = "1.0",
+        default = TRUE
+      ),
+      wood_property = list(
+        thermal_diffusivity = 0.0025,       # cm²/s
+        thermal_conductivity = NULL,        # W/(m·K) - will be estimated
+        volumetric_heat_capacity = NULL,    # J/(m³·K) - will be estimated
+        dry_density = 400,                  # kg/m³
+        fresh_density = 350,                # kg/m³
+        moisture_content = 30,              # %
+        species = "unknown",
+        wood_type = "softwood",
+        temperature = 20                    # °C
+      ),
+      tree_measurements = list(
+        dbh = NULL,
+        bark_thickness = NULL,
+        sapwood_depth = NULL,
+        sapwood_area = NULL,
+        heartwood_radius = NULL
+      ),
+      quality_thresholds = list(
+        max_velocity_cm_hr = 200,
+        min_velocity_cm_hr = -50,
+        temperature_range = c(-10, 60)
+      )
+    )
+
+  } else if (config_name == "eucalyptus") {
+    # Eucalyptus Properties
+    list(
+      metadata = list(
+        config_name = "Eucalyptus Wood Properties",
+        description = "Typical wood properties for Eucalyptus species",
+        version = "1.0",
+        default = FALSE
+      ),
+      wood_property = list(
+        thermal_diffusivity = 0.00143,
+        thermal_conductivity = 0.27,
+        volumetric_heat_capacity = 1886000,
+        dry_density = 550,
+        fresh_density = 480,
+        moisture_content = 25,
+        species = "Eucalyptus spp.",
+        wood_type = "hardwood",
+        temperature = 25
+      ),
+      tree_measurements = list(
+        dbh = NULL,
+        bark_thickness = NULL,
+        sapwood_depth = NULL,
+        sapwood_area = NULL,
+        heartwood_radius = NULL
+      ),
+      quality_thresholds = list(
+        max_velocity_cm_hr = 150,
+        min_velocity_cm_hr = -50,
+        temperature_range = c(0, 50)
+      )
+    )
+
+  } else if (config_name == "pine") {
+    # Pine Properties
+    list(
+      metadata = list(
+        config_name = "Pine Wood Properties",
+        description = "Typical wood properties for Pine species",
+        version = "1.0",
+        default = FALSE
+      ),
+      wood_property = list(
+        thermal_diffusivity = 0.00145,
+        thermal_conductivity = 0.22,
+        volumetric_heat_capacity = 963700,
+        dry_density = 450,
+        fresh_density = 380,
+        moisture_content = 35,
+        species = "Pinus spp.",
+        wood_type = "softwood",
+        temperature = 15
+      ),
+      tree_measurements = list(
+        dbh = NULL,
+        bark_thickness = NULL,
+        sapwood_depth = NULL,
+        sapwood_area = NULL,
+        heartwood_radius = NULL
+      ),
+      quality_thresholds = list(
+        max_velocity_cm_hr = 180,
+        min_velocity_cm_hr = -50,
+        temperature_range = c(-15, 45)
+      )
+    )
+
+  } else {
+    # Default to generic softwood if unknown
+    get_hardcoded_wood_defaults("generic_sw")
+  }
+}
+
 #' Wood Properties R6 Class
 #'
 #' R6 class to store and manage wood thermal and physical properties.
@@ -13,7 +133,7 @@
 #' @field thermal_conductivity Thermal conductivity (W/(m·K))
 #' @field volumetric_heat_capacity Volumetric heat capacity (J/(m³·K))
 #' @field dry_density Oven-dry wood density (kg/m³)
-#' @field basic_density Basic density - oven-dry mass / green volume (kg/m³)
+#' @field fresh_density Basic density - oven-dry mass / green volume (kg/m³)
 #' @field moisture_content Wood moisture content (%)
 #' @field species Tree species identification
 #' @field wood_type Wood classification ("softwood"/"hardwood")
@@ -33,7 +153,7 @@ WoodProperties <- R6::R6Class(
     thermal_conductivity = NULL,
     volumetric_heat_capacity = NULL,
     dry_density = NULL,
-    basic_density = NULL,
+    fresh_density = NULL,
     moisture_content = NULL,
     species = NULL,
     wood_type = NULL,
@@ -50,7 +170,7 @@ WoodProperties <- R6::R6Class(
     #' @param thermal_conductivity Thermal conductivity (W/(m·K))
     #' @param volumetric_heat_capacity Volumetric heat capacity (J/(m³·K))
     #' @param dry_density Oven-dry wood density (kg/m³)
-    #' @param basic_density Basic density (kg/m³)
+    #' @param fresh_density Basic density (kg/m³)
     #' @param moisture_content Moisture content (%)
     #' @param species Species name
     #' @param wood_type Wood type
@@ -64,7 +184,7 @@ WoodProperties <- R6::R6Class(
                          thermal_conductivity = NULL,
                          volumetric_heat_capacity = NULL,
                          dry_density = NULL,
-                         basic_density = NULL,
+                         fresh_density = NULL,
                          moisture_content = NULL,
                          species = "unknown",
                          wood_type = "softwood",
@@ -79,7 +199,7 @@ WoodProperties <- R6::R6Class(
       self$thermal_conductivity <- thermal_conductivity
       self$volumetric_heat_capacity <- volumetric_heat_capacity
       self$dry_density <- dry_density
-      self$basic_density <- basic_density
+      self$fresh_density <- fresh_density
       self$moisture_content <- moisture_content
       self$species <- species
       self$wood_type <- wood_type
@@ -166,8 +286,8 @@ WoodProperties <- R6::R6Class(
       if (!is.null(self$dry_density)) {
         cat("  Dry density:", self$dry_density, "kg/m³\n")
       }
-      if (!is.null(self$basic_density)) {
-        cat("  Basic density:", self$basic_density, "kg/m³\n")
+      if (!is.null(self$fresh_density)) {
+        cat("  Basic density:", self$fresh_density, "kg/m³\n")
       }
       if (!is.null(self$moisture_content)) {
         cat("  Moisture content:", self$moisture_content, "%\n")
@@ -251,10 +371,23 @@ load_wood_properties <- function(config_name = NULL,
     config_name <- "generic_sw"
   }
 
-  # Determine YAML file path
+  # Try to load from YAML file
+  config_data <- NULL
+  yaml_source <- NULL
+
   if (file.exists(config_name)) {
     # User provided full path to custom YAML
     yaml_file <- config_name
+    yaml_source <- yaml_file
+    config_data <- tryCatch(
+      yaml::read_yaml(yaml_file),
+      error = function(e) {
+        warning("Failed to parse YAML file: ", e$message,
+               "\nFalling back to hardcoded defaults.")
+        NULL
+      }
+    )
+
   } else {
     # Look in package configurations
     yaml_file <- system.file(
@@ -263,23 +396,25 @@ load_wood_properties <- function(config_name = NULL,
       package = "sapfluxr"
     )
 
-    if (!file.exists(yaml_file) || yaml_file == "") {
-      available <- list_available_wood_properties()
-      stop("Wood properties configuration '", config_name, "' not found.\n",
-           "Available configurations: ",
-           paste(available$name, collapse = ", "), "\n",
-           "Use list_available_wood_properties() to see details.")
+    if (file.exists(yaml_file) && yaml_file != "") {
+      yaml_source <- yaml_file
+      config_data <- tryCatch(
+        yaml::read_yaml(yaml_file),
+        error = function(e) {
+          warning("Failed to parse YAML file: ", e$message,
+                 "\nFalling back to hardcoded defaults.")
+          NULL
+        }
+      )
     }
   }
 
-  # Parse YAML
-  config_data <- tryCatch(
-    yaml::read_yaml(yaml_file),
-    error = function(e) {
-      stop("Failed to parse YAML file: ", yaml_file, "\n",
-           "Error: ", e$message)
-    }
-  )
+  # Fall back to hardcoded defaults if YAML not found or failed to parse
+  if (is.null(config_data)) {
+    message("Using hardcoded wood properties defaults for '", config_name, "'")
+    config_data <- get_hardcoded_wood_defaults(config_name)
+    yaml_source <- "hardcoded_defaults"
+  }
 
   # Extract wood properties
   wood_props <- config_data$wood_property
@@ -320,14 +455,14 @@ load_wood_properties <- function(config_name = NULL,
     thermal_conductivity = wood_props$thermal_conductivity,
     volumetric_heat_capacity = wood_props$volumetric_heat_capacity,
     dry_density = wood_props$dry_density,
-    basic_density = wood_props$basic_density,
+    fresh_density = wood_props$fresh_density,
     moisture_content = wood_props$moisture_content,
     species = wood_props$species,
     wood_type = wood_props$wood_type,
     temperature = wood_props$temperature,
     tree_measurements = tree_meas,
     quality_thresholds = quality,
-    yaml_source = yaml_file,
+    yaml_source = yaml_source,
     yaml_data = config_data
   )
 
@@ -485,7 +620,7 @@ list_available_wood_properties <- function() {
 #' @param thermal_conductivity Thermal conductivity (W/(m·K)). Optional.
 #' @param volumetric_heat_capacity Volumetric heat capacity (J/(m³·K)). Optional.
 #' @param dry_density Oven-dry wood density (kg/m³). Optional.
-#' @param basic_density Basic density (kg/m³). Optional.
+#' @param fresh_density Basic density (kg/m³). Optional.
 #' @param moisture_content Moisture content (%). Optional.
 #' @param fresh_weight Fresh/wet weight of wood sample (g). Optional.
 #' @param dry_weight Oven-dry weight of wood sample (g). Optional.
@@ -503,7 +638,7 @@ list_available_wood_properties <- function() {
 #' @param temperature_range Temperature range (°C). Default: c(-10, 60)
 #' @param assume_no_shrinkage Logical. If TRUE, assumes fresh_volume = dry_volume
 #'   when deriving properties. This allows moisture content to be calculated from
-#'   basic_density and dry_density alone. Default: TRUE.
+#'   fresh_density and dry_density alone. Default: TRUE.
 #' @param verbose Logical. If TRUE, prints information about derived properties.
 #'   Default: TRUE.
 #'
@@ -538,7 +673,7 @@ list_available_wood_properties <- function() {
 #' wood2 <- create_custom_wood_properties(
 #'   config_name = "My Eucalypt",
 #'   species = "Eucalyptus",
-#'   basic_density = 380,    # kg/m³ (fresh density at constant volume)
+#'   fresh_density = 380,    # kg/m³ (fresh density at constant volume)
 #'   dry_density = 450,      # kg/m³ (dry density at same volume)
 #'   assume_no_shrinkage = TRUE
 #'   # Automatically derives: MC = 18.4%
@@ -549,7 +684,7 @@ list_available_wood_properties <- function() {
 #'   fresh_weight = 2.45,    # grams
 #'   dry_weight = 1.38,      # grams
 #'   fresh_volume = 2.73     # cm³
-#'   # Automatically derives: basic_density, moisture_content
+#'   # Automatically derives: fresh_density, moisture_content
 #' )
 #'
 #' # Example 4: Mix of measurements
@@ -558,7 +693,7 @@ list_available_wood_properties <- function() {
 #'   moisture_content = 35,
 #'   dry_weight = 10,
 #'   assume_no_shrinkage = TRUE
-#'   # Automatically derives: fresh_weight, basic_density, volumes
+#'   # Automatically derives: fresh_weight, fresh_density, volumes
 #' )
 #' }
 #'
@@ -570,7 +705,7 @@ create_custom_wood_properties <- function(config_name = "Custom Wood Properties"
                                           thermal_conductivity = NULL,
                                           volumetric_heat_capacity = NULL,
                                           dry_density = NULL,
-                                          basic_density = NULL,
+                                          fresh_density = NULL,
                                           moisture_content = NULL,
                                           fresh_weight = NULL,
                                           dry_weight = NULL,
@@ -592,7 +727,7 @@ create_custom_wood_properties <- function(config_name = "Custom Wood Properties"
   # Check if we have any measurements that could be used for derivation
   has_measurements <- !is.null(fresh_weight) || !is.null(dry_weight) ||
                       !is.null(fresh_volume) || !is.null(dry_volume) ||
-                      !is.null(basic_density) || !is.null(dry_density) ||
+                      !is.null(fresh_density) || !is.null(dry_density) ||
                       !is.null(moisture_content)
 
   # If we have measurements, try to derive missing properties
@@ -603,7 +738,7 @@ create_custom_wood_properties <- function(config_name = "Custom Wood Properties"
       dry_weight = dry_weight,
       fresh_volume = fresh_volume,
       dry_volume = dry_volume,
-      basic_density = basic_density,
+      fresh_density = fresh_density,
       dry_density = dry_density,
       moisture_content = moisture_content,
       assume_no_shrinkage = assume_no_shrinkage,
@@ -612,8 +747,8 @@ create_custom_wood_properties <- function(config_name = "Custom Wood Properties"
     )
 
     # Use derived values (prefer derived over NULL, but keep user-provided values)
-    if (is.null(basic_density) && !is.null(derived$basic_density_kg_m3)) {
-      basic_density <- derived$basic_density_kg_m3
+    if (is.null(fresh_density) && !is.null(derived$fresh_density_kg_m3)) {
+      fresh_density <- derived$fresh_density_kg_m3
     }
     if (is.null(dry_density) && !is.null(derived$dry_density_kg_m3)) {
       dry_density <- derived$dry_density_kg_m3
@@ -628,8 +763,8 @@ create_custom_wood_properties <- function(config_name = "Custom Wood Properties"
       for (d in derived$derived) {
         message("  - ", d)
       }
-      if (!is.null(derived$basic_density)) {
-        message(sprintf("  Basic density: %.0f kg/m³", derived$basic_density_kg_m3))
+      if (!is.null(derived$fresh_density)) {
+        message(sprintf("  Basic density: %.0f kg/m³", derived$fresh_density_kg_m3))
       }
       if (!is.null(derived$dry_density)) {
         message(sprintf("  Dry density: %.0f kg/m³", derived$dry_density_kg_m3))
@@ -677,7 +812,7 @@ create_custom_wood_properties <- function(config_name = "Custom Wood Properties"
     thermal_conductivity = thermal_conductivity,
     volumetric_heat_capacity = volumetric_heat_capacity,
     dry_density = dry_density,
-    basic_density = basic_density,
+    fresh_density = fresh_density,
     moisture_content = moisture_content,
     species = species,
     wood_type = wood_type,
@@ -700,7 +835,7 @@ create_custom_wood_properties <- function(config_name = "Custom Wood Properties"
 #' @param dry_weight Oven-dry weight of wood sample (g). Optional.
 #' @param fresh_volume Fresh/green volume of wood sample (cm³). Optional.
 #' @param dry_volume Dry volume of wood sample (cm³). Optional.
-#' @param basic_density Basic density - dry mass / green volume (g/cm³ or kg/m³). Optional.
+#' @param fresh_density Basic density - dry mass / green volume (g/cm³ or kg/m³). Optional.
 #' @param dry_density Dry density - dry mass / dry volume (g/cm³ or kg/m³). Optional.
 #' @param moisture_content Moisture content on dry weight basis (% or decimal). Optional.
 #' @param assume_no_shrinkage Logical. If TRUE, assumes fresh_volume = dry_volume.
@@ -716,7 +851,7 @@ create_custom_wood_properties <- function(config_name = "Custom Wood Properties"
 #'     \item{dry_weight}{Dry weight (g)}
 #'     \item{fresh_volume}{Fresh volume (cm³)}
 #'     \item{dry_volume}{Dry volume (cm³)}
-#'     \item{basic_density}{Basic density (g/cm³)}
+#'     \item{fresh_density}{Basic density (g/cm³)}
 #'     \item{dry_density}{Dry density (g/cm³)}
 #'     \item{moisture_content}{Moisture content (decimal)}
 #'     \item{moisture_content_percent}{Moisture content (%)}
@@ -731,22 +866,22 @@ create_custom_wood_properties <- function(config_name = "Custom Wood Properties"
 #'
 #' @details
 #' **Fundamental Relationships:**
-#' - basic_density = dry_weight / fresh_volume
+#' - fresh_density = dry_weight / fresh_volume
 #' - dry_density = dry_weight / dry_volume
 #' - moisture_content = (fresh_weight - dry_weight) / dry_weight
 #' - fresh_weight = dry_weight * (1 + moisture_content)
 #'
 #' **Assumptions:**
 #' If `assume_no_shrinkage = TRUE`, the function assumes fresh_volume = dry_volume.
-#' This means basic_density = dry_density. This is a simplification - in reality,
+#' This means fresh_density = dry_density. This is a simplification - in reality,
 #' wood shrinks as it dries. Use this option when you only have density values
 #' and need to estimate moisture content.
 #'
 #' **Minimum Required Inputs:**
 #' You must provide enough information to solve the system. Examples:
 #' - fresh_weight + dry_weight (→ can get MC, but not densities without volume)
-#' - dry_weight + fresh_volume + basic_density (→ can solve for most)
-#' - basic_density + dry_density + any one mass or volume
+#' - dry_weight + fresh_volume + fresh_density (→ can solve for most)
+#' - fresh_density + dry_density + any one mass or volume
 #' - etc.
 #'
 #' @examples
@@ -760,7 +895,7 @@ create_custom_wood_properties <- function(config_name = "Custom Wood Properties"
 #'
 #' # Example 2: From both densities (assuming no shrinkage)
 #' result <- derive_wood_properties(
-#'   basic_density = 380,  # kg/m³
+#'   fresh_density = 380,  # kg/m³
 #'   dry_density = 450,    # kg/m³
 #'   assume_no_shrinkage = TRUE
 #' )
@@ -788,7 +923,7 @@ derive_wood_properties <- function(fresh_weight = NULL,
                                    dry_weight = NULL,
                                    fresh_volume = NULL,
                                    dry_volume = NULL,
-                                   basic_density = NULL,
+                                   fresh_density = NULL,
                                    dry_density = NULL,
                                    moisture_content = NULL,
                                    assume_no_shrinkage = TRUE,
@@ -807,7 +942,7 @@ derive_wood_properties <- function(fresh_weight = NULL,
   if (!is.null(dry_weight)) provided <- c(provided, "dry_weight")
   if (!is.null(fresh_volume)) provided <- c(provided, "fresh_volume")
   if (!is.null(dry_volume)) provided <- c(provided, "dry_volume")
-  if (!is.null(basic_density)) provided <- c(provided, "basic_density")
+  if (!is.null(fresh_density)) provided <- c(provided, "fresh_density")
   if (!is.null(dry_density)) provided <- c(provided, "dry_density")
   if (!is.null(moisture_content)) provided <- c(provided, "moisture_content")
 
@@ -817,14 +952,14 @@ derive_wood_properties <- function(fresh_weight = NULL,
 
   # Auto-detect and convert units
   # Densities: if > 50, assume kg/m³, otherwise g/cm³
-  if (!is.null(basic_density)) {
+  if (!is.null(fresh_density)) {
     if (density_units == "auto") {
-      if (basic_density > 50) {
-        basic_density <- basic_density / 1000  # Convert kg/m³ to g/cm³
-        notes <- c(notes, "Auto-detected basic_density in kg/m³, converted to g/cm³")
+      if (fresh_density > 50) {
+        fresh_density <- fresh_density / 1000  # Convert kg/m³ to g/cm³
+        notes <- c(notes, "Auto-detected fresh_density in kg/m³, converted to g/cm³")
       }
     } else if (density_units == "kg_m3") {
-      basic_density <- basic_density / 1000
+      fresh_density <- fresh_density / 1000
     }
   }
 
@@ -873,20 +1008,20 @@ derive_wood_properties <- function(fresh_weight = NULL,
 
     # CRITICAL: If we have both densities under no-shrinkage, we can derive MC!
     # Under no-shrinkage assumption with constant volume V:
-    # - basic_density (or fresh_density) = fresh_mass / V
+    # - fresh_density (or fresh_density) = fresh_mass / V
     # - dry_density (at same V) = dry_mass / V
     # - MC = (fresh_mass - dry_mass) / dry_mass
-    #      = (basic_density × V - dry_density × V) / (dry_density × V)
-    #      = (basic_density - dry_density) / dry_density
+    #      = (fresh_density × V - dry_density × V) / (dry_density × V)
+    #      = (fresh_density - dry_density) / dry_density
     # Volume cancels out!
-    if (!is.null(basic_density) && !is.null(dry_density)) {
-      # If they differ, interpret basic_density as fresh/green density
+    if (!is.null(fresh_density) && !is.null(dry_density)) {
+      # If they differ, interpret fresh_density as fresh/green density
       # and dry_density as dry density (both at same volume)
-      if (abs(basic_density - dry_density) / max(basic_density, dry_density) > 0.01) {
+      if (abs(fresh_density - dry_density) / max(fresh_density, dry_density) > 0.01) {
         # Determine which is fresh and which is dry
         # Fresh density should be higher (includes water)
-        rho_fresh <- max(basic_density, dry_density)
-        rho_dry <- min(basic_density, dry_density)
+        rho_fresh <- max(fresh_density, dry_density)
+        rho_dry <- min(fresh_density, dry_density)
 
         # Calculate moisture content: MC = (ρ_f - ρ_d) / ρ_d
         if (is.null(moisture_content)) {
@@ -897,20 +1032,20 @@ derive_wood_properties <- function(fresh_weight = NULL,
                            moisture_content * 100, rho_fresh, rho_dry, rho_dry))
         }
 
-        # Under no-shrinkage, basic_density should equal dry_density at same volume
+        # Under no-shrinkage, fresh_density should equal dry_density at same volume
         # But if we have fresh and dry densities, set them appropriately
-        if (basic_density > dry_density) {
-          # basic_density was actually fresh/green density
+        if (fresh_density > dry_density) {
+          # fresh_density was actually fresh/green density
           # Keep both as-is - they represent different states
           notes <- c(notes,
-                    "Interpreting basic_density as fresh/green density and dry_density as dry density (both at same volume)")
+                    "Interpreting fresh_density as fresh/green density and dry_density as dry density (both at same volume)")
         } else {
           # dry_density was actually fresh density (larger value)
           # Swap the interpretation
-          temp <- basic_density
-          basic_density <- dry_density
+          temp <- fresh_density
+          fresh_density <- dry_density
           dry_density <- temp
-          derived <- c(derived, "swapped basic_density and dry_density interpretation")
+          derived <- c(derived, "swapped fresh_density and dry_density interpretation")
           notes <- c(notes,
                     "Swapped density values: larger value interpreted as fresh density, smaller as dry density")
         }
@@ -922,12 +1057,12 @@ derive_wood_properties <- function(fresh_weight = NULL,
           notes <- c(notes, "Densities nearly equal under no-shrinkage - assuming no moisture")
         }
       }
-    } else if (!is.null(basic_density) && is.null(dry_density)) {
-      dry_density <- basic_density
+    } else if (!is.null(fresh_density) && is.null(dry_density)) {
+      dry_density <- fresh_density
       derived <- c(derived, "dry_density (from no-shrinkage assumption)")
-    } else if (!is.null(dry_density) && is.null(basic_density)) {
-      basic_density <- dry_density
-      derived <- c(derived, "basic_density (from no-shrinkage assumption)")
+    } else if (!is.null(dry_density) && is.null(fresh_density)) {
+      fresh_density <- dry_density
+      derived <- c(derived, "fresh_density (from no-shrinkage assumption)")
     }
   }
 
@@ -961,23 +1096,23 @@ derive_wood_properties <- function(fresh_weight = NULL,
       something_changed <- TRUE
     }
 
-    # Rule 4: basic_density = dry_weight / fresh_volume
-    if (!is.null(dry_weight) && !is.null(fresh_volume) && is.null(basic_density)) {
-      basic_density <- dry_weight / fresh_volume
-      derived <- c(derived, "basic_density")
+    # Rule 4: fresh_density = dry_weight / fresh_volume
+    if (!is.null(dry_weight) && !is.null(fresh_volume) && is.null(fresh_density)) {
+      fresh_density <- dry_weight / fresh_volume
+      derived <- c(derived, "fresh_density")
       something_changed <- TRUE
     }
 
-    # Rule 5: dry_weight = basic_density * fresh_volume
-    if (!is.null(basic_density) && !is.null(fresh_volume) && is.null(dry_weight)) {
-      dry_weight <- basic_density * fresh_volume
+    # Rule 5: dry_weight = fresh_density * fresh_volume
+    if (!is.null(fresh_density) && !is.null(fresh_volume) && is.null(dry_weight)) {
+      dry_weight <- fresh_density * fresh_volume
       derived <- c(derived, "dry_weight")
       something_changed <- TRUE
     }
 
-    # Rule 6: fresh_volume = dry_weight / basic_density
-    if (!is.null(dry_weight) && !is.null(basic_density) && is.null(fresh_volume)) {
-      fresh_volume <- dry_weight / basic_density
+    # Rule 6: fresh_volume = dry_weight / fresh_density
+    if (!is.null(dry_weight) && !is.null(fresh_density) && is.null(fresh_volume)) {
+      fresh_volume <- dry_weight / fresh_density
       derived <- c(derived, "fresh_volume")
       something_changed <- TRUE
     }
@@ -1044,11 +1179,11 @@ derive_wood_properties <- function(fresh_weight = NULL,
     }
   }
 
-  if (!is.null(basic_density)) {
-    if (basic_density < 0.2 || basic_density > 1.0) {
+  if (!is.null(fresh_density)) {
+    if (fresh_density < 0.2 || fresh_density > 1.0) {
       quality_flag <- "WARNING"
       notes <- c(notes,
-                sprintf("Basic density (%.3f g/cm³) outside typical range (0.2-1.0)", basic_density))
+                sprintf("Basic density (%.3f g/cm³) outside typical range (0.2-1.0)", fresh_density))
     }
   }
 
@@ -1061,10 +1196,10 @@ derive_wood_properties <- function(fresh_weight = NULL,
   }
 
   # Check for consistency
-  if (!is.null(basic_density) && !is.null(dry_density) && !assume_no_shrinkage) {
-    if (dry_density < basic_density) {
+  if (!is.null(fresh_density) && !is.null(dry_density) && !assume_no_shrinkage) {
+    if (dry_density < fresh_density) {
       quality_flag <- "ERROR"
-      notes <- c(notes, "Dry density cannot be less than basic density (dry_density < basic_density)")
+      notes <- c(notes, "Dry density cannot be less than basic density (dry_density < fresh_density)")
     }
   }
 
@@ -1074,8 +1209,8 @@ derive_wood_properties <- function(fresh_weight = NULL,
     dry_weight = dry_weight,
     fresh_volume = fresh_volume,
     dry_volume = dry_volume,
-    basic_density = basic_density,
-    basic_density_kg_m3 = if (!is.null(basic_density)) basic_density * 1000 else NULL,
+    fresh_density = fresh_density,
+    fresh_density_kg_m3 = if (!is.null(fresh_density)) fresh_density * 1000 else NULL,
     dry_density = dry_density,
     dry_density_kg_m3 = if (!is.null(dry_density)) dry_density * 1000 else NULL,
     moisture_content = moisture_content,
@@ -1128,9 +1263,9 @@ print.wood_properties_derivation <- function(x, ...) {
   if (!is.null(x$water_weight)) cat(sprintf("  Water weight: %.3f g\n", x$water_weight))
   if (!is.null(x$fresh_volume)) cat(sprintf("  Fresh volume: %.3f cm³\n", x$fresh_volume))
   if (!is.null(x$dry_volume)) cat(sprintf("  Dry volume: %.3f cm³\n", x$dry_volume))
-  if (!is.null(x$basic_density)) {
+  if (!is.null(x$fresh_density)) {
     cat(sprintf("  Basic density: %.3f g/cm³ (%.0f kg/m³)\n",
-               x$basic_density, x$basic_density_kg_m3))
+               x$fresh_density, x$fresh_density_kg_m3))
   }
   if (!is.null(x$dry_density)) {
     cat(sprintf("  Dry density: %.3f g/cm³ (%.0f kg/m³)\n",

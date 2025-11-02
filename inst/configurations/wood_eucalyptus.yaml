@@ -13,7 +13,7 @@ wood_property:
   thermal_conductivity: 0.27   # W/(m·K), will be estimated if null
   volumetric_heat_capacity: 1886000  # J/(m³·K), will be estimated if null
   dry_density: 550            # kg/m³, eucalyptus is denser than typical softwood
-  basic_density: 480          # kg/m³, oven-dry mass / green volume
+  fresh_density: 480          # kg/m³, fresh (green) wood density at field moisture
   moisture_content: 25        # %, often lower than conifers
   species: Eucalyptus spp.    # species identification
   wood_type: hardwood         # hardwood classification

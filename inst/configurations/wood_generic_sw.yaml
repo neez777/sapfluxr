@@ -14,7 +14,7 @@ wood_property:
   thermal_conductivity: null   # W/(m·K), will be estimated if null
   volumetric_heat_capacity: null  # J/(m³·K), will be estimated if null
   dry_density: 400            # kg/m³, oven-dry density
-  basic_density: 350          # kg/m³, oven-dry mass / green volume
+  fresh_density: 350          # kg/m³, fresh (green) wood density at field moisture
   moisture_content: 30        # %, moisture content on dry weight basis
   species: unknown            # species identification
   wood_type: 'softwood'       # softwood/hardwood classification

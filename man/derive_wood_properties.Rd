@@ -9,7 +9,7 @@ derive_wood_properties(
   dry_weight = NULL,
   fresh_volume = NULL,
   dry_volume = NULL,
-  basic_density = NULL,
+  fresh_density = NULL,
   dry_density = NULL,
   moisture_content = NULL,
   assume_no_shrinkage = TRUE,
@@ -26,7 +26,7 @@ derive_wood_properties(
 
 \item{dry_volume}{Dry volume of wood sample (cm³). Optional.}
 
-\item{basic_density}{Basic density - dry mass / green volume (g/cm³ or kg/m³). Optional.}
+\item{fresh_density}{Basic density - dry mass / green volume (g/cm³ or kg/m³). Optional.}
 
 \item{dry_density}{Dry density - dry mass / dry volume (g/cm³ or kg/m³). Optional.}
 
@@ -48,7 +48,7 @@ List containing:
 \item{dry_weight}{Dry weight (g)}
 \item{fresh_volume}{Fresh volume (cm³)}
 \item{dry_volume}{Dry volume (cm³)}
-\item{basic_density}{Basic density (g/cm³)}
+\item{fresh_density}{Basic density (g/cm³)}
 \item{dry_density}{Dry density (g/cm³)}
 \item{moisture_content}{Moisture content (decimal)}
 \item{moisture_content_percent}{Moisture content (\%)}
@@ -69,7 +69,7 @@ derive other properties.
 \details{
 \strong{Fundamental Relationships:}
 \itemize{
-\item basic_density = dry_weight / fresh_volume
+\item fresh_density = dry_weight / fresh_volume
 \item dry_density = dry_weight / dry_volume
 \item moisture_content = (fresh_weight - dry_weight) / dry_weight
 \item fresh_weight = dry_weight * (1 + moisture_content)
@@ -77,7 +77,7 @@ derive other properties.
 
 \strong{Assumptions:}
 If \code{assume_no_shrinkage = TRUE}, the function assumes fresh_volume = dry_volume.
-This means basic_density = dry_density. This is a simplification - in reality,
+This means fresh_density = dry_density. This is a simplification - in reality,
 wood shrinks as it dries. Use this option when you only have density values
 and need to estimate moisture content.
 
@@ -85,8 +85,8 @@ and need to estimate moisture content.
 You must provide enough information to solve the system. Examples:
 \itemize{
 \item fresh_weight + dry_weight (→ can get MC, but not densities without volume)
-\item dry_weight + fresh_volume + basic_density (→ can solve for most)
-\item basic_density + dry_density + any one mass or volume
+\item dry_weight + fresh_volume + fresh_density (→ can solve for most)
+\item fresh_density + dry_density + any one mass or volume
 \item etc.
 }
 }
@@ -101,7 +101,7 @@ result <- derive_wood_properties(
 
 # Example 2: From both densities (assuming no shrinkage)
 result <- derive_wood_properties(
-  basic_density = 380,  # kg/m³
+  fresh_density = 380,  # kg/m³
   dry_density = 450,    # kg/m³
   assume_no_shrinkage = TRUE
 )

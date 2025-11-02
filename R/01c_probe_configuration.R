@@ -1,5 +1,82 @@
 # R/02a_probe_configuration.R
 # Probe Properties Configuration System
+
+# Hardcoded fallback defaults ----
+
+#' Get Hardcoded Probe Configuration Defaults
+#'
+#' Returns hardcoded probe configuration data as a list matching YAML structure.
+#' This serves as a fallback if YAML files cannot be found.
+#'
+#' @param config_name Name of configuration ("symmetrical" or "asymmetrical")
+#' @return List with probe configuration data
+#' @keywords internal
+get_hardcoded_probe_defaults <- function(config_name = "symmetrical") {
+
+  if (config_name == "symmetrical") {
+    # ICT SFM1x Standard Symmetric Configuration
+    list(
+      metadata = list(
+        config_name = "ICT Complete Standard",
+        description = "Complete ICT standard configuration",
+        version = "1.0",
+        default = TRUE
+      ),
+      probe = list(
+        heater_position = 0,
+        upstream_distance = 5,        # mm
+        downstream_distance = 5,      # mm
+        diameter = 1.27,              # mm
+        length = 35,                  # mm
+        needle_diameter = 1.27,       # mm
+        inner_sensor = 7.5,           # mm from tip
+        outer_sensor = 22.5,          # mm from tip
+        manufacturer = "ICT",
+        model = "SFM1",
+        heat_pulse_duration = 2       # seconds
+      ),
+      methods = list(
+        compatible = c("HRM", "MHR", "DMA", "Tmax_Coh", "Tmax_Klu", "HRMx"),
+        recommended = c("HRM", "Tmax_Coh", "MHR", "DMA"),
+        priority_order = c("HRM", "Tmax_Coh", "MHR", "DMA")
+      )
+    )
+
+  } else if (config_name == "asymmetrical") {
+    # CHPM-Optimised Asymmetric Configuration
+    list(
+      metadata = list(
+        config_name = "CHPM Optimised Configuration",
+        description = "Asymmetric probe configuration optimised for CHPM method",
+        version = "1.0",
+        default = FALSE
+      ),
+      probe = list(
+        heater_position = 0,
+        upstream_distance = 7.5,      # mm - greater spacing for CHPM
+        downstream_distance = 2.5,    # mm - closer for faster response
+        diameter = 1.27,
+        length = 35,
+        needle_diameter = 1.27,
+        inner_sensor = 7.5,
+        outer_sensor = 22.5,
+        manufacturer = "ICT",
+        model = "SFM1",
+        heat_pulse_duration = 2
+      ),
+      methods = list(
+        compatible = c("CHPM", "HRM", "MHR", "DMA"),
+        recommended = c("CHPM", "HRM"),
+        priority_order = c("CHPM", "HRM", "MHR", "DMA")
+      )
+    )
+
+  } else {
+    # Default to symmetrical if unknown
+    get_hardcoded_probe_defaults("symmetrical")
+  }
+}
+
 #' ProbeConfiguration R6 Class
 #'
 #' @description
@@ -920,19 +997,42 @@ validate_probe_alignment_advanced <- function(sap_data, config = NULL,
 load_probe_config <- function(config_name = NULL, custom_params = NULL) {
   if (is.null(config_name)) config_name <- "symmetrical"
 
+  # Try to load from YAML file
+  config_data <- NULL
+  yaml_source <- NULL
+
   if (file.exists(config_name)) {
+    # User provided a file path
     yaml_file <- config_name
+    yaml_source <- yaml_file
+    config_data <- tryCatch(yaml::read_yaml(yaml_file),
+                           error = function(e) {
+                             warning("Failed to parse YAML file: ", e$message,
+                                    "\nFalling back to hardcoded defaults.")
+                             NULL
+                           })
+
   } else {
+    # Try to find built-in YAML
     yaml_file <- system.file("configurations", paste0("probe_", config_name, ".yaml"), package = "sapfluxr")
-    if (!file.exists(yaml_file) || yaml_file == "") {
-      available <- list_available_probe_configs()
-      stop("Probe configuration '", config_name, "' not found.\nAvailable: ",
-           paste(available$name, collapse = ", "))
+
+    if (file.exists(yaml_file) && yaml_file != "") {
+      yaml_source <- yaml_file
+      config_data <- tryCatch(yaml::read_yaml(yaml_file),
+                             error = function(e) {
+                               warning("Failed to parse YAML file: ", e$message,
+                                      "\nFalling back to hardcoded defaults.")
+                               NULL
+                             })
     }
   }
 
-  config_data <- tryCatch(yaml::read_yaml(yaml_file),
-                         error = function(e) stop("Failed to parse YAML: ", e$message))
+  # Fall back to hardcoded defaults if YAML not found or failed to parse
+  if (is.null(config_data)) {
+    message("Using hardcoded probe configuration defaults for '", config_name, "'")
+    config_data <- get_hardcoded_probe_defaults(config_name)
+    yaml_source <- "hardcoded_defaults"
+  }
 
   probe <- config_data$probe
   x_upstream <- probe$upstream_distance / 10
@@ -973,7 +1073,7 @@ load_probe_config <- function(config_name = NULL, custom_params = NULL) {
     compatible_methods = compatible_methods,
     method_priorities = priority_order,
     required_parameters = list(x = mean(c(x_upstream, x_downstream)), heat_pulse_duration = heat_pulse_duration),
-    yaml_source = yaml_file,
+    yaml_source = yaml_source,
     yaml_data = config_data
   )
 }

@@ -26,7 +26,7 @@ and quality thresholds.
 
 \item{\code{dry_density}}{Oven-dry wood density (kg/m³)}
 
-\item{\code{basic_density}}{Basic density - oven-dry mass / green volume (kg/m³)}
+\item{\code{fresh_density}}{Basic density - oven-dry mass / green volume (kg/m³)}
 
 \item{\code{moisture_content}}{Wood moisture content (\%)}
 
@@ -67,7 +67,7 @@ Initialize a new WoodProperties object
   thermal_conductivity = NULL,
   volumetric_heat_capacity = NULL,
   dry_density = NULL,
-  basic_density = NULL,
+  fresh_density = NULL,
   moisture_content = NULL,
   species = "unknown",
   wood_type = "softwood",
@@ -92,7 +92,7 @@ Initialize a new WoodProperties object
 
 \item{\code{dry_density}}{Oven-dry wood density (kg/m³)}
 
-\item{\code{basic_density}}{Basic density (kg/m³)}
+\item{\code{fresh_density}}{Basic density (kg/m³)}
 
 \item{\code{moisture_content}}{Moisture content (\%)}
 

@@ -13,7 +13,7 @@ wood_property:
   thermal_conductivity: 0.22   # W/(m·K), will be estimated if null
   volumetric_heat_capacity: 963700  # J/(m³·K), will be estimated if null
   dry_density: 450            # kg/m³, typical for pine
-  basic_density: 380          # kg/m³, oven-dry mass / green volume
+  fresh_density: 380          # kg/m³, fresh (green) wood density at field moisture
   moisture_content: 35        # %, softwoods often higher moisture content
   species: Pinus spp.         # species identification
   wood_type: softwood         # softwood classification

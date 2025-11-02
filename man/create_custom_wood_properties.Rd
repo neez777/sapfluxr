@@ -11,7 +11,7 @@ create_custom_wood_properties(
   thermal_conductivity = NULL,
   volumetric_heat_capacity = NULL,
   dry_density = NULL,
-  basic_density = NULL,
+  fresh_density = NULL,
   moisture_content = NULL,
   fresh_weight = NULL,
   dry_weight = NULL,
@@ -44,7 +44,7 @@ create_custom_wood_properties(
 
 \item{dry_density}{Oven-dry wood density (kg/m³). Optional.}
 
-\item{basic_density}{Basic density (kg/m³). Optional.}
+\item{fresh_density}{Basic density (kg/m³). Optional.}
 
 \item{moisture_content}{Moisture content (\%). Optional.}
 
@@ -78,7 +78,7 @@ create_custom_wood_properties(
 
 \item{assume_no_shrinkage}{Logical. If TRUE, assumes fresh_volume = dry_volume
 when deriving properties. This allows moisture content to be calculated from
-basic_density and dry_density alone. Default: TRUE.}
+fresh_density and dry_density alone. Default: TRUE.}
 
 \item{verbose}{Logical. If TRUE, prints information about derived properties.
 Default: TRUE.}
@@ -121,7 +121,7 @@ wood1 <- create_custom_wood_properties(
 wood2 <- create_custom_wood_properties(
   config_name = "My Eucalypt",
   species = "Eucalyptus",
-  basic_density = 380,    # kg/m³ (fresh density at constant volume)
+  fresh_density = 380,    # kg/m³ (fresh density at constant volume)
   dry_density = 450,      # kg/m³ (dry density at same volume)
   assume_no_shrinkage = TRUE
   # Automatically derives: MC = 18.4\%
@@ -132,7 +132,7 @@ wood3 <- create_custom_wood_properties(
   fresh_weight = 2.45,    # grams
   dry_weight = 1.38,      # grams
   fresh_volume = 2.73     # cm³
-  # Automatically derives: basic_density, moisture_content
+  # Automatically derives: fresh_density, moisture_content
 )
 
 # Example 4: Mix of measurements
@@ -141,7 +141,7 @@ wood4 <- create_custom_wood_properties(
   moisture_content = 35,
   dry_weight = 10,
   assume_no_shrinkage = TRUE
-  # Automatically derives: fresh_weight, basic_density, volumes
+  # Automatically derives: fresh_weight, fresh_density, volumes
 )
 }
 
