@@ -122,10 +122,11 @@ applied to rows currently flagged as OK.
 
 \strong{Outlier Detection Methods:}
 \enumerate{
-\item \strong{Rolling Median}: Compares each point to the median of a sliding window.
-Points that deviate by more than \code{rolling_threshold × MAD} from the local
-median are flagged. This detects isolated spikes while respecting local
-trends and daily variation.
+\item \strong{Rolling Mean}: Compares each point to the mean of a sliding window.
+Points that deviate by more than \code{rolling_threshold × SD} from the local
+mean are flagged. This detects isolated spikes while respecting local
+trends and daily variation. Default threshold of 3 corresponds to 99.7\%
+confidence interval.
 \item \strong{Rate of Change}: Flags consecutive measurements that change by more than
 \code{max_change_cm_hr}. Sap flow typically changes gradually, so large jumps
 (e.g., > 4 cm/hr between 30-min intervals) are likely sensor errors.
@@ -141,7 +142,7 @@ Sap flow data typically has:
 \item Isolated outliers (sensor spikes, logging errors)
 }
 
-Rolling median and rate of change detection are sufficient to catch these issues
+Rolling mean and rate of change detection are sufficient to catch these issues
 without needing complex seasonal decomposition.
 
 \strong{Handling Large Gaps:}
