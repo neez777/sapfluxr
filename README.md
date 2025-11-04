@@ -129,9 +129,8 @@ library(sapfluxr)
 heat_pulse_data <- read_heat_pulse_data("mydata.txt")
 
 # 1a. (Optional) Fix clock drift if device clock was inaccurate
-heat_pulse_data$measurements <- fix_clock_drift(
-  heat_pulse_data$measurements,
-  device_time_col = "datetime",
+heat_pulse_data <- fix_clock_drift(
+  data = heat_pulse_data,
   observed_device_time = as.POSIXct("2025-01-16 08:05:00"),  # What device showed
   observed_actual_time = as.POSIXct("2025-01-16 08:00:00")   # Actual correct time
 )

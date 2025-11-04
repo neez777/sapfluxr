@@ -1101,7 +1101,7 @@ create_empty_heat_pulse_data <- function(tree_id, file_path) {
 #' **Important:** Original device timestamps are preserved in a new column called
 #' \code{device_datetime} so you can always revert the correction if needed.
 #'
-#' @param data A data frame containing the raw data
+#' @param data A heat_pulse_data object from read_heat_pulse_data() or a data frame containing the raw data
 #' @param device_time_col Character string naming the column containing device
 #'   timestamps (default: "datetime")
 #' @param observed_device_time POSIXct timestamp showing what the device clock
@@ -1134,7 +1134,24 @@ create_empty_heat_pulse_data <- function(tree_id, file_path) {
 #'
 #' @examples
 #' \dontrun{
-#' # Create example data with clock drift
+#' # Example 1: Correct clock drift in heat_pulse_data object
+#' heat_pulse_data <- read_heat_pulse_data("data.txt")
+#'
+#' # When device was retrieved, it showed 2025-01-16 08:05:00
+#' # but actual time was 2025-01-16 08:00:00 (5 min drift)
+#' observed_device <- as.POSIXct("2025-01-16 08:05:00", tz = "UTC")
+#' observed_actual <- as.POSIXct("2025-01-16 08:00:00", tz = "UTC")
+#'
+#' corrected_data <- fix_clock_drift(
+#'   data = heat_pulse_data,
+#'   observed_device_time = observed_device,
+#'   observed_actual_time = observed_actual
+#' )
+#'
+#' # Now you can use corrected data with calc_heat_pulse_velocity()
+#' results <- calc_heat_pulse_velocity(corrected_data)
+#'
+#' # Example 2: Correct clock drift in a data frame
 #' # Device clock was 5 minutes fast by the end of a 24-hour period
 #' start_time <- as.POSIXct("2025-01-15 08:00:00", tz = "UTC")
 #' device_times <- seq(start_time, by = "30 min", length.out = 48)
@@ -1179,9 +1196,44 @@ fix_clock_drift <- function(data,
                             observed_device_time,
                             observed_actual_time) {
 
-  # Input validation
+  # Handle heat_pulse_data objects
+  if (inherits(data, "heat_pulse_data")) {
+    # Apply correction to measurements
+    if (!is.null(data$measurements) && nrow(data$measurements) > 0) {
+      data$measurements <- fix_clock_drift(
+        data = data$measurements,
+        device_time_col = device_time_col,
+        observed_device_time = observed_device_time,
+        observed_actual_time = observed_actual_time
+      )
+    }
+
+    # Apply correction to diagnostics
+    if (!is.null(data$diagnostics) && nrow(data$diagnostics) > 0) {
+      data$diagnostics <- fix_clock_drift(
+        data = data$diagnostics,
+        device_time_col = device_time_col,
+        observed_device_time = observed_device_time,
+        observed_actual_time = observed_actual_time
+      )
+    }
+
+    # Update metadata to indicate correction was applied
+    if (!is.null(data$metadata)) {
+      data$metadata$clock_drift_corrected <- TRUE
+      data$metadata$drift_correction_time <- Sys.time()
+    }
+
+    # Ensure class is preserved (especially for multiple_heat_pulse_data)
+    original_class <- class(data)
+    class(data) <- original_class
+
+    return(data)
+  }
+
+  # Input validation for data frames
   if (!is.data.frame(data)) {
-    stop("'data' must be a data frame")
+    stop("'data' must be a data frame or heat_pulse_data object")
   }
 
   if (!is.character(device_time_col) || length(device_time_col) != 1) {

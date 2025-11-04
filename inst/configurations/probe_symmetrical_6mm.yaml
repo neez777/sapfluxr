@@ -17,6 +17,7 @@ probe:
   needle_diameter: 1.27       # mm, needle diameter
   inner_sensor: 7.5           # mm, distance from probe tip
   outer_sensor: 22.5          # mm, distance from probe tip
+  spacer_thickness: 0         # mm, external spacer between handle and bark (0 = fully inserted)
   manufacturer: ICT           # probe manufacturer
   model: SFM1                # probe model
   heat_pulse_duration: 2      # seconds, typical ICT pulse duration
@@ -25,7 +26,6 @@ methods:
   compatible:
     - HRM
     - MHR
-    - DMA
     - Tmax_Coh
     - Tmax_Klu
     - HRMx
@@ -33,9 +33,7 @@ methods:
     - HRM
     - Tmax_Coh
     - MHR
-    - DMA
   priority_order:
     - HRM
     - Tmax_Coh
     - MHR
-    - DMA

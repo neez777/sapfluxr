@@ -140,22 +140,14 @@ If you notice the device clock has drifted (common with long deployments), you c
 # Example: Device was 5 minutes fast when retrieved on 2025-01-16 08:00:00
 # The device displayed 2025-01-16 08:05:00 at that moment
 
-# Fix clock drift in measurements data
-heat_pulse_data$measurements <- fix_clock_drift(
-  data = heat_pulse_data$measurements,
-  device_time_col = "datetime",
+# Fix clock drift - pass the entire heat_pulse_data object
+heat_pulse_data <- fix_clock_drift(
+  data = heat_pulse_data,
   observed_device_time = as.POSIXct("2025-01-16 08:05:00", tz = "UTC"),
   observed_actual_time = as.POSIXct("2025-01-16 08:00:00", tz = "UTC")
 )
 
-# Also fix diagnostics data
-heat_pulse_data$diagnostics <- fix_clock_drift(
-  data = heat_pulse_data$diagnostics,
-  device_time_col = "datetime",
-  observed_device_time = as.POSIXct("2025-01-16 08:05:00", tz = "UTC"),
-  observed_actual_time = as.POSIXct("2025-01-16 08:00:00", tz = "UTC")
-)
-
+# This automatically corrects both measurements and diagnostics
 # Original timestamps are preserved in 'device_datetime' column
 # Corrected timestamps replace the 'datetime' column
 ```
@@ -677,9 +669,8 @@ library(sapfluxr)
 heat_pulse_data <- read_heat_pulse_data("mydata.txt")
 
 # 1a. (Optional) Fix clock drift if detected
-# heat_pulse_data$measurements <- fix_clock_drift(
-#   heat_pulse_data$measurements,
-#   device_time_col = "datetime",
+# heat_pulse_data <- fix_clock_drift(
+#   data = heat_pulse_data,
 #   observed_device_time = as.POSIXct("2025-01-16 08:05:00"),
 #   observed_actual_time = as.POSIXct("2025-01-16 08:00:00")
 # )
