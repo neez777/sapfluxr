@@ -1,3 +1,4 @@
+# R/01e_heat_pulse_velocity_core.R
 #' Calculate Heat Pulse Velocity
 #'
 #' Calculates heat pulse velocity (Vh) from heat pulse temperature data using multiple methods

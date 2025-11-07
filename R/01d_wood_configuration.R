@@ -1,4 +1,4 @@
-# R/02b_wood_configuration.R
+# R/01d_wood_configuration.R
 # Wood Properties Configuration System
 # Manages wood thermal and physical properties for sap flow calculations
 
