@@ -12,7 +12,7 @@ fix_clock_drift(
 )
 }
 \arguments{
-\item{data}{A data frame containing the raw data}
+\item{data}{A heat_pulse_data object from read_heat_pulse_data() or a data frame containing the raw data}
 
 \item{device_time_col}{Character string naming the column containing device
 timestamps (default: "datetime")}
@@ -75,7 +75,24 @@ issued that correction is being extrapolated
 
 \examples{
 \dontrun{
-# Create example data with clock drift
+# Example 1: Correct clock drift in heat_pulse_data object
+heat_pulse_data <- read_heat_pulse_data("data.txt")
+
+# When device was retrieved, it showed 2025-01-16 08:05:00
+# but actual time was 2025-01-16 08:00:00 (5 min drift)
+observed_device <- as.POSIXct("2025-01-16 08:05:00", tz = "UTC")
+observed_actual <- as.POSIXct("2025-01-16 08:00:00", tz = "UTC")
+
+corrected_data <- fix_clock_drift(
+  data = heat_pulse_data,
+  observed_device_time = observed_device,
+  observed_actual_time = observed_actual
+)
+
+# Now you can use corrected data with calc_heat_pulse_velocity()
+results <- calc_heat_pulse_velocity(corrected_data)
+
+# Example 2: Correct clock drift in a data frame
 # Device clock was 5 minutes fast by the end of a 24-hour period
 start_time <- as.POSIXct("2025-01-15 08:00:00", tz = "UTC")
 device_times <- seq(start_time, by = "30 min", length.out = 48)
