@@ -9,7 +9,7 @@ detect_cross_sensor_outliers(vh_results, threshold = 3, flag_levels = "OK")
 \arguments{
 \item{vh_results}{Data frame with datetime, sensor_position, Vh_cm_hr, quality_flag}
 
-\item{threshold}{Numeric, MAD multiplier for cross-sensor comparison}
+\item{threshold}{Numeric, SD multiplier for cross-sensor comparison}
 
 \item{flag_levels}{Character vector of flag levels to check}
 }

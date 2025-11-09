@@ -8,7 +8,7 @@ filter_and_interpolate_vh(
   vh_flagged,
   flags_to_interpolate = c("DATA_MISSING", "DATA_OUTLIER", "DATA_ILLOGICAL"),
   flags_to_preserve = c("DATA_SUSPECT"),
-  interpolation_method = c("linear", "spline", "approx"),
+  interpolation_method = "linear",
   max_gap_hours = 1,
   keep_original_values = TRUE,
   keep_interpolated_flag = TRUE,
@@ -27,8 +27,10 @@ Default: c("DATA_MISSING", "DATA_OUTLIER", "DATA_ILLOGICAL")}
 \item{flags_to_preserve}{Character vector of quality flags to leave unchanged.
 Default: c("DATA_SUSPECT")}
 
-\item{interpolation_method}{Character string specifying interpolation method.
-Options: "linear" (default), "spline", "approx". See Details.}
+\item{interpolation_method}{Character string specifying interpolation method:
+"linear" (default) or "moving_average". Linear creates a straight line between
+valid points. Moving average uses a weighted average of surrounding valid points,
+with window size automatically determined based on gap size.}
 
 \item{max_gap_hours}{Numeric, maximum gap duration (hours) to interpolate.
 Gaps larger than this are left as NA. Default: 1 hour (typically 2 data points).
@@ -70,15 +72,12 @@ Removes or interpolates flagged values (outliers, illogical values, missing data
 while preserving suspect values (e.g., negative flows, high Peclet numbers).
 }
 \details{
-\strong{Interpolation Methods:}
-\itemize{
-\item \strong{linear}: Straight line between points. For single missing point,
-this is the average of previous and following values. Fast and simple.
-\item \strong{spline}: Cubic spline using multiple surrounding points. Creates
-smooth curves through data. Good for longer gaps with gradual changes.
-\item \strong{approx}: Linear approximation with better edge handling. Similar
-to linear but handles gaps at start/end of time series more robustly.
-}
+\strong{Interpolation Method:}
+Linear interpolation is used to fill small gaps (typically 1-3 hours or 2-6 data points).
+For a single missing point, this produces the simple average of surrounding values.
+For multiple consecutive missing points, it draws a straight line between the valid
+points on either side. This is appropriate for sap flow data which can have sharp
+day/night transitions and should not be artificially smoothed.
 
 \strong{Quality Flag Handling:}
 \itemize{
@@ -116,11 +115,10 @@ vh_results <- calc_heat_pulse_velocity(heat_pulse_data)
 vh_flagged <- flag_vh_quality(vh_results)
 vh_cleaned <- filter_and_interpolate_vh(vh_flagged)
 
-# Custom interpolation settings
+# Custom interpolation settings (larger gap threshold)
 vh_cleaned <- filter_and_interpolate_vh(
   vh_flagged,
   flags_to_interpolate = c("DATA_MISSING", "DATA_OUTLIER"),
-  interpolation_method = "spline",
   max_gap_hours = 2
 )
 

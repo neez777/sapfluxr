@@ -1,0 +1,628 @@
+---
+title: "Spacing Correction and Thermal Diffusivity Calibration"
+author: "sapfluxr"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Spacing Correction and Thermal Diffusivity Calibration}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+## Introduction
+
+This vignette demonstrates how to use the spacing correction and thermal diffusivity
+calibration features in **sapfluxr**. These advanced calibration methods can
+significantly improve the accuracy of heat pulse velocity measurements, particularly
+when probe installation deviates from the nominal spacing.
+
+### Why Spacing Correction Matters
+
+The Heat Ratio Method (HRM) assumes precise probe spacing (typically 0.5 cm). In
+practice, probe spacing can vary due to:
+
+- Installation inaccuracies (drilling angle, insertion depth)
+- Wood swelling/shrinkage
+- Probe movement over time
+- Manufacturing tolerances
+
+Even small spacing errors (0.1-0.2 cm) can introduce velocity biases of 10-30%.
+Burgess et al. (2001) developed a calibration method using zero-flow periods to
+correct for these errors.
+
+### Two-Phase Approach
+
+**sapfluxr** implements a phased calibration workflow:
+
+1. **Phase 1**: Spacing correction using assumed thermal diffusivity (k)
+   - Uses default k = 0.0025 cm²/s (generic softwood)
+   - Provides immediate corrections for most applications
+
+2. **Phase 2**: Empirical k estimation from zero-flow data
+   - Estimates actual k from time-to-maximum temperature (Tmax)
+   - Determines if reprocessing with corrected k is needed
+
+3. **Phase 3** (optional): Reprocessing with estimated k
+   - Only if k differs substantially from assumed value (>10-20%)
+   - Provides publication-quality precision
+
+## Phase 1: Basic Spacing Correction
+
+### Required Data
+
+You need:
+
+1. **Velocity data**: Results from `calc_heat_pulse_velocity()`
+2. **Zero-flow periods**: Times when sap flow = 0 (typically at night)
+
+### Identifying Zero-Flow Periods
+
+Zero-flow periods should be:
+
+- At least 2-6 hours duration
+- Clearly showing no flow (Vh near constant offset)
+- Multiple periods preferred (captures temporal variation)
+
+Common approaches:
+
+- **Nighttime periods**: After sunset when VPD drops
+- **Rainy periods**: Extended rainfall events
+- **Winter dormancy**: Deciduous species in winter
+- **Experimental**: Stem girdling, pot-grown trees with irrigation control
+
+### Example: Complete Spacing Correction Workflow
+
+```{r phase1-example, eval = FALSE}
+library(sapfluxr)
+
+# 1. Load your velocity data
+#    This would typically come from: calc_heat_pulse_velocity()
+vh_data <- readRDS("my_velocity_data.rds")
+
+# 2. Define zero-flow periods (dates when you observed zero flow)
+zero_periods <- list(
+  list(start = "2024-01-15 22:00:00", end = "2024-01-16 06:00:00"),
+  list(start = "2024-01-20 23:00:00", end = "2024-01-21 05:00:00"),
+  list(start = "2024-01-25 22:30:00", end = "2024-01-26 06:30:00")
+)
+
+# 3. Run complete spacing correction workflow
+result <- apply_spacing_correction_workflow(
+  vh_data = vh_data,
+  zero_periods = zero_periods,
+  sensors = c("outer", "inner"),  # Which sensors to correct
+  method = "HRM",                 # Velocity calculation method
+  k_assumed = 0.0025,             # Assumed thermal diffusivity (cm²/s)
+  probe_spacing = 0.5,            # Nominal probe spacing (cm)
+  measurement_time = 80,          # HRM measurement time (seconds)
+  verbose = TRUE                  # Show detailed progress
+)
+
+# 4. View results
+print(result)
+
+# 5. Extract corrected data
+vh_corrected <- result$vh_corrected
+```
+
+### Understanding the Output
+
+The workflow provides comprehensive diagnostics:
+
+```
+SPACING CORRECTION SUMMARY REPORT
+========================================================================
+
+PHASE: Phase 1 (Assumed k = 0.0025 cm²/s)
+METHOD: HRM
+
+ZERO-FLOW ANALYSIS
+------------------------------------------------------------------------
+OUTER sensor:
+  Mean Vh (zero flow): 0.85 cm/hr (SD: 0.12, CV: 14.1%)
+  Zero periods analyzed: 3
+  Total observations: 156
+
+INNER sensor:
+  Mean Vh (zero flow): 0.72 cm/hr (SD: 0.10, CV: 13.9%)
+  Zero periods analyzed: 3
+  Total observations: 156
+
+CORRECTION COEFFICIENTS (Burgess et al. 2001)
+------------------------------------------------------------------------
+OUTER sensor:
+  Zero offset: 0.85 cm/hr
+  Coefficient a: 1.024
+  Coefficient b: -0.87
+  Formula: Vh_corrected = 1.024 * Vh - 0.87
+  Severity: MINOR (within normal range)
+  Range type: modeled
+
+INNER sensor:
+  Zero offset: 0.72 cm/hr
+  Coefficient a: 1.020
+  Coefficient b: -0.73
+  Formula: Vh_corrected = 1.020 * Vh - 0.73
+  Severity: MINOR (within normal range)
+  Range type: modeled
+
+RECOMMENDATION
+  ✓ Corrections applied successfully
+    Zero offsets are within acceptable range for both sensors
+```
+
+### Interpreting Severity Levels
+
+| Severity | Zero Offset | Interpretation | Action |
+|----------|-------------|----------------|--------|
+| **None** | < 1 cm/hr | Excellent alignment | Optional correction |
+| **Minor** | 1-3 cm/hr | Normal installation variation | Apply correction |
+| **Moderate** | 3-5 cm/hr | Significant misalignment | Correction recommended |
+| **Severe** | 5-10 cm/hr | Major spacing error | Correction critical |
+| **Extreme** | > 10 cm/hr | Likely installation failure | Check physical installation |
+
+### Correction Formula
+
+The Burgess method applies a linear correction:
+
+**Vh_corrected = a × Vh + b**
+
+Where:
+
+- **a**: Scaling coefficient (typically 1.00-1.10)
+- **b**: Offset correction (typically -0.5 to -2.0 cm/hr)
+
+The coefficients are derived from lookup tables based on:
+
+- Zero-flow offset
+- Thermal diffusivity (k)
+- Probe spacing
+- Measurement time
+
+### Accessing Results Programmatically
+
+```{r access-results, eval = FALSE}
+# Corrected velocity data (with new column Vh_cm_hr_sc)
+vh_corrected <- result$vh_corrected
+
+# Zero offset results for each sensor
+outer_offset <- result$zero_offset_results$outer
+cat("Outer sensor zero offset:", outer_offset$zero_vh, "cm/hr\n")
+cat("CV:", outer_offset$overall_cv * 100, "%\n")
+
+# Correction coefficients
+outer_coefs <- result$correction_coefficients$outer
+cat("Outer correction: Vh_corr =",
+    outer_coefs$coef_a, "* Vh +", outer_coefs$coef_b, "\n")
+
+# Metadata
+cat("Phase:", result$metadata$phase, "\n")
+cat("Method:", result$metadata$method, "\n")
+cat("k assumed:", result$metadata$k_assumed, "cm²/s\n")
+```
+
+## Phase 2: Thermal Diffusivity Estimation
+
+Phase 2 estimates the actual thermal diffusivity (k) from your zero-flow data using
+the time-to-maximum temperature (Tmax) method. This determines whether the assumed
+k value is appropriate for your specific wood sample.
+
+### Why Estimate k?
+
+Thermal diffusivity varies by:
+
+- **Wood species** (0.0020-0.0030 cm²/s typical range)
+- **Moisture content** (higher MC → higher k)
+- **Wood density** (lower density → lower k)
+- **Temperature** (higher temp → slightly higher k)
+- **Sapwood condition** (healthy vs. dysfunctional)
+
+Using the wrong k in spacing correction can introduce systematic biases.
+
+### Example: k Estimation from Heat Pulse Data
+
+```{r phase2-example, eval = FALSE}
+library(sapfluxr)
+
+# 1. Load heat pulse temperature data
+#    This is the raw/filtered heat pulse data object
+heat_pulse_data <- read_heat_pulse_data("my_data.txt")
+
+# Optional: Apply quality filtering first
+heat_pulse_data <- filter_heat_pulse_data(
+  heat_pulse_data,
+  baseline_noise_threshold = 0.1,
+  peak_threshold = 0.5
+)
+
+# 2. Use same zero-flow periods as Phase 1
+zero_periods <- list(
+  list(start = "2024-01-15 22:00:00", end = "2024-01-16 06:00:00"),
+  list(start = "2024-01-20 23:00:00", end = "2024-01-21 05:00:00"),
+  list(start = "2024-01-25 22:30:00", end = "2024-01-26 06:30:00")
+)
+
+# 3. Estimate thermal diffusivity
+k_result <- estimate_k_from_tmax(
+  heat_pulse_data = heat_pulse_data,
+  zero_periods = zero_periods,
+  sensors = c("outer", "inner"),
+  probe_spacing = 0.5,      # Nominal spacing (cm)
+  k_nominal = 0.0025,       # Previously assumed k
+  pre_pulse = 30            # Pre-pulse baseline period (seconds)
+)
+
+# 4. View results
+print(k_result)
+```
+
+### Understanding k Estimation Output
+
+```
+THERMAL DIFFUSIVITY ESTIMATION (from Tmax at zero flow)
+========================================================================
+
+Processing sensor: OUTER
+------------------------------------------------------------------------
+  Downstream t_max: 25.4 ± 2.1 s (n = 18)
+  Upstream t_max: 25.8 ± 2.3 s (n = 18)
+  Symmetry difference: 0.4 s (1.6%)
+  ✓ Symmetry check passed
+  Estimated k: 0.002456 cm²/s
+
+Processing sensor: INNER
+------------------------------------------------------------------------
+  Downstream t_max: 26.1 ± 2.5 s (n = 18)
+  Upstream t_max: 26.3 ± 2.4 s (n = 18)
+  Symmetry difference: 0.2 s (0.8%)
+  ✓ Symmetry check passed
+  Estimated k: 0.002389 cm²/s
+
+------------------------------------------------------------------------
+
+OVERALL RESULTS
+  Nominal k (assumed): 0.0025 cm²/s
+  Estimated k (mean): 0.002422 cm²/s
+  Estimated k (SD): 0.000047 cm²/s
+  Difference: -0.000078 cm²/s (-3.1%)
+
+  ✓ OK: k difference < 5% - no action needed
+     Assumed k is appropriate for this wood
+     Spacing correction results are valid
+
+RADIAL VARIATION CHECK
+  OUTER: 0.002456 cm²/s
+  INNER: 0.002389 cm²/s
+  Variation: 2.7% (acceptable)
+```
+
+### Interpreting k Estimation Results
+
+#### Symmetry Check
+
+At zero flow, upstream and downstream probes should reach maximum temperature at
+the same time. Large asymmetry indicates:
+
+- Flow not truly zero during these periods
+- Probe damage or malfunction
+- Sensor position issues
+
+**Status levels:**
+
+- **PASS**: Difference < 5% (good zero-flow conditions)
+- **CAUTION**: Difference 5-10% (acceptable but check other periods)
+- **FAIL**: Difference > 10% (likely not zero flow, or probe issues)
+
+#### k Difference Thresholds
+
+| Difference | Recommendation | Action |
+|------------|----------------|--------|
+| **< 5%** | No action needed | Assumed k is appropriate |
+| **5-10%** | Reprocess optional | Current results acceptable for most uses |
+| **10-20%** | Reprocess recommended | For publication-quality precision |
+| **> 20%** | Reprocess critical | Assumed k substantially wrong |
+
+### Decision Tree: Do I Need to Reprocess?
+
+```
+Estimated k differs from assumed k by:
+
+├─ < 5%: ✓ No reprocessing needed
+│         Current corrections are accurate
+│
+├─ 5-10%: Consider your application
+│   ├─ General monitoring → Current results OK
+│   ├─ Research publication → Consider reprocessing
+│   └─ High-precision study → Reprocess recommended
+│
+├─ 10-20%: ⚠ Reprocessing recommended
+│           Systematic bias may affect conclusions
+│
+└─ > 20%: ⚠ Reprocessing critical
+          Assumed k substantially incorrect
+          Results may be unreliable
+```
+
+### Accessing k Estimation Results
+
+```{r k-results, eval = FALSE}
+# Overall mean k estimate
+k_mean <- k_result$k_mean
+cat("Estimated k:", k_mean, "cm²/s\n")
+
+# k by sensor
+k_outer <- k_result$k_by_sensor$outer
+k_inner <- k_result$k_by_sensor$inner
+
+# Difference from nominal
+k_diff_pct <- k_result$k_difference_percent
+cat("Difference from nominal:", k_diff_pct, "%\n")
+
+# Recommendation code
+recommendation <- k_result$recommendation
+# Values: "no_action", "reprocess_optional",
+#         "reprocess_recommended", "reprocess_critical"
+
+# Symmetry results
+outer_symmetry <- k_result$symmetry_results$outer
+cat("Symmetry status:", outer_symmetry$status, "\n")
+cat("Tmax difference:", outer_symmetry$difference_seconds, "s\n")
+```
+
+## Combined Workflow: Phase 1 + Phase 2
+
+For complete calibration, run both phases together:
+
+```{r combined-workflow, eval = FALSE}
+library(sapfluxr)
+
+# Load data
+heat_pulse_data <- read_heat_pulse_data("my_data.txt")
+
+# Calculate initial velocities with assumed k
+vh_data <- calc_heat_pulse_velocity(
+  heat_pulse_data,
+  methods = "HRM",
+  k = 0.0025  # Assumed k
+)
+
+# Define zero-flow periods
+zero_periods <- list(
+  list(start = "2024-01-15 22:00:00", end = "2024-01-16 06:00:00"),
+  list(start = "2024-01-20 23:00:00", end = "2024-01-21 05:00:00")
+)
+
+# PHASE 1: Spacing correction with assumed k
+message("=== PHASE 1: Spacing Correction ===")
+spacing_result <- apply_spacing_correction_workflow(
+  vh_data = vh_data,
+  zero_periods = zero_periods,
+  sensors = c("outer", "inner"),
+  k_assumed = 0.0025
+)
+
+# PHASE 2: Estimate actual k
+message("\n=== PHASE 2: Thermal Diffusivity Estimation ===")
+k_result <- estimate_k_from_tmax(
+  heat_pulse_data = heat_pulse_data,
+  zero_periods = zero_periods,
+  sensors = c("outer", "inner"),
+  k_nominal = 0.0025
+)
+
+# DECISION: Reprocess if needed
+if (k_result$recommendation %in% c("reprocess_recommended", "reprocess_critical")) {
+
+  message("\n=== REPROCESSING with estimated k ===")
+
+  # Recalculate velocities with estimated k
+  vh_data_v2 <- calc_heat_pulse_velocity(
+    heat_pulse_data,
+    methods = "HRM",
+    k = k_result$k_mean  # Use estimated k
+  )
+
+  # Reapply spacing correction with correct k
+  spacing_result_v2 <- apply_spacing_correction_workflow(
+    vh_data = vh_data_v2,
+    zero_periods = zero_periods,
+    sensors = c("outer", "inner"),
+    k_assumed = k_result$k_mean  # Now using measured k
+  )
+
+  # Use reprocessed data
+  vh_final <- spacing_result_v2$vh_corrected
+
+} else {
+  message("\n✓ No reprocessing needed - Phase 1 results are accurate")
+  vh_final <- spacing_result$vh_corrected
+}
+
+# Save final corrected data
+saveRDS(vh_final, "velocity_corrected_final.rds")
+```
+
+## Practical Considerations
+
+### Choosing Zero-Flow Periods
+
+**Good zero-flow periods:**
+
+- Flat, stable Vh values (low noise)
+- Multiple hours duration (at least 2-4 hours)
+- Consistent across multiple nights
+- Environmental conditions support zero flow (low VPD, high soil moisture)
+
+**Warning signs:**
+
+- High variability in "zero-flow" Vh
+- Different sensors show different patterns
+- Symmetry check fails (upstream ≠ downstream)
+- Vh not clearly different from daytime values
+
+### Multiple vs. Single Zero-Flow Periods
+
+**Multiple periods (recommended):**
+
+- Captures temporal variation in offset
+- More robust k estimation (larger n)
+- Better CV assessment
+- Can identify unstable probes
+
+**Single period (acceptable if):**
+
+- Long duration (6+ hours)
+- Low variability (CV < 15%)
+- No alternative periods available
+- Symmetry check passes strongly
+
+### Data Quality Requirements
+
+For reliable calibration:
+
+1. **Temperature data quality**
+   - Clean baseline (pre-pulse) temperatures
+   - Clear heat pulse response
+   - Minimal electrical noise
+
+2. **Sufficient sample size**
+   - At least 10-20 heat pulses during zero flow
+   - More is better for k estimation
+
+3. **True zero flow**
+   - Symmetry check must pass
+   - Stable offset across period
+   - Environmental evidence (nighttime, rain, etc.)
+
+### When Calibration May Not Help
+
+Spacing correction cannot fix:
+
+- **Probe damage** (thermistor failure)
+- **Poor thermal contact** (air gaps, drilling issues)
+- **Wounding response** (traumatic resin ducts, tissue damage)
+- **Dysfunctional sapwood** (cavitation, decay)
+- **Fundamental method limitations** (very high/low flows)
+
+If zero-flow offset is:
+
+- Very high (> 10 cm/hr) → Check physical installation
+- Highly variable (CV > 30%) → Probe stability issues
+- Different between sensors (> 50%) → Sensor-specific problems
+
+### Species-Specific k Values
+
+If you cannot estimate k from your data, use literature values:
+
+| Species Type | Typical k (cm²/s) | Range |
+|--------------|-------------------|-------|
+| Softwoods (general) | 0.0025 | 0.0020-0.0030 |
+| Hardwoods (ring-porous) | 0.0022 | 0.0018-0.0026 |
+| Hardwoods (diffuse-porous) | 0.0028 | 0.0024-0.0032 |
+| Eucalyptus | 0.0026 | 0.0022-0.0030 |
+| Pinus species | 0.0024 | 0.0020-0.0028 |
+
+*Note: Values vary with moisture content and temperature*
+
+## Example Output Comparison
+
+### Before Spacing Correction
+
+```
+Daily sap flow (tree #1): 45.2 L/day
+Daily sap flow (tree #2): 52.8 L/day
+Difference: 17%
+```
+
+### After Spacing Correction
+
+```
+Daily sap flow (tree #1): 48.7 L/day  (+7.7%)
+Daily sap flow (tree #2): 51.3 L/day  (-2.8%)
+Difference: 5.3%
+```
+
+**Result**: Apparent between-tree variation reduced by accounting for systematic
+spacing errors. Tree #1 had positive offset (0.9 cm/hr), Tree #2 had smaller offset
+(0.3 cm/hr).
+
+## Troubleshooting
+
+### Error: "No valid zero-flow data found"
+
+**Cause**: Zero periods don't overlap with your data timespan
+
+**Solution**: Check date formats and data coverage
+```{r troubleshoot-dates, eval = FALSE}
+# Check your data range
+range(vh_data$datetime)
+
+# Check zero period format
+zero_periods <- list(
+  list(start = "2024-01-15 22:00:00",  # Must match your data dates
+       end = "2024-01-16 06:00:00")
+)
+```
+
+### Warning: "High CV in zero-flow period"
+
+**Cause**: High variability suggests flow not truly zero
+
+**Solution**:
+
+1. Try different time periods (later at night)
+2. Check environmental data (VPD, soil moisture)
+3. Consider longer periods to average out noise
+4. Check for probe malfunction
+
+### Symmetry Check Fails
+
+**Cause**: Upstream and downstream peaks at different times
+
+**Solutions:**
+
+1. **Not actually zero flow** → Try different periods
+2. **Sensor malfunction** → Check raw temperature traces
+3. **Wounding response** → May need to wait weeks/months after installation
+
+### Extreme Correction Coefficients
+
+**Signs:**
+
+- Zero offset > 10 cm/hr
+- Coefficient a > 1.20 or < 0.80
+- Range type = "extrapolated" with severe warning
+
+**Actions:**
+
+1. Verify zero-flow periods are appropriate
+2. Check physical probe installation
+3. Review raw temperature data for anomalies
+4. Consider probe reinstallation
+
+## References
+
+**Burgess, S. S., Adams, M. A., Turner, N. C., Beverly, C. R., Ong, C. K., Khan,
+A. A., & Bleby, T. M. (2001).** An improved heat pulse method to measure low and
+reverse rates of sap flow in woody plants. *Tree Physiology*, 21(9), 589-598.
+
+**Vandegehuchte, M. W., & Steppe, K. (2013).** Sap-flux density measurement methods:
+working principles and applicability. *Functional Plant Biology*, 40(3), 213-223.
+
+## Additional Resources
+
+- **Main vignette**: `vignette("quickstart", package = "sapfluxr")`
+- **Data quality**: `vignette("data-quality-simplified", package = "sapfluxr")`
+- **Step 3 implementation**: See `knowledge_docs/step3.md` in package source
+
+---
+
+*This vignette demonstrates advanced calibration methods. For basic usage, see the
+quickstart vignette. For questions or issues, please visit the package repository.*

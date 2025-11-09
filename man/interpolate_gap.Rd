@@ -13,12 +13,12 @@ interpolate_gap(vh_values, datetimes, gap_indices, method)
 
 \item{gap_indices}{Integer vector of indices to fill}
 
-\item{method}{Interpolation method ("linear", "spline", "approx")}
+\item{method}{Interpolation method: "linear" or "moving_average"}
 }
 \value{
 Numeric vector with gap filled
 }
 \description{
-Fills a gap in velocity data using specified interpolation method.
+Fills a gap in velocity data using linear or moving average interpolation.
 }
 \keyword{internal}

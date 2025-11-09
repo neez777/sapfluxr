@@ -53,8 +53,8 @@ Allows for clock drift and jitter (default: 5 seconds)}
 \item{rolling_window}{Integer, half-width of rolling window for median calculation
 (default: 5, meaning 11-point window)}
 
-\item{rolling_threshold}{Numeric, MAD multiplier for rolling median outlier detection.
-Points deviating more than threshold × MAD from rolling median are flagged (default: 3)}
+\item{rolling_threshold}{Numeric, SD multiplier for rolling mean outlier detection.
+Points deviating more than threshold × SD from rolling mean are flagged (default: 3)}
 
 \item{detect_rate_of_change}{Logical, whether to detect excessive rate of change (default: TRUE)}
 
@@ -63,7 +63,7 @@ Default: 4 cm/hr - larger jumps are unlikely to be real sap flow changes}
 
 \item{check_cross_sensor}{Logical, detect cross-sensor inconsistencies (default: TRUE)}
 
-\item{cross_sensor_threshold}{Numeric, MAD multiplier for cross-sensor comparison (default: 3)}
+\item{cross_sensor_threshold}{Numeric, SD multiplier for cross-sensor comparison (default: 3)}
 
 \item{add_rows_for_missing}{Logical, add rows for missing pulses (default: TRUE)}
 
