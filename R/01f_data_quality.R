@@ -34,13 +34,13 @@ NULL
 #' @param detect_outliers Logical, whether to detect statistical outliers (default: TRUE)
 #' @param rolling_window Integer, half-width of rolling window for median calculation
 #'   (default: 5, meaning 11-point window)
-#' @param rolling_threshold Numeric, MAD multiplier for rolling median outlier detection.
-#'   Points deviating more than threshold × MAD from rolling median are flagged (default: 3)
+#' @param rolling_threshold Numeric, SD multiplier for rolling mean outlier detection.
+#'   Points deviating more than threshold × SD from rolling mean are flagged (default: 3)
 #' @param detect_rate_of_change Logical, whether to detect excessive rate of change (default: TRUE)
 #' @param max_change_cm_hr Numeric, maximum allowed change in Vh between consecutive pulses (cm/hr).
 #'   Default: 4 cm/hr - larger jumps are unlikely to be real sap flow changes
 #' @param check_cross_sensor Logical, detect cross-sensor inconsistencies (default: TRUE)
-#' @param cross_sensor_threshold Numeric, MAD multiplier for cross-sensor comparison (default: 3)
+#' @param cross_sensor_threshold Numeric, SD multiplier for cross-sensor comparison (default: 3)
 #' @param add_rows_for_missing Logical, add rows for missing pulses (default: TRUE)
 #' @param max_gap_to_fill_hours Numeric, maximum gap duration (hours) to fill with MISSING rows.
 #'   Gaps larger than this are reported but not filled to avoid creating excessive missing rows.
@@ -768,7 +768,7 @@ detect_rate_of_change_outliers <- function(vh_values, max_change = 4) {
 #' Detect Cross-Sensor Outliers
 #'
 #' @param vh_results Data frame with datetime, sensor_position, Vh_cm_hr, quality_flag
-#' @param threshold Numeric, MAD multiplier for cross-sensor comparison
+#' @param threshold Numeric, SD multiplier for cross-sensor comparison
 #' @param flag_levels Character vector of flag levels to check
 #' @return Integer vector of row indices flagged as cross-sensor outliers
 #' @keywords internal
@@ -799,11 +799,11 @@ detect_cross_sensor_outliers <- function(vh_results,
 
     if (length(vh_at_time) < 3) next
 
-    sensor_median <- median(vh_at_time, na.rm = TRUE)
-    sensor_mad <- mad(vh_at_time, na.rm = TRUE)
+    sensor_mean <- mean(vh_at_time, na.rm = TRUE)
+    sensor_sd <- sd(vh_at_time, na.rm = TRUE)
 
-    if (sensor_mad > 0) {
-      deviations <- abs(vh_results$Vh_cm_hr[time_indices] - sensor_median) / sensor_mad
+    if (sensor_sd > 0) {
+      deviations <- abs(vh_results$Vh_cm_hr[time_indices] - sensor_mean) / sensor_sd
       outlier_mask <- deviations > threshold & !is.na(deviations)
       outlier_indices <- c(outlier_indices, time_indices[outlier_mask])
     }
@@ -846,7 +846,7 @@ print.vh_quality_results <- function(x, ...) {
 
   cat("\nDetection Parameters:\n")
   cat(sprintf("  Rolling window: %d\n", x$metadata$rolling_window))
-  cat(sprintf("  Rolling threshold: %.1f MAD\n", x$metadata$rolling_threshold))
+  cat(sprintf("  Rolling threshold: %.1f SD\n", x$metadata$rolling_threshold))
   cat(sprintf("  Max change: %.1f cm/hr\n", x$metadata$max_change_cm_hr))
   cat(sprintf("  Hard max Vh: %.0f cm/hr\n", x$metadata$hard_max_vh))
   if (!is.null(x$metadata$species_max_vh)) {

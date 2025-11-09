@@ -24,8 +24,10 @@ NULL
 #'   Default: c("DATA_MISSING", "DATA_OUTLIER", "DATA_ILLOGICAL")
 #' @param flags_to_preserve Character vector of quality flags to leave unchanged.
 #'   Default: c("DATA_SUSPECT")
-#' @param interpolation_method Character string specifying interpolation method.
-#'   Options: "linear" (default), "spline", "approx". See Details.
+#' @param interpolation_method Character string specifying interpolation method:
+#'   "linear" (default) or "moving_average". Linear creates a straight line between
+#'   valid points. Moving average uses a weighted average of surrounding valid points,
+#'   with window size automatically determined based on gap size.
 #' @param max_gap_hours Numeric, maximum gap duration (hours) to interpolate.
 #'   Gaps larger than this are left as NA. Default: 1 hour (typically 2 data points).
 #'   Warning issued if > 3 hours.
@@ -42,15 +44,12 @@ NULL
 #' @param verbose Logical, whether to print progress messages (default: TRUE)
 #'
 #' @details
-#' **Interpolation Methods:**
-#' \itemize{
-#'   \item \strong{linear}: Straight line between points. For single missing point,
-#'     this is the average of previous and following values. Fast and simple.
-#'   \item \strong{spline}: Cubic spline using multiple surrounding points. Creates
-#'     smooth curves through data. Good for longer gaps with gradual changes.
-#'   \item \strong{approx}: Linear approximation with better edge handling. Similar
-#'     to linear but handles gaps at start/end of time series more robustly.
-#' }
+#' **Interpolation Method:**
+#' Linear interpolation is used to fill small gaps (typically 1-3 hours or 2-6 data points).
+#' For a single missing point, this produces the simple average of surrounding values.
+#' For multiple consecutive missing points, it draws a straight line between the valid
+#' points on either side. This is appropriate for sap flow data which can have sharp
+#' day/night transitions and should not be artificially smoothed.
 #'
 #' **Quality Flag Handling:**
 #' \itemize{
@@ -100,11 +99,10 @@ NULL
 #' vh_flagged <- flag_vh_quality(vh_results)
 #' vh_cleaned <- filter_and_interpolate_vh(vh_flagged)
 #'
-#' # Custom interpolation settings
+#' # Custom interpolation settings (larger gap threshold)
 #' vh_cleaned <- filter_and_interpolate_vh(
 #'   vh_flagged,
 #'   flags_to_interpolate = c("DATA_MISSING", "DATA_OUTLIER"),
-#'   interpolation_method = "spline",
 #'   max_gap_hours = 2
 #' )
 #'
@@ -123,7 +121,7 @@ NULL
 filter_and_interpolate_vh <- function(vh_flagged,
                                        flags_to_interpolate = c("DATA_MISSING", "DATA_OUTLIER", "DATA_ILLOGICAL"),
                                        flags_to_preserve = c("DATA_SUSPECT"),
-                                       interpolation_method = c("linear", "spline", "approx"),
+                                       interpolation_method = "linear",
                                        max_gap_hours = 1,
                                        keep_original_values = TRUE,
                                        keep_interpolated_flag = TRUE,
@@ -144,8 +142,13 @@ filter_and_interpolate_vh <- function(vh_flagged,
   }
 
   # Match arguments
-  interpolation_method <- match.arg(interpolation_method)
   handle_multi_method <- match.arg(handle_multi_method)
+
+  # Validate interpolation method
+  valid_methods <- c("linear", "moving_average")
+  if (!interpolation_method %in% valid_methods) {
+    stop("interpolation_method must be one of: ", paste(valid_methods, collapse = ", "))
+  }
 
   # Warning for large gap threshold
   if (max_gap_hours > 3) {
@@ -517,12 +520,12 @@ estimate_pulse_interval <- function(datetimes) {
 
 #' Interpolate a Single Gap
 #'
-#' Fills a gap in velocity data using specified interpolation method.
+#' Fills a gap in velocity data using linear or moving average interpolation.
 #'
 #' @param vh_values Numeric vector of velocities
 #' @param datetimes POSIXct vector of timestamps
 #' @param gap_indices Integer vector of indices to fill
-#' @param method Interpolation method ("linear", "spline", "approx")
+#' @param method Interpolation method: "linear" or "moving_average"
 #' @return Numeric vector with gap filled
 #' @keywords internal
 interpolate_gap <- function(vh_values, datetimes, gap_indices, method) {
@@ -538,7 +541,6 @@ interpolate_gap <- function(vh_values, datetimes, gap_indices, method) {
   # Convert datetimes to numeric for interpolation
   times_numeric <- as.numeric(datetimes)
 
-  # Perform interpolation
   if (method == "linear") {
     # Linear interpolation
     interpolated <- approx(
@@ -549,38 +551,51 @@ interpolate_gap <- function(vh_values, datetimes, gap_indices, method) {
       rule = 1  # NA outside range
     )$y
 
-  } else if (method == "spline") {
-    # Cubic spline interpolation
-    if (length(valid_indices) < 4) {
-      # Fall back to linear for < 4 points
-      interpolated <- approx(
-        x = times_numeric[valid_indices],
-        y = vh_values[valid_indices],
-        xout = times_numeric[gap_indices],
-        method = "linear",
-        rule = 1
-      )$y
-    } else {
-      interpolated <- spline(
-        x = times_numeric[valid_indices],
-        y = vh_values[valid_indices],
-        xout = times_numeric[gap_indices],
-        method = "natural"
-      )$y
+  } else if (method == "moving_average") {
+    # Moving average interpolation
+    # Window size: max(3, gap_length + 2) to ensure we have context around the gap
+    gap_length <- length(gap_indices)
+    window_size <- max(3, gap_length + 2)
+
+    interpolated <- numeric(length(gap_indices))
+
+    for (i in seq_along(gap_indices)) {
+      gap_idx <- gap_indices[i]
+
+      # Find valid points within window around this gap point
+      window_start <- max(1, gap_idx - window_size)
+      window_end <- min(length(vh_values), gap_idx + window_size)
+      window_indices <- window_start:window_end
+
+      # Get valid points in window
+      valid_in_window <- intersect(window_indices, valid_indices)
+
+      if (length(valid_in_window) >= 2) {
+        # Calculate distances from gap point to valid points
+        distances <- abs(times_numeric[valid_in_window] - times_numeric[gap_idx])
+
+        # Inverse distance weighting (closer points have more weight)
+        # Add small epsilon to avoid division by zero
+        weights <- 1 / (distances + 1e-10)
+        weights <- weights / sum(weights)  # Normalise
+
+        # Weighted average
+        interpolated[i] <- sum(vh_values[valid_in_window] * weights)
+      } else {
+        # Not enough points for moving average, fall back to linear
+        linear_result <- approx(
+          x = times_numeric[valid_indices],
+          y = vh_values[valid_indices],
+          xout = times_numeric[gap_idx],
+          method = "linear",
+          rule = 1
+        )$y
+        interpolated[i] <- linear_result
+      }
     }
 
-  } else if (method == "approx") {
-    # Linear approximation with better edge handling
-    interpolated <- approx(
-      x = times_numeric[valid_indices],
-      y = vh_values[valid_indices],
-      xout = times_numeric[gap_indices],
-      method = "linear",
-      rule = 2  # Extend edges
-    )$y
-
   } else {
-    stop("Unknown interpolation method: ", method)
+    stop("Interpolation method must be 'linear' or 'moving_average'")
   }
 
   # Fill gap
