@@ -37,6 +37,7 @@ plot_spacing_correction_comparison(result, sensor_position = "outer")
 \seealso{
 Other spacing correction plots: 
 \code{\link{plot_burgess_coefficients}()},
+\code{\link{plot_changepoints_interactive}()},
 \code{\link{plot_k_estimation_summary}()},
 \code{\link{plot_spacing_correction_report}()},
 \code{\link{plot_symmetry_check}()},

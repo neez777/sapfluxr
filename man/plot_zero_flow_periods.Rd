@@ -46,6 +46,7 @@ plot_zero_flow_periods(vh_data, zero_periods, sensor_position = "outer")
 \seealso{
 Other spacing correction plots: 
 \code{\link{plot_burgess_coefficients}()},
+\code{\link{plot_changepoints_interactive}()},
 \code{\link{plot_k_estimation_summary}()},
 \code{\link{plot_spacing_correction_comparison}()},
 \code{\link{plot_spacing_correction_report}()},

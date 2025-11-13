@@ -186,7 +186,8 @@ head(vh_results)
 | **Tmax_Coh** | High flows | Cohen et al. (1981) |
 | **Tmax_Klu** | High flows (adjusted) | Kluitenberg & Ham (2004) |
 
-**Note:** DMA (Dual Method Approach) is applied as post-processing using `apply_sdma_processing()` - see section below.
+<!-- sDMA NOTE REMOVED - functionality being re-implemented in later workflow stage -->
+<!-- **Note:** DMA (Dual Method Approach) is applied as post-processing using `apply_sdma_processing()` - see section below. -->
 
 ### Understanding the Output
 
@@ -343,6 +344,26 @@ plot_method_comparison(
 )
 ```
 
+<!-- ============================================================================ -->
+<!-- sDMA SECTION - TEMPORARILY REMOVED                                         -->
+<!--                                                                             -->
+<!-- The Selectable Dual Method Approach (sDMA) functionality has been          -->
+<!-- temporarily extracted from the active workflow and is being re-implemented -->
+<!-- in a later workflow stage.                                                 -->
+<!--                                                                             -->
+<!-- FUTURE POSITION: sDMA will be available after wound correction and before  -->
+<!-- flux density calculation (between Steps 4 and 5).                          -->
+<!--                                                                             -->
+<!-- FUTURE FUNCTIONALITY:                                                      -->
+<!-- - Will apply to corrected velocities (Vc) instead of raw velocities (Vh)  -->
+<!-- - Will use Peclet numbers calculated from corrected HRM results            -->
+<!-- - Will allow switching between HRM and secondary methods based on Pe       -->
+<!--                                                                             -->
+<!-- Complete implementation preserved in: R/04j_sdma_methods.R                 -->
+<!-- See: SDMA_EXTRACTION_STATUS.md for extraction status and timeline          -->
+<!-- ============================================================================ -->
+
+<!--
 ## Selectable Dual Method Approach (sDMA)
 
 The **Selectable DMA** (sDMA) is an advanced post-processing method that allows you to choose which high-flow method to pair with HRM. This provides an automatic method selection based on flow conditions.
@@ -480,6 +501,7 @@ vh_corrected <- apply_hpv_corrections(vh, corrections)
 # Then apply sDMA to corrected results
 vh_sdma <- apply_sdma_processing(vh_corrected, secondary_method = "MHR")
 ```
+-->
 
 # Configurations
 

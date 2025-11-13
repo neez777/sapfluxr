@@ -41,6 +41,7 @@ print(report)
 \seealso{
 Other spacing correction plots: 
 \code{\link{plot_burgess_coefficients}()},
+\code{\link{plot_changepoints_interactive}()},
 \code{\link{plot_k_estimation_summary}()},
 \code{\link{plot_spacing_correction_comparison}()},
 \code{\link{plot_symmetry_check}()},

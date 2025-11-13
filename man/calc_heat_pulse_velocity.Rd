@@ -85,6 +85,7 @@ A tibble containing calculated heat pulse velocities with columns:
 \item{method}{Calculation method used (e.g., "HRM", "MHR")}
 \item{sensor_position}{Inner or outer sensor position}
 \item{Vh_cm_hr}{Heat pulse velocity in cm/hr}
+\item{temp_ratio}{Temperature ratio used in calculation. For HRM/MHR/HRMX: v1/v2 ratio. NA for Tmax methods (which use calc_time_sec instead). This enables efficient recalculation with different thermal diffusivity values.}
 \item{calc_window_start_sec}{Start of calculation window (seconds after pulse). For HRM and HRMX: averaging window start. For MHR: time when upstream sensor reaches maximum. NA for Tmax methods.}
 \item{calc_window_end_sec}{End of calculation window (seconds after pulse). For HRM and HRMX: averaging window end. For MHR: time when downstream sensor reaches maximum. NA for Tmax methods.}
 \item{calc_time_sec}{Specific time of calculation (seconds after pulse). For Tmax methods: time to peak. For MHR: time when downstream sensor reaches maximum. NA for HRM/HRMX.}

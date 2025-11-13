@@ -31,6 +31,7 @@ plot_burgess_coefficients(lookup, zero_vh_observed = c(0.5, 1.2))
 }
 \seealso{
 Other spacing correction plots: 
+\code{\link{plot_changepoints_interactive}()},
 \code{\link{plot_k_estimation_summary}()},
 \code{\link{plot_spacing_correction_comparison}()},
 \code{\link{plot_spacing_correction_report}()},
