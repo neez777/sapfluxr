@@ -244,6 +244,498 @@ calculate_zero_offset <- function(vh_data,
 }
 
 
+#' Detect Candidate Zero-Flow Periods Automatically
+#'
+#' Analyses velocity time series to automatically identify candidate zero-flow periods
+#' using multiple detection methods: nighttime patterns, weekly/monthly minimums,
+#' and statistical thresholds.
+#'
+#' @param vh_data Data frame containing velocity data with columns: datetime, sensor_position,
+#'   method, and velocity column (specified by vh_col)
+#' @param sensor_position Sensor position to analyse ("outer" or "inner")
+#' @param method_col Name of method column (default: "method")
+#' @param method Value of method to analyse (default: "HRM")
+#' @param vh_col Name of velocity column (default: "Vh_cm_hr")
+#' @param detection_method Detection approach to use. Options:
+#'   \itemize{
+#'     \item "weekly" - Identify weekly minimum periods (default)
+#'     \item "monthly" - Identify monthly minimum periods
+#'     \item "statistical" - Use CV/velocity thresholds
+#'     \item "all" - Try all methods and return best candidates
+#'   }
+#' @param min_period_hours Minimum duration for a candidate period in hours (default: 6)
+#' @param max_velocity_threshold Maximum mean velocity for zero-flow candidates (cm/hr, default: 2.0)
+#' @param max_cv_threshold Maximum coefficient of variation for stability (default: 0.3)
+#' @param max_candidates Maximum number of candidates to return (default: 10)
+#'
+#' @return A data frame with candidate zero-flow periods containing:
+#'   \item{period_id}{Unique identifier for each candidate period}
+#'   \item{start}{Start datetime of period (POSIXct)}
+#'   \item{end}{End datetime of period (POSIXct)}
+#'   \item{duration_hours}{Duration of period in hours}
+#'   \item{mean_vh}{Mean velocity during period (cm/hr)}
+#'   \item{sd_vh}{Standard deviation of velocity}
+#'   \item{cv}{Coefficient of variation (SD/mean)}
+#'   \item{n_observations}{Number of observations in period}
+#'   \item{detection_method}{Method that identified this period}
+#'   \item{quality_score}{Quality score (0-100, higher is better)}
+#'   \item{recommendation}{"excellent", "good", "acceptable", or "questionable"}
+#'
+#' @details
+#' **Detection Methods:**
+#'
+#' **Weekly Detection:**
+#' - Analyses weekly patterns to find minimum flow periods
+#' - Identifies weeks with consistently low velocities
+#' - Good for trees with weekly environmental variation
+#' - Best for datasets spanning multiple weeks
+#'
+#' **Monthly Detection:**
+#' - Identifies monthly minimum periods
+#' - Finds extended low-flow windows across months
+#' - Best for seasonal zero-flow (winter dormancy)
+#' - Requires at least 1 month of data
+#'
+#' **Statistical Detection:**
+#' - Uses velocity and CV thresholds to find stable low-flow periods
+#' - Looks for extended periods meeting both criteria
+#' - Method-agnostic, works for any flow pattern
+#' - Most flexible, works with any dataset length
+#'
+#' **Quality Scoring:**
+#' Quality scores combine multiple factors:
+#' - Lower mean velocity (better)
+#' - Lower CV (more stable)
+#' - Longer duration (more reliable)
+#' - More observations (better statistics)
+#'
+#' Scores > 80: Excellent candidates
+#' Scores 60-80: Good candidates
+#' Scores 40-60: Acceptable candidates
+#' Scores < 40: Questionable candidates
+#'
+#' @examples
+#' \dontrun{
+#' # Detect weekly zero-flow periods
+#' candidates <- detect_zero_flow_periods(
+#'   vh_data = vh_results,
+#'   sensor_position = "outer",
+#'   method = "HRM",
+#'   detection_method = "weekly"
+#' )
+#'
+#' # View top candidates
+#' head(candidates)
+#'
+#' # Filter to excellent candidates only
+#' excellent <- candidates[candidates$recommendation == "excellent", ]
+#'
+#' # Try all detection methods
+#' all_candidates <- detect_zero_flow_periods(
+#'   vh_data = vh_results,
+#'   sensor_position = "outer",
+#'   detection_method = "all",
+#'   max_candidates = 15
+#' )
+#' }
+#'
+#' @family spacing correction functions
+#' @export
+detect_zero_flow_periods <- function(vh_data,
+                                      sensor_position,
+                                      method_col = "method",
+                                      method = "HRM",
+                                      vh_col = "Vh_cm_hr",
+                                      detection_method = "weekly",
+                                      min_period_hours = 6,
+                                      max_velocity_threshold = 2.0,
+                                      max_cv_threshold = 0.3,
+                                      max_candidates = 10) {
+
+  # Input validation
+  if (!is.data.frame(vh_data)) {
+    stop("vh_data must be a data frame")
+  }
+
+  required_cols <- c("datetime", "sensor_position", method_col, vh_col)
+  missing_cols <- setdiff(required_cols, names(vh_data))
+  if (length(missing_cols) > 0) {
+    stop("Missing required columns: ", paste(missing_cols, collapse = ", "))
+  }
+
+  if (!sensor_position %in% c("outer", "inner")) {
+    stop("sensor_position must be 'outer' or 'inner'")
+  }
+
+  # Filter data
+  sensor_data <- vh_data[
+    vh_data$sensor_position == sensor_position &
+    vh_data[[method_col]] == method &
+    !is.na(vh_data[[vh_col]]),
+  ]
+
+  if (nrow(sensor_data) == 0) {
+    stop("No data found for sensor '", sensor_position, "' and method '", method, "'")
+  }
+
+  # Ensure datetime is POSIXct
+  if (!inherits(sensor_data$datetime, "POSIXct")) {
+    sensor_data$datetime <- as.POSIXct(sensor_data$datetime)
+  }
+
+  # Sort by datetime
+  sensor_data <- sensor_data[order(sensor_data$datetime), ]
+
+  # Add time components for analysis
+  sensor_data$hour <- as.integer(format(sensor_data$datetime, "%H"))
+  sensor_data$date <- as.Date(sensor_data$datetime)
+  sensor_data$week <- format(sensor_data$datetime, "%Y-W%W")
+  sensor_data$month <- format(sensor_data$datetime, "%Y-%m")
+
+  # Initialize candidates list
+  all_candidates <- list()
+
+  # Apply detection method(s)
+  if (detection_method %in% c("weekly", "all")) {
+    weekly_candidates <- detect_weekly_periods(
+      sensor_data, vh_col, min_period_hours,
+      max_velocity_threshold, max_cv_threshold
+    )
+    if (nrow(weekly_candidates) > 0) {
+      all_candidates[[length(all_candidates) + 1]] <- weekly_candidates
+    }
+  }
+
+  if (detection_method %in% c("monthly", "all")) {
+    monthly_candidates <- detect_monthly_periods(
+      sensor_data, vh_col, min_period_hours,
+      max_velocity_threshold, max_cv_threshold
+    )
+    if (nrow(monthly_candidates) > 0) {
+      all_candidates[[length(all_candidates) + 1]] <- monthly_candidates
+    }
+  }
+
+  if (detection_method %in% c("statistical", "all")) {
+    statistical_candidates <- detect_statistical_periods(
+      sensor_data, vh_col, min_period_hours,
+      max_velocity_threshold, max_cv_threshold
+    )
+    if (nrow(statistical_candidates) > 0) {
+      all_candidates[[length(all_candidates) + 1]] <- statistical_candidates
+    }
+  }
+
+  # Combine all candidates
+  if (length(all_candidates) == 0) {
+    message("No zero-flow candidates detected with current thresholds")
+    return(data.frame(
+      period_id = integer(0),
+      start = as.POSIXct(character(0)),
+      end = as.POSIXct(character(0)),
+      duration_hours = numeric(0),
+      mean_vh = numeric(0),
+      sd_vh = numeric(0),
+      cv = numeric(0),
+      n_observations = integer(0),
+      detection_method = character(0),
+      quality_score = numeric(0),
+      recommendation = character(0)
+    ))
+  }
+
+  candidates <- do.call(rbind, all_candidates)
+
+  # Remove duplicates (overlapping periods from different methods)
+  candidates <- remove_overlapping_periods(candidates)
+
+  # Sort by quality score
+  candidates <- candidates[order(candidates$quality_score, decreasing = TRUE), ]
+
+  # Limit to max_candidates
+  if (nrow(candidates) > max_candidates) {
+    candidates <- candidates[1:max_candidates, ]
+  }
+
+  # Add period IDs
+  candidates$period_id <- seq_len(nrow(candidates))
+
+  # Reorder columns
+  candidates <- candidates[, c("period_id", "start", "end", "duration_hours",
+                              "mean_vh", "sd_vh", "cv", "n_observations",
+                              "detection_method", "quality_score", "recommendation")]
+
+  rownames(candidates) <- NULL
+  return(candidates)
+}
+
+
+# Helper functions for period detection (internal)
+
+#' @keywords internal
+detect_weekly_periods <- function(data, vh_col, min_period_hours,
+                                  max_velocity_threshold, max_cv_threshold) {
+
+  # Calculate weekly statistics
+  weekly_stats <- aggregate(
+    data[[vh_col]],
+    by = list(week = data$week),
+    FUN = function(x) c(mean = mean(x, na.rm = TRUE),
+                        sd = sd(x, na.rm = TRUE),
+                        cv = sd(x, na.rm = TRUE) / abs(mean(x, na.rm = TRUE)))
+  )
+
+  weekly_stats <- data.frame(
+    week = weekly_stats$week,
+    mean_vh = weekly_stats$x[, "mean"],
+    sd_vh = weekly_stats$x[, "sd"],
+    cv = weekly_stats$x[, "cv"]
+  )
+
+  # Filter weeks meeting criteria
+  good_weeks <- weekly_stats[
+    weekly_stats$mean_vh <= max_velocity_threshold &
+    weekly_stats$cv <= max_cv_threshold,
+  ]
+
+  if (nrow(good_weeks) == 0) return(data.frame())
+
+  # Extract periods for good weeks
+  candidates <- list()
+
+  for (i in seq_len(nrow(good_weeks))) {
+    week_data <- data[data$week == good_weeks$week[i], ]
+
+    duration_hours <- as.numeric(difftime(max(week_data$datetime),
+                                          min(week_data$datetime),
+                                          units = "hours"))
+
+    if (duration_hours < min_period_hours) next
+
+    quality <- calculate_quality_score(good_weeks$mean_vh[i], good_weeks$cv[i],
+                                       duration_hours, nrow(week_data))
+
+    candidates[[length(candidates) + 1]] <- data.frame(
+      start = min(week_data$datetime),
+      end = max(week_data$datetime),
+      duration_hours = duration_hours,
+      mean_vh = good_weeks$mean_vh[i],
+      sd_vh = good_weeks$sd_vh[i],
+      cv = good_weeks$cv[i],
+      n_observations = nrow(week_data),
+      detection_method = "weekly",
+      quality_score = quality,
+      recommendation = classify_quality(quality),
+      stringsAsFactors = FALSE
+    )
+  }
+
+  if (length(candidates) == 0) return(data.frame())
+  do.call(rbind, candidates)
+}
+
+
+#' @keywords internal
+detect_monthly_periods <- function(data, vh_col, min_period_hours,
+                                   max_velocity_threshold, max_cv_threshold) {
+
+  # Calculate monthly statistics
+  monthly_stats <- aggregate(
+    data[[vh_col]],
+    by = list(month = data$month),
+    FUN = function(x) c(mean = mean(x, na.rm = TRUE),
+                        sd = sd(x, na.rm = TRUE),
+                        cv = sd(x, na.rm = TRUE) / abs(mean(x, na.rm = TRUE)))
+  )
+
+  monthly_stats <- data.frame(
+    month = monthly_stats$month,
+    mean_vh = monthly_stats$x[, "mean"],
+    sd_vh = monthly_stats$x[, "sd"],
+    cv = monthly_stats$x[, "cv"]
+  )
+
+  # Filter months meeting criteria
+  good_months <- monthly_stats[
+    monthly_stats$mean_vh <= max_velocity_threshold &
+    monthly_stats$cv <= max_cv_threshold,
+  ]
+
+  if (nrow(good_months) == 0) return(data.frame())
+
+  # Extract periods for good months
+  candidates <- list()
+
+  for (i in seq_len(nrow(good_months))) {
+    month_data <- data[data$month == good_months$month[i], ]
+
+    duration_hours <- as.numeric(difftime(max(month_data$datetime),
+                                          min(month_data$datetime),
+                                          units = "hours"))
+
+    if (duration_hours < min_period_hours) next
+
+    quality <- calculate_quality_score(good_months$mean_vh[i], good_months$cv[i],
+                                       duration_hours, nrow(month_data))
+
+    candidates[[length(candidates) + 1]] <- data.frame(
+      start = min(month_data$datetime),
+      end = max(month_data$datetime),
+      duration_hours = duration_hours,
+      mean_vh = good_months$mean_vh[i],
+      sd_vh = good_months$sd_vh[i],
+      cv = good_months$cv[i],
+      n_observations = nrow(month_data),
+      detection_method = "monthly",
+      quality_score = quality,
+      recommendation = classify_quality(quality),
+      stringsAsFactors = FALSE
+    )
+  }
+
+  if (length(candidates) == 0) return(data.frame())
+  do.call(rbind, candidates)
+}
+
+
+#' @keywords internal
+detect_statistical_periods <- function(data, vh_col, min_period_hours,
+                                       max_velocity_threshold, max_cv_threshold) {
+
+  # Find consecutive periods meeting both velocity and CV thresholds
+  # Use rolling window to identify stable periods
+
+  window_size <- max(10, floor(nrow(data) / 100))  # Adaptive window
+
+  candidates <- list()
+  i <- 1
+
+  while (i <= (nrow(data) - window_size)) {
+    # Calculate statistics for window
+    window_data <- data[i:(i + window_size - 1), ]
+    mean_vh <- mean(window_data[[vh_col]], na.rm = TRUE)
+    sd_vh <- sd(window_data[[vh_col]], na.rm = TRUE)
+    cv <- sd_vh / abs(mean_vh)
+
+    # Check if window meets criteria
+    if (mean_vh <= max_velocity_threshold && cv <= max_cv_threshold) {
+      # Extend window forward while criteria still met
+      end_idx <- i + window_size - 1
+
+      while (end_idx < nrow(data)) {
+        test_window <- data[i:(end_idx + 1), ]
+        test_mean <- mean(test_window[[vh_col]], na.rm = TRUE)
+        test_cv <- sd(test_window[[vh_col]], na.rm = TRUE) / abs(test_mean)
+
+        if (test_mean <= max_velocity_threshold && test_cv <= max_cv_threshold) {
+          end_idx <- end_idx + 1
+        } else {
+          break
+        }
+      }
+
+      # Extract final period
+      period_data <- data[i:end_idx, ]
+      duration_hours <- as.numeric(difftime(max(period_data$datetime),
+                                            min(period_data$datetime),
+                                            units = "hours"))
+
+      if (duration_hours >= min_period_hours) {
+        mean_vh <- mean(period_data[[vh_col]], na.rm = TRUE)
+        sd_vh <- sd(period_data[[vh_col]], na.rm = TRUE)
+        cv <- sd_vh / abs(mean_vh)
+
+        quality <- calculate_quality_score(mean_vh, cv, duration_hours,
+                                           nrow(period_data))
+
+        candidates[[length(candidates) + 1]] <- data.frame(
+          start = min(period_data$datetime),
+          end = max(period_data$datetime),
+          duration_hours = duration_hours,
+          mean_vh = mean_vh,
+          sd_vh = sd_vh,
+          cv = cv,
+          n_observations = nrow(period_data),
+          detection_method = "statistical",
+          quality_score = quality,
+          recommendation = classify_quality(quality),
+          stringsAsFactors = FALSE
+        )
+      }
+
+      # Skip past this period
+      i <- end_idx + 1
+    } else {
+      i <- i + 1
+    }
+  }
+
+  if (length(candidates) == 0) return(data.frame())
+  do.call(rbind, candidates)
+}
+
+
+#' @keywords internal
+calculate_quality_score <- function(mean_vh, cv, duration_hours, n_obs) {
+  # Quality score 0-100 combining multiple factors
+
+  # Velocity score (0-40 points): lower is better
+  velocity_score <- max(0, 40 * (1 - abs(mean_vh) / 5))
+
+  # CV score (0-30 points): lower is better
+  cv_score <- max(0, 30 * (1 - cv / 0.5))
+
+  # Duration score (0-20 points): longer is better
+  duration_score <- min(20, 20 * (duration_hours / 48))
+
+  # Sample size score (0-10 points): more is better
+  sample_score <- min(10, 10 * (n_obs / 200))
+
+  total_score <- velocity_score + cv_score + duration_score + sample_score
+
+  return(round(total_score, 1))
+}
+
+
+#' @keywords internal
+classify_quality <- function(score) {
+  if (score >= 80) return("excellent")
+  if (score >= 60) return("good")
+  if (score >= 40) return("acceptable")
+  return("questionable")
+}
+
+
+#' @keywords internal
+remove_overlapping_periods <- function(candidates) {
+  if (nrow(candidates) <= 1) return(candidates)
+
+  # Sort by quality score (descending)
+  candidates <- candidates[order(candidates$quality_score, decreasing = TRUE), ]
+
+  keep <- rep(TRUE, nrow(candidates))
+
+  for (i in 1:(nrow(candidates) - 1)) {
+    if (!keep[i]) next
+
+    for (j in (i + 1):nrow(candidates)) {
+      if (!keep[j]) next
+
+      # Check for overlap
+      overlap <- !(candidates$end[i] < candidates$start[j] ||
+                   candidates$start[i] > candidates$end[j])
+
+      if (overlap) {
+        # Keep higher quality period
+        keep[j] <- FALSE
+      }
+    }
+  }
+
+  candidates[keep, ]
+}
+
+
 #' Calculate Burgess Correction Coefficients Using Original Equations
 #'
 #' Implements the Burgess et al. (2001) correction methodology to calculate
@@ -1080,5 +1572,298 @@ print_spacing_correction_summary <- function(correction_result) {
 #' @export
 print.spacing_correction_result <- function(x, ...) {
   print_spacing_correction_summary(x)
+}
+
+
+#' Apply Spacing Correction Per Segment (Changepoint-Based)
+#'
+#' Applies spacing correction separately to each segment defined by changepoints,
+#' calculating separate zero offsets and Burgess coefficients for each period.
+#' This accounts for probe movement or alignment changes over time.
+#'
+#' @param vh_data Data frame containing velocity data
+#' @param changepoints Vector of changepoint dates (Date class) dividing the time series
+#' @param sensor_position Sensor position to correct ("outer" or "inner")
+#' @param method Method to correct (default: "HRM")
+#' @param method_col Name of method column (default: "method")
+#' @param vh_col Name of velocity column (default: "Vh_cm_hr")
+#' @param k_assumed Assumed thermal diffusivity (cm²/s) (default: 0.0025)
+#' @param probe_spacing Probe spacing (cm) (default: 0.5)
+#' @param measurement_time Measurement time (sec) (default: 80)
+#' @param lookup_table Optional pre-calculated Burgess lookup table
+#' @param create_new_col Logical, whether to create new corrected column (default: TRUE)
+#' @param verbose Logical, whether to print progress messages (default: TRUE)
+#'
+#' @return A list containing:
+#'   \item{vh_corrected}{Data frame with spacing corrections applied}
+#'   \item{segment_results}{List of correction results per segment}
+#'   \item{metadata}{List containing correction metadata}
+#'
+#' @details
+#' **Changepoint-Based Correction:**
+#'
+#' This function divides the time series into segments at changepoints and applies
+#' independent spacing corrections to each segment. This is necessary when:
+#' \itemize{
+#'   \item Tree swelling after rain causes probe misalignment
+#'   \item Tree shrinkage during drought moves probes
+#'   \item Physical disturbance shifts probe positions
+#'   \item Seasonal changes affect probe contact
+#' }
+#'
+#' **Workflow Per Segment:**
+#' \enumerate{
+#'   \item Identify data within segment boundaries
+#'   \item Calculate baseline (minimum) velocity for that segment
+#'   \item Look up Burgess correction coefficients
+#'   \item Apply segment-specific correction
+#' }
+#'
+#' @examples
+#' \dontrun{
+#' # Detect changepoints
+#' daily_min <- calculate_daily_minima(vh_results)
+#' cpt_result <- detect_changepoints(daily_min)
+#'
+#' # Apply segment-based correction
+#' correction_result <- apply_spacing_correction_per_segment(
+#'   vh_data = vh_results,
+#'   changepoints = cpt_result$changepoints,
+#'   sensor_position = "outer",
+#'   method = "HRM"
+#' )
+#' }
+#'
+#' @family spacing correction functions
+#' @export
+apply_spacing_correction_per_segment <- function(vh_data,
+                                                  changepoints,
+                                                  sensor_position,
+                                                  method = "HRM",
+                                                  method_col = "method",
+                                                  vh_col = "Vh_cm_hr",
+                                                  k_assumed = 0.0025,
+                                                  probe_spacing = 0.5,
+                                                  measurement_time = 80,
+                                                  lookup_table = NULL,
+                                                  create_new_col = TRUE,
+                                                  verbose = TRUE) {
+
+  # Input validation
+  if (!is.data.frame(vh_data)) {
+    stop("vh_data must be a data frame")
+  }
+
+  required_cols <- c("datetime", "sensor_position", method_col, vh_col)
+  missing_cols <- setdiff(required_cols, names(vh_data))
+  if (length(missing_cols) > 0) {
+    stop("Missing required columns: ", paste(missing_cols, collapse = ", "))
+  }
+
+  if (!sensor_position %in% c("outer", "inner")) {
+    stop("sensor_position must be 'outer' or 'inner'")
+  }
+
+  # Ensure datetime is POSIXct
+  if (!inherits(vh_data$datetime, "POSIXct")) {
+    vh_data$datetime <- as.POSIXct(vh_data$datetime)
+  }
+
+  # Filter data for specified sensor and method
+  sensor_data <- vh_data[
+    vh_data$sensor_position == sensor_position &
+    vh_data[[method_col]] == method,
+  ]
+
+  if (nrow(sensor_data) == 0) {
+    stop("No data found for sensor '", sensor_position, "' and method '", method, "'")
+  }
+
+  # Create or validate lookup table
+  if (is.null(lookup_table)) {
+    if (verbose) {
+      cat("Generating Burgess coefficient lookup table...\n")
+    }
+    lookup_table <- calculate_burgess_coefficients(
+      k = k_assumed,
+      x = probe_spacing,
+      t = measurement_time
+    )
+  }
+
+  # Define segment boundaries from changepoints
+  # Convert changepoints to POSIXct for comparison with datetime
+  if (!is.null(changepoints) && length(changepoints) > 0) {
+    cpt_datetimes <- as.POSIXct(as.character(changepoints))
+    segment_starts <- c(min(sensor_data$datetime), cpt_datetimes)
+    segment_ends <- c(cpt_datetimes, max(sensor_data$datetime))
+  } else {
+    # No changepoints - single segment
+    segment_starts <- min(sensor_data$datetime)
+    segment_ends <- max(sensor_data$datetime)
+  }
+
+  n_segments <- length(segment_starts)
+
+  if (verbose) {
+    cat("\n")
+    cat(strrep("=", 72), "\n")
+    cat("SEGMENT-BASED SPACING CORRECTION (k =", k_assumed, "cm²/s)\n")
+    cat(strrep("=", 72), "\n")
+    cat("Sensor:", toupper(sensor_position), "| Method:", method, "\n")
+    cat("Number of segments:", n_segments, "\n")
+    cat("\n")
+  }
+
+  # Initialise storage
+  segment_results <- list()
+  corrected_vh <- numeric(nrow(sensor_data))
+
+  # Process each segment
+  for (seg_id in seq_len(n_segments)) {
+
+    if (verbose) {
+      cat(strrep("-", 72), "\n")
+      cat("Processing Segment", seg_id, "of", n_segments, "\n")
+      cat(strrep("-", 72), "\n")
+      cat("Period:", format(segment_starts[seg_id], "%Y-%m-%d %H:%M"), "to",
+          format(segment_ends[seg_id], "%Y-%m-%d %H:%M"), "\n")
+    }
+
+    # Extract segment data
+    seg_mask <- sensor_data$datetime >= segment_starts[seg_id] &
+                sensor_data$datetime <= segment_ends[seg_id]
+    seg_data <- sensor_data[seg_mask, ]
+
+    if (nrow(seg_data) == 0) {
+      if (verbose) {
+        cat("  ✗ No data in this segment - skipping\n\n")
+      }
+      next
+    }
+
+    if (verbose) {
+      cat("  Observations:", nrow(seg_data), "\n")
+    }
+
+    # Calculate zero offset as minimum Vh in this segment (baseline)
+    vh_values <- seg_data[[vh_col]]
+    vh_values_clean <- vh_values[!is.na(vh_values) & is.finite(vh_values)]
+
+    if (length(vh_values_clean) == 0) {
+      if (verbose) {
+        cat("  ✗ No valid Vh values in segment - skipping\n\n")
+      }
+      next
+    }
+
+    zero_vh <- round(min(vh_values_clean, na.rm = TRUE), 1)
+    mean_vh <- mean(vh_values_clean, na.rm = TRUE)
+    sd_vh <- sd(vh_values_clean, na.rm = TRUE)
+    cv <- sd_vh / abs(mean_vh)
+
+    if (verbose) {
+      cat("  Baseline (min Vh):", zero_vh, "cm/hr\n")
+      cat("  Mean Vh:", round(mean_vh, 2), "cm/hr\n")
+      cat("  SD:", round(sd_vh, 2), "| CV:", round(cv, 3), "\n")
+    }
+
+    # Get correction coefficients
+    tryCatch({
+      coef_result <- get_correction_coefficients(
+        zero_vh = zero_vh,
+        lookup_table = lookup_table
+      )
+
+      if (verbose) {
+        cat("  Correction formula:", coef_result$correction_formula, "\n")
+        cat("  Severity:", toupper(coef_result$severity), "\n")
+      }
+
+      # Apply correction to this segment
+      corrected_vh[seg_mask] <- coef_result$coef_a * vh_values + coef_result$coef_b
+
+      # Store segment results
+      segment_results[[seg_id]] <- list(
+        segment_id = seg_id,
+        start_datetime = segment_starts[seg_id],
+        end_datetime = segment_ends[seg_id],
+        n_observations = nrow(seg_data),
+        zero_vh = zero_vh,
+        mean_vh = mean_vh,
+        sd_vh = sd_vh,
+        cv = cv,
+        coef_a = coef_result$coef_a,
+        coef_b = coef_result$coef_b,
+        range_type = coef_result$range_type,
+        severity = coef_result$severity,
+        correction_formula = coef_result$correction_formula
+      )
+
+    }, error = function(e) {
+      if (verbose) {
+        cat("  ✗ Error getting correction coefficients:", e$message, "\n")
+      }
+      warning("Segment ", seg_id, ": ", e$message, call. = FALSE)
+      corrected_vh[seg_mask] <- vh_values  # Use uncorrected
+    })
+
+    if (verbose) cat("\n")
+  }
+
+  # Apply corrections to full dataset
+  corrected_data <- vh_data
+
+  if (create_new_col) {
+    corrected_col <- paste0(vh_col, "_sc")
+    corrected_data[[corrected_col]] <- NA_real_
+    corrected_data$spacing_correction_applied <- FALSE
+  } else {
+    corrected_col <- vh_col
+    if (!"spacing_correction_applied" %in% names(corrected_data)) {
+      corrected_data$spacing_correction_applied <- FALSE
+    }
+  }
+
+  # Insert corrected values for this sensor/method
+  sensor_method_mask <- corrected_data$sensor_position == sensor_position &
+                        corrected_data[[method_col]] == method
+
+  corrected_data[[corrected_col]][sensor_method_mask] <- corrected_vh
+  corrected_data$spacing_correction_applied[sensor_method_mask] <- TRUE
+
+  # Create metadata
+  metadata <- list(
+    method = method,
+    sensor_position = sensor_position,
+    k_assumed = k_assumed,
+    probe_spacing = probe_spacing,
+    measurement_time = measurement_time,
+    n_segments = length(segment_results),
+    changepoints = if (!is.null(changepoints)) as.character(changepoints) else character(0),
+    date_applied = Sys.time(),
+    approach = "Changepoint-based segmentation",
+    sapfluxr_version = packageVersion("sapfluxr")
+  )
+
+  if (verbose) {
+    cat(strrep("=", 72), "\n")
+    cat("✓ Segment-based spacing correction complete!\n")
+    cat("  ", length(segment_results), "segments processed\n")
+    n_corrected <- sum(corrected_data$spacing_correction_applied, na.rm = TRUE)
+    cat("  ", n_corrected, "observations corrected\n")
+    cat(strrep("=", 72), "\n")
+    cat("\n")
+  }
+
+  result <- list(
+    vh_corrected = corrected_data,
+    segment_results = segment_results,
+    metadata = metadata
+  )
+
+  class(result) <- c("segment_spacing_correction_result", "list")
+
+  return(result)
 }
 

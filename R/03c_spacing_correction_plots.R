@@ -63,9 +63,24 @@ plot_zero_flow_periods <- function(vh_data,
   zero_rects <- data.frame()
   for (i in seq_along(zero_periods)) {
     period <- zero_periods[[i]]
+
+    # Simple conversion - no timezone handling needed
+    # Data and period definitions are both in local time
+    start_time <- if (inherits(period$start, "POSIXct")) {
+      period$start
+    } else {
+      as.POSIXct(period$start, format = "%Y-%m-%d %H:%M:%S")
+    }
+
+    end_time <- if (inherits(period$end, "POSIXct")) {
+      period$end
+    } else {
+      as.POSIXct(period$end, format = "%Y-%m-%d %H:%M:%S")
+    }
+
     zero_rects <- rbind(zero_rects, data.frame(
-      xmin = as.POSIXct(period$start),
-      xmax = as.POSIXct(period$end),
+      xmin = start_time,
+      xmax = end_time,
       period_id = i
     ))
   }
@@ -818,4 +833,236 @@ plot_spacing_correction_report <- function(spacing_result,
       burgess_coefficients = p3
     ))
   }
+}
+
+
+#' Plot Interactive Changepoint Detection with Daily Minima
+#'
+#' Creates an interactive plotly visualization showing daily minimum velocities
+#' with detected changepoints as vertical dashed lines. Supports zooming and
+#' panning for visual assessment of baseline shifts.
+#'
+#' @param daily_min Data frame with columns \code{date} and \code{min_value}
+#' @param changepoints Vector of changepoint dates (Date class), or NULL for no changepoints
+#' @param segments Optional data frame of segments with baseline values. If NULL and
+#'   changepoints are provided, segments will be auto-generated from changepoints.
+#' @param vh_data Optional full velocity data frame for overlay (must have datetime and Vh_cm_hr)
+#' @param title Character, plot title (optional)
+#' @param show_baseline_values Logical, whether to show baseline values for each segment (default: TRUE)
+#' @param show_original_data Logical, whether to overlay original velocity data (default: FALSE)
+#'
+#' @return A plotly object
+#'
+#' @family spacing correction plots
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' # Calculate daily minima
+#' daily_min <- calculate_daily_minima(vh_results)
+#'
+#' # Detect changepoints
+#' cpt_result <- detect_changepoints(daily_min)
+#'
+#' # Get segments with baselines
+#' segments <- extract_segment_baselines(cpt_result)
+#'
+#' # Create interactive plot
+#' plot_changepoints_interactive(
+#'   daily_min = cpt_result$daily_min_with_segments,
+#'   changepoints = cpt_result$changepoints,
+#'   segments = segments
+#' )
+#' }
+plot_changepoints_interactive <- function(daily_min,
+                                           changepoints = NULL,
+                                           segments = NULL,
+                                           vh_data = NULL,
+                                           title = "Daily Minimum Velocities with Changepoints",
+                                           show_baseline_values = TRUE,
+                                           show_original_data = FALSE) {
+
+  # Check for plotly
+  if (!requireNamespace("plotly", quietly = TRUE)) {
+    stop("plotly is required for interactive plotting. Install with: install.packages('plotly')")
+  }
+
+  # Validate inputs
+  if (!is.data.frame(daily_min)) {
+    stop("daily_min must be a data frame")
+  }
+
+  required_cols <- c("date", "min_value")
+  missing_cols <- setdiff(required_cols, names(daily_min))
+  if (length(missing_cols) > 0) {
+    stop("Missing required columns: ", paste(missing_cols, collapse = ", "))
+  }
+
+  # Ensure date is Date class
+  if (!inherits(daily_min$date, "Date")) {
+    daily_min$date <- as.Date(daily_min$date)
+  }
+
+  # Auto-generate segments from changepoints if not provided
+  if (is.null(segments) && !is.null(changepoints) && length(changepoints) > 0) {
+    message(sprintf("Auto-generating segments from %d changepoints", length(changepoints)))
+
+    # Create segments: changepoints divide the data into n+1 segments
+    n_cpts <- length(changepoints)
+    segment_starts <- c(min(daily_min$date), changepoints)
+    segment_ends <- c(changepoints, max(daily_min$date))
+
+    segments <- data.frame(
+      segment_id = seq_len(n_cpts + 1),
+      start_date = segment_starts,
+      end_date = segment_ends,
+      stringsAsFactors = FALSE
+    )
+
+    # Calculate baseline for each segment
+    segments$baseline_value <- NA_real_
+    segments$n_days <- NA_integer_
+
+    for (i in seq_len(nrow(segments))) {
+      seg_data <- daily_min[daily_min$date >= segments$start_date[i] &
+                            daily_min$date <= segments$end_date[i], ]
+      if (nrow(seg_data) > 0) {
+        segments$baseline_value[i] <- min(seg_data$min_value, na.rm = TRUE)
+        segments$n_days[i] <- as.integer(diff(range(seg_data$date))) + 1
+      }
+    }
+
+    message(sprintf("Auto-generated %d segments with baselines", nrow(segments)))
+  }
+
+  # Create base plotly figure
+  fig <- plotly::plot_ly()
+
+  # Add original data overlay if requested
+  if (show_original_data && !is.null(vh_data)) {
+    # Ensure datetime column exists
+    if ("datetime" %in% names(vh_data) && "Vh_cm_hr" %in% names(vh_data)) {
+      vh_data$date_only <- as.Date(vh_data$datetime)
+
+      fig <- fig %>%
+        plotly::add_trace(
+          data = vh_data,
+          x = ~datetime,
+          y = ~Vh_cm_hr,
+          type = "scatter",
+          mode = "markers",
+          name = "All Data Points",
+          marker = list(size = 2, color = "gray", opacity = 0.5),
+          hovertemplate = paste(
+            "<b>DateTime:</b> %{x|%Y-%m-%d %H:%M}<br>",
+            "<b>Vh:</b> %{y:.2f} cm/hr<br>",
+            "<extra></extra>"
+          )
+        )
+    }
+  }
+
+  # Add daily minima line
+  fig <- fig %>%
+    plotly::add_trace(
+      data = daily_min,
+      x = ~date,
+      y = ~min_value,
+      type = "scatter",
+      mode = "lines+markers",
+      name = "Daily Minimum Vh",
+      line = list(color = "steelblue", width = 2),
+      marker = list(size = 4, color = "steelblue"),
+      hovertemplate = paste(
+        "<b>Date:</b> %{x|%Y-%m-%d}<br>",
+        "<b>Min Vh:</b> %{y:.2f} cm/hr<br>",
+        "<extra></extra>"
+      )
+    )
+
+  # Add changepoint vertical lines if provided
+  if (!is.null(changepoints) && length(changepoints) > 0) {
+    message(sprintf("Adding %d changepoint vertical lines", length(changepoints)))
+
+    for (i in seq_along(changepoints)) {
+      cpt_date <- changepoints[i]
+
+      fig <- fig %>%
+        plotly::add_trace(
+          x = c(cpt_date, cpt_date),
+          y = c(min(daily_min$min_value, na.rm = TRUE), max(daily_min$min_value, na.rm = TRUE)),
+          type = "scatter",
+          mode = "lines",
+          name = if (i == 1) "Changepoints" else NULL,
+          line = list(color = "red", width = 2, dash = "dash"),
+          showlegend = if (i == 1) TRUE else FALSE,
+          hovertemplate = paste(
+            "<b>Changepoint</b><br>",
+            "Date: ", format(cpt_date, "%Y-%m-%d"), "<br>",
+            "<extra></extra>"
+          )
+        )
+    }
+  }
+
+  # Add segment baseline values as horizontal lines if provided
+  if (!is.null(segments) && show_baseline_values && "baseline_value" %in% names(segments)) {
+    message(sprintf("Adding %d baseline horizontal lines", nrow(segments)))
+
+    for (i in seq_len(nrow(segments))) {
+      seg <- segments[i, ]
+
+      fig <- fig %>%
+        plotly::add_trace(
+          x = c(seg$start_date, seg$end_date),
+          y = c(seg$baseline_value, seg$baseline_value),
+          type = "scatter",
+          mode = "lines",
+          name = if (i == 1) "Segment Baselines" else NULL,
+          line = list(color = "darkgreen", width = 1.5, dash = "dot"),
+          showlegend = if (i == 1) TRUE else FALSE,
+          hovertemplate = paste(
+            "<b>Segment", i, "Baseline</b><br>",
+            "Baseline: ", round(seg$baseline_value, 2), " cm/hr<br>",
+            "Period: ", format(seg$start_date, "%Y-%m-%d"), " to ",
+            format(seg$end_date, "%Y-%m-%d"), "<br>",
+            "Days: ", seg$n_days, "<br>",
+            "<extra></extra>"
+          )
+        )
+    }
+  }
+
+  # Configure layout
+  fig <- fig %>%
+    plotly::layout(
+      title = list(text = title, font = list(size = 16, weight = "bold")),
+      xaxis = list(
+        title = "Date",
+        showgrid = TRUE,
+        gridcolor = "lightgray"
+      ),
+      yaxis = list(
+        title = "Velocity (cm/hr)",
+        showgrid = TRUE,
+        gridcolor = "lightgray"
+      ),
+      hovermode = "closest",
+      dragmode = "zoom",
+      legend = list(
+        x = 0.02,
+        y = 0.98,
+        bgcolor = "rgba(255,255,255,0.8)"
+      )
+    ) %>%
+    plotly::config(
+      modeBarButtonsToRemove = c("select2d", "lasso2d", "autoScale2d"),
+      displaylogo = FALSE
+    ) %>%
+    plotly::event_register("plotly_click")
+
+  # Set source for click events (needed for Shiny)
+  fig$x$source <- "changepoint_plot"
+
+  return(fig)
 }
