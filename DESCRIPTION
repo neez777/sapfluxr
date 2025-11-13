@@ -34,7 +34,8 @@ Imports:
     R6,
     progressr (>= 0.13.0),
     yaml (>= 2.3.0),
-    patchwork (>= 1.1.0)
+    patchwork (>= 1.1.0),
+    changepoint (>= 2.2.0)
 Suggests:
     testthat (>= 3.0.0),
     knitr,
