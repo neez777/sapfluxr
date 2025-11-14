@@ -2,7 +2,7 @@
 % Please edit documentation in R/01e_heat_pulse_velocity_core.R
 \name{calc_hrm}
 \alias{calc_hrm}
-\title{Calculate HRM velocities}
+\title{Calculate HRM velocities (R version - superseded by calc_hrm_cpp)}
 \usage{
 calc_hrm(
   dTratio_douo,
@@ -14,6 +14,6 @@ calc_hrm(
 )
 }
 \description{
-Calculate HRM velocities
+Calculate HRM velocities (R version - superseded by calc_hrm_cpp)
 }
 \keyword{internal}

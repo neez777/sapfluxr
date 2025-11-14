@@ -8,7 +8,9 @@ validate_heat_pulse_data(
   heat_pulse_data,
   temperature_range = c(-10, 60),
   voltage_range = c(0, 30),
-  strict_validation = FALSE
+  strict_validation = FALSE,
+  detect_missing_pulses = TRUE,
+  max_gap_to_fill_hours = 24
 )
 }
 \arguments{
@@ -22,17 +24,36 @@ voltage values (default: c(0, 30))}
 
 \item{strict_validation}{Logical indicating whether to apply strict validation
 rules (default: FALSE)}
+
+\item{detect_missing_pulses}{Deprecated - gap detection now happens in read_heat_pulse_data()}
+
+\item{max_gap_to_fill_hours}{Numeric, used for warning messages about unfilled gaps (default: 24 hours)}
 }
 \value{
 A list containing:
 \item{valid}{Logical indicating overall validation result}
 \item{issues}{Character vector of validation issues found}
 \item{warnings}{Character vector of warnings (non-critical issues)}
-\item{summary}{List with validation statistics}
+\item{summary}{List with validation statistics including pulse_completeness}
 }
 \description{
 Performs comprehensive validation of imported heat pulse temperature data, checking for
-data integrity, reasonable value ranges, and structural consistency.
+data integrity, reasonable value ranges, and structural consistency. Calculates accurate
+completeness metrics based on gap detection results from read_heat_pulse_data().
+}
+\details{
+\strong{Gap Detection and Completeness:}
+Gap detection now happens automatically during data import in read_heat_pulse_data().
+This function uses those results to calculate accurate completeness metrics.
+
+If gaps were detected and filled, the validation summary will include:
+\itemize{
+\item pulse_completeness: Proportion of actual pulses vs. expected
+\item n_actual_pulses: Number of pulses in the raw data
+\item n_expected_pulses: Total expected based on regular pulse interval
+\item n_missing_pulses: Number of missing pulses detected
+\item n_filled_pulses: Number filled with interpolated timestamps (pulse_id = NA)
+}
 }
 \examples{
 \dontrun{
@@ -40,6 +61,11 @@ heat_pulse_data <- read_heat_pulse_data("data.txt")
 validation <- validate_heat_pulse_data(heat_pulse_data)
 if (!validation$valid) {
   print(validation$issues)
+}
+
+# Check pulse completeness
+if (!is.null(validation$summary$pulse_completeness)) {
+  cat("Pulse completeness:", validation$summary$pulse_completeness * 100, "\%\n")
 }
 }
 

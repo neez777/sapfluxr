@@ -8,6 +8,7 @@ plot_changepoints_interactive(
   daily_min,
   changepoints = NULL,
   segments = NULL,
+  proposed_changepoints = NULL,
   vh_data = NULL,
   title = "Daily Minimum Velocities with Changepoints",
   show_baseline_values = TRUE,
@@ -17,10 +18,14 @@ plot_changepoints_interactive(
 \arguments{
 \item{daily_min}{Data frame with columns \code{date} and \code{min_value}}
 
-\item{changepoints}{Vector of changepoint dates (Date class), or NULL for no changepoints}
+\item{changepoints}{Vector of changepoint dates (Date class), or NULL for no changepoints.
+These are "confirmed" changepoints that will have baselines calculated.}
 
 \item{segments}{Optional data frame of segments with baseline values. If NULL and
 changepoints are provided, segments will be auto-generated from changepoints.}
+
+\item{proposed_changepoints}{Optional vector of proposed/detected changepoint dates that
+haven't been confirmed yet. Shown in orange without baselines.}
 
 \item{vh_data}{Optional full velocity data frame for overlay (must have datetime and Vh_cm_hr)}
 

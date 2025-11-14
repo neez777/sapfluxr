@@ -16,5 +16,6 @@ Data frame with columns: start_idx, end_idx, n_missing, duration_hours
 }
 \description{
 Finds consecutive NA values in velocity data and calculates gap durations.
+Uses optimized C++ implementation for speed.
 }
 \keyword{internal}

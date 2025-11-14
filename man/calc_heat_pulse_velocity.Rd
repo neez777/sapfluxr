@@ -19,7 +19,8 @@ calc_heat_pulse_velocity(
   show_progress = TRUE,
   fill_missing_pulses = TRUE,
   max_gap_hours = 24,
-  interval_tolerance_seconds = 5
+  interval_tolerance_seconds = 5,
+  progress_update_frequency = 500
 )
 }
 \arguments{
@@ -77,6 +78,11 @@ missing rows (default: 24 hours). Only applies if fill_missing_pulses = TRUE.}
 \item{interval_tolerance_seconds}{Numeric tolerance in seconds for matching pulse times.
 Allows for clock drift and timing jitter (default: 5 seconds). Only applies if
 fill_missing_pulses = TRUE.}
+
+\item{progress_update_frequency}{Numeric indicating how many method calculations should
+complete before updating the progress bar (default: 500). Higher values reduce UI overhead
+in Shiny apps but provide less frequent feedback. For 2 methods, updates occur every 250
+pulses. Ignored if show_progress = FALSE.}
 }
 \value{
 A tibble containing calculated heat pulse velocities with columns:

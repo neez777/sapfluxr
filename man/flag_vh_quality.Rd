@@ -18,7 +18,7 @@ flag_vh_quality(
   rolling_threshold = 3,
   detect_rate_of_change = TRUE,
   max_change_cm_hr = 4,
-  check_cross_sensor = TRUE,
+  check_cross_sensor = FALSE,
   cross_sensor_threshold = 3,
   add_rows_for_missing = TRUE,
   max_gap_to_fill_hours = 24,
