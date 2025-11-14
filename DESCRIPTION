@@ -35,7 +35,9 @@ Imports:
     progressr (>= 0.13.0),
     yaml (>= 2.3.0),
     patchwork (>= 1.1.0),
-    changepoint (>= 2.2.0)
+    changepoint (>= 2.2.0),
+    Rcpp (>= 1.0.0)
+LinkingTo: Rcpp
 Suggests:
     testthat (>= 3.0.0),
     knitr,
