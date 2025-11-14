@@ -843,9 +843,12 @@ plot_spacing_correction_report <- function(spacing_result,
 #' panning for visual assessment of baseline shifts.
 #'
 #' @param daily_min Data frame with columns \code{date} and \code{min_value}
-#' @param changepoints Vector of changepoint dates (Date class), or NULL for no changepoints
+#' @param changepoints Vector of changepoint dates (Date class), or NULL for no changepoints.
+#'   These are "confirmed" changepoints that will have baselines calculated.
 #' @param segments Optional data frame of segments with baseline values. If NULL and
 #'   changepoints are provided, segments will be auto-generated from changepoints.
+#' @param proposed_changepoints Optional vector of proposed/detected changepoint dates that
+#'   haven't been confirmed yet. Shown in orange without baselines.
 #' @param vh_data Optional full velocity data frame for overlay (must have datetime and Vh_cm_hr)
 #' @param title Character, plot title (optional)
 #' @param show_baseline_values Logical, whether to show baseline values for each segment (default: TRUE)
@@ -877,6 +880,7 @@ plot_spacing_correction_report <- function(spacing_result,
 plot_changepoints_interactive <- function(daily_min,
                                            changepoints = NULL,
                                            segments = NULL,
+                                           proposed_changepoints = NULL,
                                            vh_data = NULL,
                                            title = "Daily Minimum Velocities with Changepoints",
                                            show_baseline_values = TRUE,
@@ -980,9 +984,9 @@ plot_changepoints_interactive <- function(daily_min,
       )
     )
 
-  # Add changepoint vertical lines if provided
+  # Add confirmed changepoint vertical lines (red)
   if (!is.null(changepoints) && length(changepoints) > 0) {
-    message(sprintf("Adding %d changepoint vertical lines", length(changepoints)))
+    message(sprintf("Adding %d confirmed changepoint vertical lines (red)", length(changepoints)))
 
     for (i in seq_along(changepoints)) {
       cpt_date <- changepoints[i]
@@ -993,12 +997,38 @@ plot_changepoints_interactive <- function(daily_min,
           y = c(min(daily_min$min_value, na.rm = TRUE), max(daily_min$min_value, na.rm = TRUE)),
           type = "scatter",
           mode = "lines",
-          name = if (i == 1) "Changepoints" else NULL,
+          name = if (i == 1) "Confirmed Changepoints" else NULL,
           line = list(color = "red", width = 2, dash = "dash"),
           showlegend = if (i == 1) TRUE else FALSE,
           hovertemplate = paste(
-            "<b>Changepoint</b><br>",
+            "<b>Confirmed Changepoint</b><br>",
             "Date: ", format(cpt_date, "%Y-%m-%d"), "<br>",
+            "<extra></extra>"
+          )
+        )
+    }
+  }
+
+  # Add proposed changepoint vertical lines (orange) - detected but not confirmed
+  if (!is.null(proposed_changepoints) && length(proposed_changepoints) > 0) {
+    message(sprintf("Adding %d proposed changepoint vertical lines (orange)", length(proposed_changepoints)))
+
+    for (i in seq_along(proposed_changepoints)) {
+      prop_date <- proposed_changepoints[i]
+
+      fig <- fig %>%
+        plotly::add_trace(
+          x = c(prop_date, prop_date),
+          y = c(min(daily_min$min_value, na.rm = TRUE), max(daily_min$min_value, na.rm = TRUE)),
+          type = "scatter",
+          mode = "lines",
+          name = if (i == 1) "Proposed Changepoints" else NULL,
+          line = list(color = "orange", width = 2, dash = "dot"),
+          showlegend = if (i == 1) TRUE else FALSE,
+          hovertemplate = paste(
+            "<b>Proposed Changepoint</b><br>",
+            "Date: ", format(prop_date, "%Y-%m-%d"), "<br>",
+            "Click [+] in detection results to confirm<br>",
             "<extra></extra>"
           )
         )
