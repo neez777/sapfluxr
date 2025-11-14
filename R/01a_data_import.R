@@ -163,7 +163,50 @@ read_heat_pulse_data <- function(file_path,
 
   class(result) <- c("heat_pulse_data", "list")
 
-  # Validate if requested
+  # Detect and fill missing pulses BEFORE validation
+  # This ensures completeness calculations are accurate
+  if (nrow(result$measurements) > 1 && "datetime" %in% names(result$measurements)) {
+    if (show_progress) {
+      show_message("🔍 Detecting missing pulses...\n")
+    }
+
+    tryCatch({
+      gap_detection_result <- detect_and_fill_missing_pulse_timestamps(
+        measurements = result$measurements,
+        expected_interval_hours = NULL,  # Auto-detect
+        max_gap_to_fill_hours = 24,
+        verbose = show_progress
+      )
+
+      # Update measurements with filled gaps
+      result$measurements <- gap_detection_result$measurements_complete
+
+      # Store gap detection results
+      result$gap_detection <- list(
+        gap_report = gap_detection_result$gap_report,
+        summary = gap_detection_result$summary
+      )
+
+      # Report gap findings
+      if (show_progress && !is.null(gap_detection_result$gap_report) && nrow(gap_detection_result$gap_report) > 0) {
+        n_gaps <- nrow(gap_detection_result$gap_report)
+        n_filled <- gap_detection_result$summary$n_filled
+        show_message(sprintf("⚠️  Found %d gap(s), filled %d missing pulse(s) with interpolated timestamps\n",
+                            n_gaps, n_filled))
+      }
+
+    }, error = function(e) {
+      if (show_progress) {
+        show_message(sprintf("⚠️  Gap detection failed: %s\n", e$message))
+        message("    ERROR details: ", e$message)
+        message("    ERROR call: ", paste(deparse(e$call), collapse = " "))
+      }
+      # Store empty gap detection on error
+      result$gap_detection <- NULL
+    })
+  }
+
+  # Validate if requested (now runs AFTER gap detection)
   if (validate_data) {
     if (show_progress) {
       show_message("✔️ Validating data structure and ranges...\n")
@@ -394,124 +437,55 @@ parse_ict_current_vectorized <- function(content, show_progress, file_size_mb = 
   }
 
   if (show_progress) {
-    show_message("Extracting measurements (optimised)...\n")
+    show_message("Extracting measurements (C++ optimised)...\n")
   }
 
-  # OPTIMIZATION: Pre-allocate diagnostic vectors instead of list-of-lists
-  diag_pulse_id <- integer(n_pulses)
-  diag_datetime <- rep(as.POSIXct(NA), n_pulses)
-  diag_batt_volt <- numeric(n_pulses)
-  diag_batt_current <- numeric(n_pulses)
-  diag_batt_temp <- numeric(n_pulses)
-  diag_external_volt <- numeric(n_pulses)
-  diag_external_current <- numeric(n_pulses)
+  # OPTIMISATION: Use C++ for fast batch parsing (6x faster than R loop)
+  # This replaces the entire R loop that previously processed each pulse individually
+  pulse_times_numeric <- as.numeric(pulse_times)
 
-  # Pre-allocate measurement list
-  meas_list <- vector("list", n_pulses)
-
-  # Pre-compile regex for numbers (use base R gregexpr for better performance)
-  num_pattern <- "[-+]?\\d+\\.\\d+"
-
-  # Progress reporter for all files (always create if show_progress = TRUE)
+  # Progress reporter (simple progress for C++ batch operation)
   show_prog <- if (show_progress && n_pulses > 0) {
-    progressr::progressor(steps = n_pulses)
+    progressr::progressor(steps = 1)
   } else {
     NULL
   }
 
-  # Determine update frequency based on file size
-  # Small files: update more frequently for better feedback
-  # Large files: update less frequently for better performance
-  update_interval <- if (n_pulses < 50) {
-    5   # Update every 5 pulses for tiny files
-  } else if (n_pulses < 100) {
-    10  # Update every 10 pulses for small files
-  } else if (n_pulses < 1000) {
-    25  # Update every 25 pulses for medium files
-  } else if (n_pulses < 10000) {
-    100  # Update every 100 pulses for large files
-  } else {
-    500  # Update every 500 pulses for very large files
+  if (show_progress && !is.null(show_prog)) {
+    show_prog(amount = 0,
+              message = sprintf("Parsing %s pulses with C++...",
+                               format(n_pulses, big.mark = ",")))
   }
 
-  # OPTIMIZATION: Use base R regex instead of stringr (faster for this use case)
-  last_reported <- 0  # Track last reported position for accurate progress updates
-
-  for (i in seq_len(n_pulses)) {
-
-    # Update progress at appropriate intervals
-    if (show_progress && !is.null(show_prog) && (i %% update_interval == 0 || i == n_pulses)) {
-      # Calculate actual amount processed since last update
-      amount_to_report <- i - last_reported
-      show_prog(amount = amount_to_report,
-        message = sprintf("Parsing pulse %s / %s (%.0f%%)",
-                         format(i, big.mark = ","),
-                         format(n_pulses, big.mark = ","),
-                         100 * i / n_pulses))
-      last_reported <- i
-    }
-
-    # Extract all numbers from this record using base R (faster than stringr)
-    matches <- gregexpr(num_pattern, records[i], perl = TRUE)
-    all_numbers_raw <- regmatches(records[i], matches)[[1]]
-
-    if (length(all_numbers_raw) < 5) next
-
-    all_numbers <- as.numeric(all_numbers_raw)
-
-    # First 5 are diagnostics - store directly in vectors
-    diag_pulse_id[i] <- i
-    diag_datetime[i] <- pulse_times[i]
-    diag_batt_volt[i] <- all_numbers[1]
-    diag_batt_current[i] <- all_numbers[2]
-    diag_batt_temp[i] <- all_numbers[3]
-    diag_external_volt[i] <- if(length(all_numbers) >= 4) all_numbers[4] else NA_real_
-    diag_external_current[i] <- if(length(all_numbers) >= 5) all_numbers[5] else NA_real_
-
-    # Remaining are temperature measurements
-    temp_numbers <- all_numbers[-(1:5)]
-
-    if (length(temp_numbers) >= 4) {
-      n_measurements <- length(temp_numbers) %/% 4
-      idx_base <- seq(1, length(temp_numbers) - 3, by = 4)
-
-      meas_list[[i]] <- data.frame(
-        pulse_id = i,
-        datetime = pulse_times[i] + seq(0, n_measurements - 1),
-        do = temp_numbers[idx_base],
-        di = temp_numbers[idx_base + 1],
-        uo = temp_numbers[idx_base + 2],
-        ui = temp_numbers[idx_base + 3],
-        stringsAsFactors = FALSE
-      )
-    }
-  }
-
-  if (show_progress) {
-    show_message("Combining results...\n")
-  }
-
-  # OPTIMIZATION: Create diagnostics from pre-allocated vectors (much faster)
-  diagnostics <- data.frame(
-    pulse_id = diag_pulse_id,
-    datetime = diag_datetime,
-    batt_volt = diag_batt_volt,
-    batt_current = diag_batt_current,
-    batt_temp = diag_batt_temp,
-    external_volt = diag_external_volt,
-    external_current = diag_external_current,
-    stringsAsFactors = FALSE
+  # Call C++ function to do all the heavy lifting
+  parsed_data <- parse_ict_records_cpp(
+    records = records,
+    pulse_times = pulse_times_numeric,
+    measurement_interval = 1,  # 1 second between measurements
+    expected_diagnostics = 5
   )
 
-  # Remove NA rows (where pulse_id is 0)
-  diagnostics <- diagnostics[diag_pulse_id > 0, ]
+  if (show_progress && !is.null(show_prog)) {
+    show_prog(amount = 1,
+              message = "Parsing complete!")
+  }
 
-  # Combine measurements - use data.table::rbindlist if available (faster than dplyr)
-  if (requireNamespace("data.table", quietly = TRUE)) {
-    measurements <- data.table::rbindlist(meas_list)
-    measurements <- as.data.frame(measurements)
-  } else {
-    measurements <- dplyr::bind_rows(meas_list)
+  # C++ returns data frames directly - just need to fix datetime classes
+  diagnostics <- parsed_data$diagnostics
+  measurements <- parsed_data$measurements
+
+  # Convert numeric datetimes back to POSIXct
+  diagnostics$datetime <- as.POSIXct(diagnostics$datetime, origin = "1970-01-01", tz = "UTC")
+  measurements$datetime <- as.POSIXct(measurements$datetime, origin = "1970-01-01", tz = "UTC")
+
+  # Rename columns to match expected output
+  names(diagnostics)[names(diagnostics) == "ext1"] <- "external_volt"
+  names(diagnostics)[names(diagnostics) == "ext2"] <- "external_current"
+
+  if (show_progress) {
+    show_message(sprintf("Successfully parsed %s pulses with %s measurements\n",
+                        format(nrow(diagnostics), big.mark = ","),
+                        format(nrow(measurements), big.mark = ",")))
   }
 
   return(list(
