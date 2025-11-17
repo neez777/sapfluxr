@@ -176,8 +176,9 @@ calc_heat_pulse_velocity <- function(heat_pulse_data,
     params$probe_spacing <- probe_spacing
   }
 
-  # Get pulse IDs to process
+  # Get pulse IDs to process and diagnostics
   measurements <- heat_pulse_data$measurements
+  diagnostics <- heat_pulse_data$diagnostics
   if (is.null(pulse_ids)) {
     pulse_ids <- unique(measurements$pulse_id)
   }
@@ -225,7 +226,7 @@ calc_heat_pulse_velocity <- function(heat_pulse_data,
 
     return(progressr::with_progress({
       calc_heat_pulse_velocity_internal(
-        measurements_by_pulse, pulse_ids, params, methods, plot_results,
+        measurements_by_pulse, pulse_ids, diagnostics, params, methods, plot_results,
         show_progress, fill_missing_pulses, max_gap_hours,
         interval_tolerance_seconds, probe_corrections, progress_update_frequency
       )
@@ -234,7 +235,7 @@ calc_heat_pulse_velocity <- function(heat_pulse_data,
 
   # In Shiny or progress disabled - just run directly
   return(calc_heat_pulse_velocity_internal(
-    measurements_by_pulse, pulse_ids, params, methods, plot_results,
+    measurements_by_pulse, pulse_ids, diagnostics, params, methods, plot_results,
     show_progress, fill_missing_pulses, max_gap_hours,
     interval_tolerance_seconds, probe_corrections, progress_update_frequency
   ))
@@ -243,7 +244,7 @@ calc_heat_pulse_velocity <- function(heat_pulse_data,
 
 #' Internal calculation function (called with progress context already set up)
 #' @keywords internal
-calc_heat_pulse_velocity_internal <- function(measurements_by_pulse, pulse_ids,
+calc_heat_pulse_velocity_internal <- function(measurements_by_pulse, pulse_ids, diagnostics,
                                               params, methods, plot_results,
                                               show_progress, fill_missing_pulses,
                                               max_gap_hours, interval_tolerance_seconds,
@@ -325,6 +326,23 @@ calc_heat_pulse_velocity_internal <- function(measurements_by_pulse, pulse_ids,
 
   # Combine results
   combined_results <- dplyr::bind_rows(all_results)
+
+  # Add placeholder results for missing pulses (if detected during import)
+  if ("is_missing_pulse" %in% names(diagnostics)) {
+    missing_pulse_results <- create_missing_pulse_results(
+      diagnostics,
+      methods
+    )
+
+    if (!is.null(missing_pulse_results) && nrow(missing_pulse_results) > 0) {
+      combined_results <- dplyr::bind_rows(combined_results, missing_pulse_results)
+
+      if (show_progress) {
+        n_missing <- sum(diagnostics$is_missing_pulse)
+        cat(sprintf("Added placeholder results for %d missing pulses (DATA_MISSING)\n", n_missing))
+      }
+    }
+  }
 
   # Add quality flags
   combined_results <- add_quality_flags(combined_results)

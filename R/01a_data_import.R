@@ -154,6 +154,16 @@ read_heat_pulse_data <- function(file_path,
     file_size = file_info$size,
     file_size_mb = file_size_mb,
     n_pulses = nrow(result$diagnostics),
+    n_pulses_original = if (!is.null(result$missing_pulse_info)) {
+      nrow(result$diagnostics) - result$missing_pulse_info$total_missing
+    } else {
+      nrow(result$diagnostics)
+    },
+    n_missing_pulses = if (!is.null(result$missing_pulse_info)) {
+      result$missing_pulse_info$total_missing
+    } else {
+      0
+    },
     n_measurements = nrow(result$measurements),
     chunk_size = chunk_size,
     r_version = R.version.string,
@@ -391,9 +401,51 @@ read_ict_current <- function(file_path, chunk_size, show_progress, ...) {
   diagnostics <- result$diagnostics
   measurements <- result$measurements
 
+  # ========================================================================
+  # CRITICAL: Detect and handle missing pulses
+  # This ensures pulse_id is consistent across diagnostics and measurements
+  # ========================================================================
+  if (show_progress) {
+    show_message("Checking for missing pulses...\n")
+  }
+
+  missing_info <- detect_missing_pulses(diagnostics)
+
+  if (missing_info$total_missing > 0) {
+    if (show_progress) {
+      show_message(sprintf(
+        "Found %d missing pulses in %d gaps. Inserting placeholders...\n",
+        missing_info$total_missing, missing_info$n_gaps
+      ))
+    }
+
+    # Keep original diagnostics for pulse_id mapping
+    original_diagnostics <- diagnostics
+
+    # Insert placeholder rows for missing pulses and renumber pulse_ids
+    diagnostics <- insert_missing_pulse_rows(diagnostics, missing_info)
+
+    # Update measurements with new pulse_ids (old -> new mapping)
+    measurements <- apply_pulse_ids_to_measurements(measurements, original_diagnostics, diagnostics)
+
+    if (show_progress) {
+      show_message(sprintf(
+        "Complete pulse sequence: %d total pulses (%d original + %d missing)\n",
+        nrow(diagnostics), nrow(diagnostics) - missing_info$total_missing,
+        missing_info$total_missing
+      ))
+    }
+  } else {
+    if (show_progress) {
+      show_message("No missing pulses detected. Pulse sequence is complete.\n")
+    }
+    diagnostics$is_missing_pulse <- FALSE
+  }
+
   return(list(
     diagnostics = diagnostics,
-    measurements = measurements
+    measurements = measurements,
+    missing_pulse_info = missing_info  # Include for metadata
   ))
 }
 
