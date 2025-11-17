@@ -292,6 +292,278 @@ Gaps larger than `max_gap_to_fill_hours` are reported in `gap_report` but NOT fi
 
 See `?flag_vh_quality` for full details.
 
+## 2b. Zero-Flow Correction (Spacing Adjustment)
+
+### Why Zero-Flow Correction?
+
+Heat pulse velocity sensors can experience **probe spacing errors** due to:
+- Slight misalignment during installation
+- Tree swelling/shrinking with moisture changes
+- Bark expansion after rain events
+- Seasonal wood movement
+
+These spacing errors cause **systematic bias** in velocity estimates. During periods of true zero flow (no transpiration), misaligned probes will still report non-zero velocities.
+
+**The Burgess et al. (2001) correction** uses zero-flow calibration periods to:
+1. Calculate the apparent velocity when true flow is zero (the "zero offset")
+2. Derive correction coefficients that account for probe misalignment
+3. Apply a linear correction to all velocity measurements
+
+### Workflow 1: Manual Zero-Flow Period Definition
+
+This is the **recommended approach** when you have known zero-flow conditions:
+
+```{r eval=FALSE}
+# Step 1: Define zero-flow periods (times when transpiration was truly zero)
+# Examples: extended rain events, winter dormancy, cut trees
+zero_periods <- list(
+  list(start = "2024-05-01 00:00:00", end = "2024-05-05 23:59:59"),  # 5-day rain event
+  list(start = "2024-08-15 02:00:00", end = "2024-08-15 06:00:00")  # Pre-dawn period
+)
+
+# Step 2: Apply complete spacing correction workflow
+correction_result <- apply_spacing_correction_workflow(
+  vh_data = vh_results,
+  zero_periods = zero_periods,
+  sensors = c("outer", "inner"),    # Correct both sensors
+  method = "HRM",                    # Method to correct
+  k_assumed = 0.0025,                # Thermal diffusivity (cm²/s)
+  verbose = TRUE                     # Print detailed progress
+)
+
+# Step 3: Extract corrected data
+vh_corrected <- correction_result$vh_corrected
+
+# View correction summary
+print(correction_result)
+```
+
+**Choosing Good Zero-Flow Periods:**
+
+✅ **Excellent candidates:**
+- Extended rain events (3-7 days) with overcast skies
+- Winter periods for deciduous trees (leafless, dormant)
+- Freshly cut trees (first few hours after cutting)
+- Multi-day cloudy periods with high humidity
+
+⚠️ **Poor candidates:**
+- Single nighttime periods (may have nocturnal flow)
+- Brief rain events (< 6 hours)
+- Periods immediately after rain (bark swelling in progress)
+
+**Quality Indicators:**
+- **CV < 0.3** - Excellent stability, high confidence
+- **CV 0.3-0.5** - Acceptable, moderate confidence
+- **CV > 0.5** - High variability, consider different periods
+
+```{r eval=FALSE}
+# Check correction quality
+correction_result$zero_offset_results$outer$overall_cv  # Should be < 0.3
+
+# View per-period statistics
+correction_result$zero_offset_results$outer$period_summary
+```
+
+### Workflow 2: Automatic Zero-Flow Detection
+
+If you don't have known zero-flow periods, use automatic detection:
+
+```{r eval=FALSE}
+# Detect candidate zero-flow periods automatically
+candidates <- detect_zero_flow_periods(
+  vh_data = vh_results,
+  sensor_position = "outer",
+  method = "HRM",
+  detection_method = "weekly",        # Options: "weekly", "monthly", "statistical", "all"
+  min_period_hours = 6,               # Minimum duration
+  max_velocity_threshold = 2.0,       # cm/hr (low velocities)
+  max_cv_threshold = 0.3,             # Stable periods only
+  max_candidates = 10                 # Top 10 candidates
+)
+
+# View candidates ranked by quality score
+head(candidates)
+
+# Select excellent candidates only
+excellent <- candidates[candidates$recommendation == "excellent", ]
+
+# Convert to zero_periods format
+zero_periods <- lapply(1:nrow(excellent), function(i) {
+  list(
+    start = format(excellent$start[i], "%Y-%m-%d %H:%M:%S"),
+    end = format(excellent$end[i], "%Y-%m-%d %H:%M:%S")
+  )
+})
+
+# Apply correction using detected periods
+correction_result <- apply_spacing_correction_workflow(
+  vh_data = vh_results,
+  zero_periods = zero_periods,
+  sensors = c("outer", "inner"),
+  method = "HRM"
+)
+```
+
+**Detection Methods:**
+- **"weekly"** - Finds weekly minimum flow periods (good for regular environmental cycles)
+- **"monthly"** - Identifies monthly minimums (good for seasonal zero-flow)
+- **"statistical"** - Uses velocity + CV thresholds (most flexible)
+- **"all"** - Tries all methods and returns best candidates
+
+### Workflow 3: Changepoint-Based Correction
+
+For long deployments where probe alignment changes over time (tree swelling, seasonal movement), use **changepoint detection** to apply different corrections to different time periods:
+
+```{r eval=FALSE}
+# Step 1: Calculate daily minimum velocities
+daily_min <- calculate_daily_minima(
+  vh_data = vh_results,
+  sensor_position = "outer",
+  method = "HRM"
+)
+
+# Step 2: Detect changepoints (baseline shifts indicating probe movement)
+cpt_result <- detect_changepoints(
+  daily_min = daily_min,
+  penalty = "MBIC",                  # Options: "MBIC" (conservative), "BIC", "Manual"
+  detection_type = "mean",           # Detect mean changes (baseline shifts)
+  min_segment_days = 7,              # Minimum segment length
+  merge_short_segments = TRUE        # Merge spurious short segments
+)
+
+# View detected changepoints
+print(cpt_result$changepoints)
+print(cpt_result$segments)
+
+# Step 3: Get segment baselines
+segments_with_baselines <- extract_segment_baselines(cpt_result)
+
+# Step 4: Apply correction per segment
+segment_correction <- apply_spacing_correction_per_segment(
+  vh_data = vh_results,
+  changepoints = cpt_result$changepoints,
+  sensor_position = "outer",
+  method = "HRM",
+  k_assumed = 0.0025
+)
+
+vh_corrected <- segment_correction$vh_corrected
+```
+
+**When to Use Changepoint-Based Correction:**
+- Long deployments (> 3 months)
+- Data spans wet/dry seasonal transitions
+- Visible baseline shifts in daily minimum plots
+- Trees known to have significant swelling/shrinking
+
+**Penalty Selection:**
+- **MBIC** (recommended) - Most conservative, fewest changepoints
+- **BIC** - Moderate, more changepoints than MBIC
+- **Manual** (e.g., `penalty_value = 50`) - Full control over sensitivity
+
+### Diagnostic Plots
+
+Visualise zero-flow periods and correction impacts:
+
+```{r eval=FALSE}
+# Plot zero-flow period selection
+plot_zero_flow_periods(
+  vh_data = vh_results,
+  zero_periods = zero_periods,
+  sensor_position = "outer",
+  method = "HRM",
+  show_stats = TRUE
+)
+
+# Compare before/after correction
+plot_spacing_correction_comparison(
+  spacing_result = correction_result,
+  sensor_position = "outer",
+  show_difference = TRUE
+)
+
+# View Burgess coefficient lookup curves
+lookup <- calculate_burgess_coefficients()
+plot_burgess_coefficients(
+  lookup_table = lookup,
+  zero_vh_observed = c(0.8, 1.2),  # Your observed zero offsets
+  labels = c("Outer", "Inner")
+)
+
+# Interactive changepoint visualisation
+plot_changepoints_interactive(
+  daily_min = cpt_result$daily_min_with_segments,
+  changepoints = cpt_result$changepoints,
+  segments = segments_with_baselines,
+  show_baseline_values = TRUE
+)
+```
+
+### Understanding Correction Results
+
+```{r eval=FALSE}
+# Correction formula for each sensor
+correction_result$correction_coefficients$outer
+# Output example:
+#   zero_vh: 0.8 cm/hr
+#   coef_a: 1.0234 (slope)
+#   coef_b: -0.8192 (offset)
+#   severity: "minor"
+#
+# Corrected_Vh = 1.0234 × Vh - 0.8192
+
+# Compare uncorrected vs corrected
+summary(vh_results$Vh_cm_hr[vh_results$sensor_position == "outer"])
+summary(vh_corrected$Vh_cm_hr_sc[vh_corrected$sensor_position == "outer"])
+```
+
+**Severity Assessment:**
+
+| Zero Offset | Severity | Interpretation |
+|-------------|----------|----------------|
+| ≤ 1 cm/hr | None/Minor | Typical field installation |
+| 1-3 cm/hr | Minor | Acceptable, correction reliable |
+| 3-5 cm/hr | Moderate | Significant misalignment |
+| 5-10 cm/hr | Severe | Major misalignment, elevated uncertainty |
+| > 10 cm/hr | Critical | **Discard data, reinstall probes** |
+
+### Best Practices
+
+1. **Always correct BEFORE downstream analyses** (sDMA, flux scaling, etc.)
+2. **Use multiple zero-flow periods** (2-5) from different conditions
+3. **Each period should be ≥ 6-12 hours** for stable statistics
+4. **Check CV values** - aim for CV < 0.3 for high confidence
+5. **Correct both sensors independently** - they may have different offsets
+6. **Document your zero-flow period selection** in metadata
+7. **Create diagnostic plots** to visually confirm period quality
+
+### Integration with Quality Control
+
+Spacing correction should be applied **after** quality flagging but **before** method-switching (sDMA):
+
+```{r eval=FALSE}
+# Recommended workflow order:
+# 1. Calculate velocities
+vh_results <- calc_heat_pulse_velocity(heat_pulse_data, methods = "HRM")
+
+# 2. Quality control
+qc_results <- flag_vh_quality(vh_results)
+vh_flagged <- qc_results$vh_flagged
+
+# 3. Spacing correction (THIS STEP)
+correction_result <- apply_spacing_correction_workflow(
+  vh_data = vh_flagged,
+  zero_periods = zero_periods,
+  sensors = c("outer", "inner"),
+  method = "HRM"
+)
+vh_corrected <- correction_result$vh_corrected
+
+# 4. Now apply sDMA or other post-processing
+vh_final <- apply_sdma_processing(vh_corrected, secondary_method = "MHR")
+```
+
+See `?apply_spacing_correction_workflow`, `?detect_changepoints`, and `?calculate_zero_offset` for detailed parameter documentation.
 ## 3. Visualise Results
 
 ### Time Series Plot

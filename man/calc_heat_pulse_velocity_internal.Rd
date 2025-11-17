@@ -7,6 +7,7 @@
 calc_heat_pulse_velocity_internal(
   measurements_by_pulse,
   pulse_ids,
+  diagnostics,
   params,
   methods,
   plot_results,
