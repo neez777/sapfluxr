@@ -319,12 +319,12 @@ For datasets spanning days to months, probe alignment often **changes over time*
 
 This matches the real-world workflow used by researchers analyzing long-term sap flow data.
 
-### Workflow 1: Automatic Changepoint Detection
+### Workflow 1: Automatic Changepoint Detection (Both Sensors)
 
-Let the algorithm detect changepoints and baseline shifts automatically:
+Let the algorithm detect changepoints from the outer sensor and apply correction to both inner and outer sensors:
 
 ```{r eval=FALSE}
-# Step 1: Calculate daily minimum velocities
+# Step 1: Calculate daily minimum velocities (from outer sensor)
 daily_min <- calculate_daily_minima(
   vh_data = vh_results,
   sensor_position = "outer",
@@ -344,17 +344,23 @@ cpt_result <- detect_changepoints(
 print(cpt_result$changepoints)
 print(cpt_result$segments)
 
-# Step 3: Apply correction per segment (auto-detects baseline in each segment)
-correction <- apply_spacing_correction_per_segment(
+# Step 3: Apply correction to BOTH sensors
+# Uses same segments, but calculates separate baselines per sensor
+correction <- apply_spacing_correction_both_sensors(
   vh_data = vh_results,
   changepoints = cpt_result$changepoints,
-  sensor_position = "outer",
   method = "HRM",
   k_assumed = 0.0025
 )
 
 vh_corrected <- correction$vh_corrected
 ```
+
+**Key Points:**
+- Changepoints detected from **outer sensor only** (more reliable, less wounding damage)
+- Same segments applied to **both inner and outer** sensors
+- Each sensor gets its **own baseline** within each segment
+- Burgess correction only applied to **HRM** (validated method)
 
 **When to Use Automatic Detection:**
 - Long deployments (> 1 month)
@@ -367,45 +373,73 @@ vh_corrected <- correction$vh_corrected
 - **BIC** - Moderate, more changepoints than MBIC
 - **Manual** (e.g., `penalty_value = 50`) - Full control over sensitivity
 
-### Workflow 2: Manual Changepoint Specification
+### Workflow 2: Manual Changepoint Specification (Both Sensors)
 
-When you have domain knowledge about probe conditions (e.g., you know when rain events occurred, when you repositioned probes), specify changepoints manually:
+When you have domain knowledge about probe conditions, specify changepoints manually for both sensors:
 
 ```{r eval=FALSE}
-# Specify changepoints based on your knowledge
-# Example: Rain event on March 15, probe adjustment on June 10
-correction <- apply_manual_spacing_correction(
+# Simple: Auto-detect baselines for both sensors
+correction <- apply_spacing_correction_both_sensors(
   vh_data = vh_results,
-  manual_changepoints = c("2024-03-15", "2024-06-10"),
-  sensor_position = "outer",
+  changepoints = c("2024-03-15", "2024-06-10"),
   method = "HRM"
 )
 
 vh_corrected <- correction$vh_corrected
 ```
 
-**With Optional Baseline Overrides:**
+**With Per-Sensor Baseline Overrides:**
 
-If you know the zero offset values for specific periods (e.g., from cut-stem experiments or extended zero-flow periods):
+If you have different known zero offsets for inner vs outer sensors (e.g., from cut-stem experiments):
 
 ```{r eval=FALSE}
-correction <- apply_manual_spacing_correction(
+correction <- apply_spacing_correction_both_sensors(
   vh_data = vh_results,
-  manual_changepoints = c("2024-03-15", "2024-06-10"),
-  baseline_overrides = list(
-    "2024-01-01/2024-03-15" = 0.8,  # Segment 1: user-specified
-    # Segment 2 auto-detects (not specified)
-    "2024-06-11/2024-12-31" = 1.5   # Segment 3: user-specified
+  changepoints = c("2024-03-15", "2024-06-10"),
+  baseline_overrides_outer = list(
+    "seg_1" = 0.8,   # Segment 1: outer sensor manual baseline
+    "seg_2" = 1.2    # Segment 2: outer sensor manual baseline
+    # Segment 3 auto-detects for outer
   ),
-  sensor_position = "outer"
+  baseline_overrides_inner = list(
+    "seg_1" = 1.1,   # Segment 1: inner sensor manual baseline
+    # Segments 2 and 3 auto-detect for inner
+  ),
+  method = "HRM"
 )
+
+vh_corrected <- correction$vh_corrected
 ```
+
+**Note:** Segment IDs are "seg_1", "seg_2", "seg_3", etc. You can mix manual and auto-detected baselines - only specify the segments you want to override.
 
 **When to Use Manual Specification:**
 - You have field notes about probe conditions
 - Known disturbance events (rain, repositioning, animal damage)
 - Cut-stem calibration data available
 - Want to test sensitivity to specific changepoints
+
+### Workflow 3: Junction Smoothing
+
+After applying segment-based corrections, there may be artificial discontinuities at segment boundaries. Smooth these junctions using a moving average:
+
+```{r eval=FALSE}
+# Apply junction smoothing (HRM only)
+vh_smoothed <- smooth_segment_junctions(
+  vh_data = vh_corrected,
+  changepoints = cpt_result$changepoints,
+  method = "HRM",
+  window_size = 3,  # Default: 3 points either side of junction
+  verbose = TRUE
+)
+```
+
+**Important Notes:**
+- Junction smoothing is **only applied to HRM** (Burgess correction is HRM-specific)
+- Default window size is 3 points (configurable)
+- Smoothing prevents artificial jumps at changepoint boundaries
+- Apply smoothing AFTER spacing correction but BEFORE method calibration
+- Both inner and outer sensors are smoothed independently
 
 ### Diagnostic Plots
 
@@ -499,6 +533,221 @@ vh_corrected <- correction$vh_corrected
 ```
 
 See `?apply_spacing_correction_per_segment`, `?apply_manual_spacing_correction`, `?detect_changepoints`, and `?calculate_daily_minima` for detailed parameter documentation.
+
+## 2c. Method Calibration (Aligning Secondary Methods to HRM)
+
+### Why Method Calibration?
+
+After spacing correction, **HRM** provides the most reliable sap velocity estimates across all flow conditions because it has been validated with Burgess correction. However, other methods (MHR, Tmax, HRMXa, etc.) may provide useful information at higher flow rates.
+
+**Method calibration** aligns secondary methods to the HRM scale using regression in overlapping flow regions. This allows you to:
+1. Use HRM at low flows (most accurate)
+2. Use calibrated secondary methods at higher flows (better sensitivity)
+3. Maintain consistency across the full flow range
+
+**Important:** Calibration should be performed **AFTER** spacing correction, when HRM values are most reliable.
+
+### Workflow 1: Automatic Threshold Optimization (Single Method)
+
+Find the optimal threshold for calibrating one secondary method to HRM:
+
+```{r eval=FALSE}
+# Find optimal threshold for MHR calibration
+calibration_mhr <- find_optimal_calibration_threshold(
+  vh_corrected = vh_corrected,
+  primary_method = "HRM",
+  secondary_method = "MHR",
+  sensor_position = "outer",
+  threshold_start = 0,
+  threshold_max = 20,
+  threshold_step = 0.5,
+  fit_type = "auto",        # "linear", "quadratic", or "auto"
+  create_plots = TRUE,
+  verbose = TRUE
+)
+
+# View optimal result
+print(calibration_mhr$optimal_threshold)   # e.g., 2.5 cm/hr
+print(calibration_mhr$optimal_r_squared)   # e.g., 0.985
+print(calibration_mhr$optimal_fit_type)    # "linear" or "quadratic"
+```
+
+**How it works:**
+- Tests multiple threshold values (0 to 20 cm/hr by default)
+- For each threshold, performs regression using only HRM values above that threshold
+- Selects threshold with highest R²
+- Returns diagnostic plots showing R² vs threshold
+
+### Workflow 2: Manual Threshold Override
+
+If you disagree with the automatic threshold selection (e.g., you prefer a threshold with slightly lower R² but more data points):
+
+```{r eval=FALSE}
+# Use manual threshold instead of automatic optimization
+calibration_mhr <- find_optimal_calibration_threshold(
+  vh_corrected = vh_corrected,
+  primary_method = "HRM",
+  secondary_method = "MHR",
+  sensor_position = "outer",
+  manual_threshold = 3.0,   # Your chosen threshold
+  create_plots = TRUE
+)
+
+# Result will use your threshold, skip optimization
+```
+
+### Workflow 3: Multi-Method Batch Calibration
+
+Calibrate multiple secondary methods at once:
+
+```{r eval=FALSE}
+# Calibrate all secondary methods to HRM
+calibrations <- calibrate_multiple_methods(
+  vh_corrected = vh_corrected,
+  primary_method = "HRM",
+  secondary_methods = c("MHR", "Tmax_Klu", "HRMXa"),
+  sensor_position = "outer",
+  threshold_start = 0,
+  threshold_max = 20,
+  threshold_step = 0.5
+)
+
+# View results for each method
+print(calibrations$MHR$optimal_threshold)
+print(calibrations$Tmax_Klu$optimal_threshold)
+print(calibrations$HRMXa$optimal_threshold)
+```
+
+**With Mixed Manual/Automatic Thresholds:**
+
+```{r eval=FALSE}
+# Override specific methods, auto-optimize others
+calibrations <- calibrate_multiple_methods(
+  vh_corrected = vh_corrected,
+  primary_method = "HRM",
+  secondary_methods = c("MHR", "Tmax_Klu", "HRMXa"),
+  sensor_position = "outer",
+  manual_thresholds = list(
+    MHR = 2.5,          # Manual threshold for MHR
+    # Tmax_Klu auto-optimizes
+    HRMXa = 1.5         # Manual threshold for HRMXa
+  )
+)
+```
+
+### Workflow 4: Apply Calibration Transformation
+
+Once calibrated, transform your secondary method data to the HRM scale:
+
+```{r eval=FALSE}
+# Single method transformation
+vh_calibrated_mhr <- transform_secondary_method(
+  vh_original = vh_corrected,
+  calibration = calibration_mhr$optimal_calibration,
+  method = "MHR"
+)
+
+# Multi-method transformation (applies all calibrations)
+vh_calibrated_all <- transform_multiple_methods(
+  vh_original = vh_corrected,
+  calibrations = calibrations
+)
+```
+
+### Workflow 5: Interactive Comparison Plots
+
+Visualize calibration results with interactive date range and method selection:
+
+```{r eval=FALSE}
+# Plot calibration comparison (interactive prompts)
+plot_calibration_comparison(
+  vh_original = vh_corrected,
+  vh_calibrated = vh_calibrated_all,
+  calibration = calibrations  # Pass multi-method object
+)
+
+# You'll be prompted to:
+# 1. Select which method to plot (if multiple available)
+# 2. Enter start date for time window
+# 3. Enter end date for time window
+
+# Or specify directly (non-interactive)
+plot_calibration_comparison(
+  vh_original = vh_corrected,
+  vh_calibrated = vh_calibrated_all,
+  calibration = calibrations,
+  method = "MHR",                    # Specific method
+  start_date = "2024-03-01",
+  end_date = "2024-03-31",
+  aggregation = "daily"              # "none", "hourly", "daily"
+)
+```
+
+### Understanding Calibration Results
+
+```{r eval=FALSE}
+# Inspect calibration details
+cal <- calibration_mhr$optimal_calibration
+
+cat("Fit type:", cal$fit_type, "\n")         # "linear" or "quadratic"
+cat("Intercept:", cal$coefficients[1], "\n")
+cat("Slope:", cal$coefficients[2], "\n")
+if (cal$fit_type == "quadratic") {
+  cat("Quadratic term:", cal$coefficients[3], "\n")
+}
+cat("R²:", cal$r_squared, "\n")
+cat("RMSE:", cal$rmse, "cm/hr\n")
+cat("Sample size:", cal$n_points, "\n")
+```
+
+### Best Practices
+
+1. **Always calibrate AFTER spacing correction** - HRM must be corrected first
+2. **Use outer sensor for calibration** - More reliable, less wounding damage
+3. **Check R² values** - Aim for R² > 0.90 for reliable calibration
+4. **Validate threshold selection** - Review R² vs threshold plots
+5. **Consider sample size** - Very high thresholds may have too few points
+6. **Test sensitivity** - Try different thresholds to assess robustness
+7. **Document your choices** - Record which thresholds and why
+
+### Integration with Complete Workflow
+
+```{r eval=FALSE}
+# Complete workflow order:
+# 1. Calculate velocities (multiple methods)
+vh_results <- calc_heat_pulse_velocity(heat_pulse_data, methods = c("HRM", "MHR", "HRMXa", "Tmax_Klu"))
+
+# 2. Quality control
+qc_results <- flag_vh_quality(vh_results)
+vh_flagged <- qc_results$vh_flagged
+
+# 3. Spacing correction (HRM only, both sensors)
+daily_min <- calculate_daily_minima(vh_flagged, sensor_position = "outer", method = "HRM")
+cpt_result <- detect_changepoints(daily_min)
+correction <- apply_spacing_correction_both_sensors(vh_flagged, cpt_result$changepoints, method = "HRM")
+vh_corrected <- correction$vh_corrected
+
+# 4. Junction smoothing (HRM only)
+vh_smoothed <- smooth_segment_junctions(vh_corrected, cpt_result$changepoints, method = "HRM")
+
+# 5. Method calibration (THIS STEP - secondary methods to corrected HRM)
+calibrations <- calibrate_multiple_methods(
+  vh_corrected = vh_smoothed,
+  primary_method = "HRM",
+  secondary_methods = c("MHR", "HRMXa", "Tmax_Klu"),
+  sensor_position = "outer"
+)
+
+# 6. Apply calibrations
+vh_final <- transform_multiple_methods(vh_smoothed, calibrations)
+
+# Now vh_final contains:
+# - HRM: spacing-corrected and junction-smoothed (reference method)
+# - MHR, HRMXa, Tmax_Klu: calibrated to HRM scale
+```
+
+See `?find_optimal_calibration_threshold`, `?calibrate_multiple_methods`, `?transform_secondary_method`, and `?plot_calibration_comparison` for detailed documentation.
+
 ## 3. Visualise Results
 
 ### Time Series Plot
@@ -733,8 +982,11 @@ saveRDS(list(
 # Workflow Summary
 
 ```r
-# Complete workflow with all quality control steps
+# Complete workflow with all processing steps
 library(sapfluxr)
+
+# PHASE 1: Import and Initial Calculations
+# ========================================
 
 # 1. Import
 heat_pulse_data <- read_heat_pulse_data("mydata.txt")
@@ -746,7 +998,7 @@ heat_pulse_data <- read_heat_pulse_data("mydata.txt")
 #   observed_actual_time = as.POSIXct("2025-01-16 08:00:00")
 # )
 
-# 2. Calculate velocities
+# 2. Calculate velocities (all methods)
 vh_results <- calc_heat_pulse_velocity(
   heat_pulse_data,
   methods = c("HRM", "MHR", "HRMXa", "Tmax_Klu"),
@@ -762,14 +1014,75 @@ qc_results <- flag_vh_quality(
 )
 vh_flagged <- qc_results$vh_flagged
 
+# PHASE 2-3: Changepoint Detection and Spacing Correction
+# ========================================================
 
-# 3. Visualise
-plot_vh_timeseries(vh_flagged, methods = c("HRM", "MHR", "HRMXa"))
-plot_heat_pulse_trace(heat_pulse_data, vh_flagged, pulse_id = 1)
+# 2b. Detect changepoints (from outer sensor HRM)
+daily_min <- calculate_daily_minima(
+  vh_data = vh_flagged,
+  sensor_position = "outer",
+  method = "HRM"
+)
 
-# 4. Export (only OK quality data)
-clean_data <- vh_flagged[vh_flagged$quality_flag == "OK", ]
-write.csv(clean_data, "sap_velocity_clean.csv", row.names = FALSE)
+cpt_result <- detect_changepoints(
+  daily_min = daily_min,
+  penalty = "MBIC",
+  min_segment_days = 7
+)
+
+# Apply spacing correction to both sensors
+correction <- apply_spacing_correction_both_sensors(
+  vh_data = vh_flagged,
+  changepoints = cpt_result$changepoints,
+  method = "HRM",
+  k_assumed = 0.0025
+)
+
+vh_corrected <- correction$vh_corrected
+
+# Apply junction smoothing (HRM only)
+vh_smoothed <- smooth_segment_junctions(
+  vh_data = vh_corrected,
+  changepoints = cpt_result$changepoints,
+  method = "HRM",
+  window_size = 3
+)
+
+# PHASE 5: Method Calibration
+# ============================
+
+# Calibrate secondary methods to corrected HRM
+calibrations <- calibrate_multiple_methods(
+  vh_corrected = vh_smoothed,
+  primary_method = "HRM",
+  secondary_methods = c("MHR", "HRMXa", "Tmax_Klu"),
+  sensor_position = "outer"
+)
+
+# Apply calibrations
+vh_final <- transform_multiple_methods(
+  vh_original = vh_smoothed,
+  calibrations = calibrations
+)
+
+# PHASE 6: Visualisation and Export
+# ==================================
+
+# 3. Visualise results
+plot_vh_timeseries(vh_final, methods = c("HRM", "MHR", "HRMXa"))
+plot_calibration_comparison(vh_smoothed, vh_final, calibrations)
+
+# 4. Export final processed data
+write.csv(vh_final, "sap_velocity_final.csv", row.names = FALSE)
+
+# Export with full metadata
+saveRDS(list(
+  data = vh_final,
+  changepoints = cpt_result,
+  correction = correction,
+  calibrations = calibrations,
+  processing_date = Sys.time()
+), "sap_velocity_complete.rds")
 ```
 
 ## Common Workflows
