@@ -341,8 +341,10 @@ detect_changepoints <- function(daily_min,
   changepoint_dates <- daily_min$date[cpt_indices]
 
   # Build segments data frame
-  segment_ends <- cpt_indices
-  segment_starts <- c(1, head(segment_ends, -1) + 1)
+  # n changepoints creates n+1 segments
+  # Seg 1: 1 → cpt[1], Seg 2: cpt[1]+1 → cpt[2], ..., Seg n+1: cpt[n]+1 → end
+  segment_starts <- c(1, cpt_indices + 1)
+  segment_ends <- c(cpt_indices, nrow(daily_min))
 
   segments <- data.frame(
     segment_id = seq_along(segment_starts),
