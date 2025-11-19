@@ -23,12 +23,12 @@ Prints a formatted summary including:
 }
 \seealso{
 Other spacing correction functions: 
+\code{\link{apply_manual_spacing_correction}()},
 \code{\link{apply_spacing_correction}()},
 \code{\link{apply_spacing_correction_per_segment}()},
 \code{\link{apply_spacing_correction_workflow}()},
 \code{\link{calculate_burgess_coefficients}()},
 \code{\link{calculate_zero_offset}()},
-\code{\link{detect_zero_flow_periods}()},
 \code{\link{get_correction_coefficients}()}
 }
 \concept{spacing correction functions}

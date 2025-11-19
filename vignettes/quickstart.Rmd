@@ -304,115 +304,24 @@ Heat pulse velocity sensors can experience **probe spacing errors** due to:
 
 These spacing errors cause **systematic bias** in velocity estimates. During periods of true zero flow (no transpiration), misaligned probes will still report non-zero velocities.
 
-**The Burgess et al. (2001) correction** uses zero-flow calibration periods to:
+**The Burgess et al. (2001) correction** uses zero-flow calibration to:
 1. Calculate the apparent velocity when true flow is zero (the "zero offset")
 2. Derive correction coefficients that account for probe misalignment
 3. Apply a linear correction to all velocity measurements
 
-### Workflow 1: Manual Zero-Flow Period Definition
+### The Changepoint Approach
 
-This is the **recommended approach** when you have known zero-flow conditions:
+For datasets spanning days to months, probe alignment often **changes over time** due to tree swelling/shrinking, seasonal wood movement, or environmental conditions. The changepoint-based correction method handles this by:
 
-```{r eval=FALSE}
-# Step 1: Define zero-flow periods (times when transpiration was truly zero)
-# Examples: extended rain events, winter dormancy, cut trees
-zero_periods <- list(
-  list(start = "2024-05-01 00:00:00", end = "2024-05-05 23:59:59"),  # 5-day rain event
-  list(start = "2024-08-15 02:00:00", end = "2024-08-15 06:00:00")  # Pre-dawn period
-)
+1. **Detecting baseline shifts** - Identifies when the zero offset changes
+2. **Segmenting the time series** - Divides data into periods with consistent probe alignment
+3. **Applying segment-specific corrections** - Each segment gets its own zero offset and correction coefficients
 
-# Step 2: Apply complete spacing correction workflow
-correction_result <- apply_spacing_correction_workflow(
-  vh_data = vh_results,
-  zero_periods = zero_periods,
-  sensors = c("outer", "inner"),    # Correct both sensors
-  method = "HRM",                    # Method to correct
-  k_assumed = 0.0025,                # Thermal diffusivity (cm²/s)
-  verbose = TRUE                     # Print detailed progress
-)
+This matches the real-world workflow used by researchers analyzing long-term sap flow data.
 
-# Step 3: Extract corrected data
-vh_corrected <- correction_result$vh_corrected
+### Workflow 1: Automatic Changepoint Detection
 
-# View correction summary
-print(correction_result)
-```
-
-**Choosing Good Zero-Flow Periods:**
-
-✅ **Excellent candidates:**
-- Extended rain events (3-7 days) with overcast skies
-- Winter periods for deciduous trees (leafless, dormant)
-- Freshly cut trees (first few hours after cutting)
-- Multi-day cloudy periods with high humidity
-
-⚠️ **Poor candidates:**
-- Single nighttime periods (may have nocturnal flow)
-- Brief rain events (< 6 hours)
-- Periods immediately after rain (bark swelling in progress)
-
-**Quality Indicators:**
-- **CV < 0.3** - Excellent stability, high confidence
-- **CV 0.3-0.5** - Acceptable, moderate confidence
-- **CV > 0.5** - High variability, consider different periods
-
-```{r eval=FALSE}
-# Check correction quality
-correction_result$zero_offset_results$outer$overall_cv  # Should be < 0.3
-
-# View per-period statistics
-correction_result$zero_offset_results$outer$period_summary
-```
-
-### Workflow 2: Automatic Zero-Flow Detection
-
-If you don't have known zero-flow periods, use automatic detection:
-
-```{r eval=FALSE}
-# Detect candidate zero-flow periods automatically
-candidates <- detect_zero_flow_periods(
-  vh_data = vh_results,
-  sensor_position = "outer",
-  method = "HRM",
-  detection_method = "weekly",        # Options: "weekly", "monthly", "statistical", "all"
-  min_period_hours = 6,               # Minimum duration
-  max_velocity_threshold = 2.0,       # cm/hr (low velocities)
-  max_cv_threshold = 0.3,             # Stable periods only
-  max_candidates = 10                 # Top 10 candidates
-)
-
-# View candidates ranked by quality score
-head(candidates)
-
-# Select excellent candidates only
-excellent <- candidates[candidates$recommendation == "excellent", ]
-
-# Convert to zero_periods format
-zero_periods <- lapply(1:nrow(excellent), function(i) {
-  list(
-    start = format(excellent$start[i], "%Y-%m-%d %H:%M:%S"),
-    end = format(excellent$end[i], "%Y-%m-%d %H:%M:%S")
-  )
-})
-
-# Apply correction using detected periods
-correction_result <- apply_spacing_correction_workflow(
-  vh_data = vh_results,
-  zero_periods = zero_periods,
-  sensors = c("outer", "inner"),
-  method = "HRM"
-)
-```
-
-**Detection Methods:**
-- **"weekly"** - Finds weekly minimum flow periods (good for regular environmental cycles)
-- **"monthly"** - Identifies monthly minimums (good for seasonal zero-flow)
-- **"statistical"** - Uses velocity + CV thresholds (most flexible)
-- **"all"** - Tries all methods and returns best candidates
-
-### Workflow 3: Changepoint-Based Correction
-
-For long deployments where probe alignment changes over time (tree swelling, seasonal movement), use **changepoint detection** to apply different corrections to different time periods:
+Let the algorithm detect changepoints and baseline shifts automatically:
 
 ```{r eval=FALSE}
 # Step 1: Calculate daily minimum velocities
@@ -435,11 +344,8 @@ cpt_result <- detect_changepoints(
 print(cpt_result$changepoints)
 print(cpt_result$segments)
 
-# Step 3: Get segment baselines
-segments_with_baselines <- extract_segment_baselines(cpt_result)
-
-# Step 4: Apply correction per segment
-segment_correction <- apply_spacing_correction_per_segment(
+# Step 3: Apply correction per segment (auto-detects baseline in each segment)
+correction <- apply_spacing_correction_per_segment(
   vh_data = vh_results,
   changepoints = cpt_result$changepoints,
   sensor_position = "outer",
@@ -447,37 +353,76 @@ segment_correction <- apply_spacing_correction_per_segment(
   k_assumed = 0.0025
 )
 
-vh_corrected <- segment_correction$vh_corrected
+vh_corrected <- correction$vh_corrected
 ```
 
-**When to Use Changepoint-Based Correction:**
-- Long deployments (> 3 months)
+**When to Use Automatic Detection:**
+- Long deployments (> 1 month)
 - Data spans wet/dry seasonal transitions
-- Visible baseline shifts in daily minimum plots
-- Trees known to have significant swelling/shrinking
+- You want an objective, reproducible approach
+- Unsure where baseline shifts occurred
 
 **Penalty Selection:**
 - **MBIC** (recommended) - Most conservative, fewest changepoints
 - **BIC** - Moderate, more changepoints than MBIC
 - **Manual** (e.g., `penalty_value = 50`) - Full control over sensitivity
 
-### Diagnostic Plots
+### Workflow 2: Manual Changepoint Specification
 
-Visualise zero-flow periods and correction impacts:
+When you have domain knowledge about probe conditions (e.g., you know when rain events occurred, when you repositioned probes), specify changepoints manually:
 
 ```{r eval=FALSE}
-# Plot zero-flow period selection
-plot_zero_flow_periods(
+# Specify changepoints based on your knowledge
+# Example: Rain event on March 15, probe adjustment on June 10
+correction <- apply_manual_spacing_correction(
   vh_data = vh_results,
-  zero_periods = zero_periods,
+  manual_changepoints = c("2024-03-15", "2024-06-10"),
   sensor_position = "outer",
-  method = "HRM",
-  show_stats = TRUE
+  method = "HRM"
+)
+
+vh_corrected <- correction$vh_corrected
+```
+
+**With Optional Baseline Overrides:**
+
+If you know the zero offset values for specific periods (e.g., from cut-stem experiments or extended zero-flow periods):
+
+```{r eval=FALSE}
+correction <- apply_manual_spacing_correction(
+  vh_data = vh_results,
+  manual_changepoints = c("2024-03-15", "2024-06-10"),
+  baseline_overrides = list(
+    "2024-01-01/2024-03-15" = 0.8,  # Segment 1: user-specified
+    # Segment 2 auto-detects (not specified)
+    "2024-06-11/2024-12-31" = 1.5   # Segment 3: user-specified
+  ),
+  sensor_position = "outer"
+)
+```
+
+**When to Use Manual Specification:**
+- You have field notes about probe conditions
+- Known disturbance events (rain, repositioning, animal damage)
+- Cut-stem calibration data available
+- Want to test sensitivity to specific changepoints
+
+### Diagnostic Plots
+
+Visualise changepoints and correction impacts:
+
+```{r eval=FALSE}
+# Interactive changepoint visualisation
+plot_changepoints_interactive(
+  daily_min = cpt_result$daily_min_with_segments,
+  changepoints = cpt_result$changepoints,
+  segments = extract_segment_baselines(cpt_result),
+  show_baseline_values = TRUE
 )
 
 # Compare before/after correction
 plot_spacing_correction_comparison(
-  spacing_result = correction_result,
+  spacing_result = correction,
   sensor_position = "outer",
   show_difference = TRUE
 )
@@ -487,30 +432,22 @@ lookup <- calculate_burgess_coefficients()
 plot_burgess_coefficients(
   lookup_table = lookup,
   zero_vh_observed = c(0.8, 1.2),  # Your observed zero offsets
-  labels = c("Outer", "Inner")
-)
-
-# Interactive changepoint visualisation
-plot_changepoints_interactive(
-  daily_min = cpt_result$daily_min_with_segments,
-  changepoints = cpt_result$changepoints,
-  segments = segments_with_baselines,
-  show_baseline_values = TRUE
+  labels = c("Segment 1", "Segment 2")
 )
 ```
 
 ### Understanding Correction Results
 
 ```{r eval=FALSE}
-# Correction formula for each sensor
-correction_result$correction_coefficients$outer
-# Output example:
-#   zero_vh: 0.8 cm/hr
-#   coef_a: 1.0234 (slope)
-#   coef_b: -0.8192 (offset)
-#   severity: "minor"
-#
-# Corrected_Vh = 1.0234 × Vh - 0.8192
+# View segment-specific corrections
+for (seg in correction$segment_results) {
+  cat("\nSegment", seg$segment_id, ":\n")
+  cat("  Period:", format(seg$start_datetime), "to", format(seg$end_datetime), "\n")
+  cat("  Zero offset:", seg$zero_vh, "cm/hr\n")
+  cat("  Baseline source:", seg$baseline_source, "\n")  # "auto-detected" or "user-specified"
+  cat("  Correction:", seg$correction_formula, "\n")
+  cat("  Severity:", seg$severity, "\n")
+}
 
 # Compare uncorrected vs corrected
 summary(vh_results$Vh_cm_hr[vh_results$sensor_position == "outer"])
@@ -529,17 +466,17 @@ summary(vh_corrected$Vh_cm_hr_sc[vh_corrected$sensor_position == "outer"])
 
 ### Best Practices
 
-1. **Always correct BEFORE downstream analyses** (sDMA, flux scaling, etc.)
-2. **Use multiple zero-flow periods** (2-5) from different conditions
-3. **Each period should be ≥ 6-12 hours** for stable statistics
-4. **Check CV values** - aim for CV < 0.3 for high confidence
-5. **Correct both sensors independently** - they may have different offsets
-6. **Document your zero-flow period selection** in metadata
-7. **Create diagnostic plots** to visually confirm period quality
+1. **Always correct BEFORE downstream analyses** (flux scaling, tree water use)
+2. **Check for baseline shifts** - Plot daily minima to identify potential changepoints
+3. **Use multiple segments for long deployments** - Don't assume constant alignment
+4. **Validate with field notes** - Compare detected changepoints with field observations
+5. **Correct both sensors independently** - They may have different offsets
+6. **Document your approach** - Record whether automatic or manual, and why
+7. **Create diagnostic plots** - Visually confirm segment quality
 
 ### Integration with Quality Control
 
-Spacing correction should be applied **after** quality flagging but **before** method-switching (sDMA):
+Spacing correction should be applied **after** quality flagging:
 
 ```{r eval=FALSE}
 # Recommended workflow order:
@@ -551,19 +488,17 @@ qc_results <- flag_vh_quality(vh_results)
 vh_flagged <- qc_results$vh_flagged
 
 # 3. Spacing correction (THIS STEP)
-correction_result <- apply_spacing_correction_workflow(
+daily_min <- calculate_daily_minima(vh_flagged)
+cpt_result <- detect_changepoints(daily_min)
+correction <- apply_spacing_correction_per_segment(
   vh_data = vh_flagged,
-  zero_periods = zero_periods,
-  sensors = c("outer", "inner"),
-  method = "HRM"
+  changepoints = cpt_result$changepoints,
+  sensor_position = "outer"
 )
-vh_corrected <- correction_result$vh_corrected
-
-# 4. Now apply sDMA or other post-processing
-vh_final <- apply_sdma_processing(vh_corrected, secondary_method = "MHR")
+vh_corrected <- correction$vh_corrected
 ```
 
-See `?apply_spacing_correction_workflow`, `?detect_changepoints`, and `?calculate_zero_offset` for detailed parameter documentation.
+See `?apply_spacing_correction_per_segment`, `?apply_manual_spacing_correction`, `?detect_changepoints`, and `?calculate_daily_minima` for detailed parameter documentation.
 ## 3. Visualise Results
 
 ### Time Series Plot
@@ -616,164 +551,6 @@ plot_method_comparison(
 )
 ```
 
-<!-- ============================================================================ -->
-<!-- sDMA SECTION - TEMPORARILY REMOVED                                         -->
-<!--                                                                             -->
-<!-- The Selectable Dual Method Approach (sDMA) functionality has been          -->
-<!-- temporarily extracted from the active workflow and is being re-implemented -->
-<!-- in a later workflow stage.                                                 -->
-<!--                                                                             -->
-<!-- FUTURE POSITION: sDMA will be available after wound correction and before  -->
-<!-- flux density calculation (between Steps 4 and 5).                          -->
-<!--                                                                             -->
-<!-- FUTURE FUNCTIONALITY:                                                      -->
-<!-- - Will apply to corrected velocities (Vc) instead of raw velocities (Vh)  -->
-<!-- - Will use Peclet numbers calculated from corrected HRM results            -->
-<!-- - Will allow switching between HRM and secondary methods based on Pe       -->
-<!--                                                                             -->
-<!-- Complete implementation preserved in: R/04j_sdma_methods.R                 -->
-<!-- See: SDMA_EXTRACTION_STATUS.md for extraction status and timeline          -->
-<!-- ============================================================================ -->
-
-<!--
-## Selectable Dual Method Approach (sDMA)
-
-The **Selectable DMA** (sDMA) is an advanced post-processing method that allows you to choose which high-flow method to pair with HRM. This provides an automatic method selection based on flow conditions.
-
-### How sDMA Works
-
-sDMA automatically switches between two methods based on the **Peclet number (Pe)**:
-
-- **Pe < 1.0**: Uses HRM (optimal for low flows)
-- **Pe ≥ 1.0**: Uses your chosen secondary method (optimal for high flows)
-
-The Peclet number is calculated from the HRM velocity: `Pe = (Vh_HRM × probe_spacing) / (diffusivity × 3600)`
-
-### Why Post-Processing?
-
-**New Workflow (Efficient):**
-```{r eval=FALSE}
-# Step 1: Calculate base methods (each calculated once)
-vh <- calc_heat_pulse_velocity(
-  heat_pulse_data,
-  methods = c("HRM", "MHR", "Tmax_Klu")
-)
-
-# Step 2: Apply sDMA switching as post-processing
-vh_sdma <- apply_sdma_processing(vh, secondary_method = "MHR")
-
-# Now have: HRM, MHR, Tmax_Klu, sDMA:MHR (all in one tibble)
-```
-
-**Benefits:**
-- Each method calculated exactly once (no redundancy)
-- Can apply sDMA after corrections: `apply_hpv_corrections() %>% apply_sdma_processing()`
-- Can test multiple secondary methods without recalculating HRM
-- More explicit about what's happening
-
-### Using sDMA
-
-```{r}
-# Step 1: Calculate base methods including HRM (required for Peclet numbers)
-vh <- calc_heat_pulse_velocity(
-  heat_pulse_data,
-  methods = c("HRM", "MHR"),
-  show_progress = FALSE
-)
-
-# Step 2: Apply sDMA processing with MHR as secondary method
-vh_sdma <- apply_sdma_processing(
-  vh,
-  secondary_method = "MHR",
-  show_progress = FALSE
-)
-
-# View sDMA-specific columns
-head(vh_sdma[vh_sdma$method == "sDMA:MHR",
-             c("datetime", "method", "Vh_cm_hr",
-               "peclet_number", "selected_method")])
-```
-
-The `selected_method` column shows which method was actually used for each measurement (HRM or MHR).
-
-### Compare Multiple sDMA Variants
-
-You can test multiple secondary methods to find which works best for your data:
-
-```{r}
-# Calculate base methods once
-vh <- calc_heat_pulse_velocity(
-  heat_pulse_data,
-  methods = c("HRM", "MHR", "Tmax_Klu"),
-  show_progress = FALSE
-)
-
-# Apply sDMA with multiple secondary methods at once
-vh_multi_sdma <- apply_sdma_processing(
-  vh,
-  secondary_method = c("MHR", "Tmax_Klu"),
-  show_progress = FALSE
-)
-
-# Now have: HRM, MHR, Tmax_Klu, sDMA:MHR, sDMA:Tmax_Klu
-unique(vh_multi_sdma$method)
-
-# Summary by method
-aggregate(Vh_cm_hr ~ method, data = vh_multi_sdma, FUN = mean, na.rm = TRUE)
-```
-
-### Visualising sDMA Results
-
-The dedicated sDMA plotting function shows:
-
-- Velocity points colored by which method was selected (HRM vs secondary)
-- Peclet number on a secondary y-axis (grey line)
-- The Pe = 1.0 switching threshold (dashed horizontal line)
-- Legend includes both selected methods and the Peclet number line
-
-```{r fig.width=8, fig.height=6, eval=FALSE}
-# Plot sDMA time series with Peclet number
-plot_sdma_timeseries(
-  vh_sdma,
-  sdma_method = "sDMA:MHR",
-  sensor_position = "outer"
-)
-
-# Plot without Peclet number
-plot_sdma_timeseries(
-  vh_sdma,
-  sdma_method = "sDMA:MHR",
-  sensor_position = "outer",
-  show_peclet = FALSE
-)
-```
-
-The plot legend shows which method was used for each data point (and the Peclet number when `show_peclet = TRUE`), and the summary statistics tell you what percentage of measurements used HRM vs the secondary method.
-
-### When to Use sDMA
-
-Use sDMA when:
-
-- **You have variable flow conditions**: Data spans both low and high flow regimes
-- **You want method transparency**: sDMA shows exactly which method was used via `selected_method` column
-- **Tmax methods fail frequently**: Try `sDMA:MHR` as an alternative to standard DMA (which uses Tmax_Klu)
-- **You want to analyse flow regimes**: The `peclet_number` column reveals flow conditions over time
-
-### Advanced: sDMA After Corrections
-
-The post-processing approach allows you to apply sDMA after making probe corrections:
-
-```{r eval=FALSE}
-# Calculate base methods
-vh <- calc_heat_pulse_velocity(heat_pulse_data, methods = c("HRM", "MHR"))
-
-# Apply corrections (wound diameter, zero-flow, etc.)
-vh_corrected <- apply_hpv_corrections(vh, corrections)
-
-# Then apply sDMA to corrected results
-vh_sdma <- apply_sdma_processing(vh_corrected, secondary_method = "MHR")
-```
--->
 
 # Configurations
 
@@ -985,13 +762,10 @@ qc_results <- flag_vh_quality(
 )
 vh_flagged <- qc_results$vh_flagged
 
-# 2b. (Optional) Apply sDMA post-processing
-vh_sdma <- apply_sdma_processing(vh_flagged, secondary_method = "MHR")
 
 # 3. Visualise
 plot_vh_timeseries(vh_flagged, methods = c("HRM", "MHR", "HRMXa"))
 plot_heat_pulse_trace(heat_pulse_data, vh_flagged, pulse_id = 1)
-plot_sdma_timeseries(vh_sdma, sdma_method = "sDMA:MHR")
 
 # 4. Export (only OK quality data)
 clean_data <- vh_flagged[vh_flagged$quality_flag == "OK", ]
@@ -1005,7 +779,7 @@ write.csv(clean_data, "sap_velocity_clean.csv", row.names = FALSE)
 # Use proven methods for routine analysis
 vh_results <- calc_heat_pulse_velocity(
   heat_pulse_data,
-  methods = c("HRM", "MHR", "DMA")
+  methods = c("HRM", "MHR")
 )
 ```
 
@@ -1014,22 +788,10 @@ vh_results <- calc_heat_pulse_velocity(
 # Compare multiple methods to find the best for your data
 vh_results <- calc_heat_pulse_velocity(
   heat_pulse_data,
-  methods = c("HRM", "MHR", "HRMXa", "Tmax_Klu", "DMA")
+  methods = c("HRM", "MHR", "HRMXa", "Tmax_Klu")
 )
 ```
 
-### sDMA Optimisation
-```r
-# If standard DMA has issues, try different secondary methods
-vh_results <- calc_heat_pulse_velocity(
-  heat_pulse_data,
-  methods = c("DMA", "sDMA:MHR", "sDMA:Tmax_Klu", "sDMA:HRMXa")
-)
-
-# Visualise each variant
-plot_sdma_timeseries(vh_results, sdma_method = "sDMA:MHR")
-plot_sdma_timeseries(vh_results, sdma_method = "sDMA:HRMXa")
-```
 
 # Getting Help
 
