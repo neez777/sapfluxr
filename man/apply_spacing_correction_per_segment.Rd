@@ -15,6 +15,7 @@ apply_spacing_correction_per_segment(
   probe_spacing = 0.5,
   measurement_time = 80,
   lookup_table = NULL,
+  baseline_overrides = NULL,
   create_new_col = TRUE,
   verbose = TRUE
 )
@@ -39,6 +40,12 @@ apply_spacing_correction_per_segment(
 \item{measurement_time}{Measurement time (sec) (default: 80)}
 
 \item{lookup_table}{Optional pre-calculated Burgess lookup table}
+
+\item{baseline_overrides}{Optional named list of manual baseline values per segment.
+List names should be segment IDs ("1", "2", etc.). If a segment ID is not in
+the list, baseline is auto-detected as minimum Vh in that segment.
+Example: \code{list("1" = 0.8, "3" = 1.2)} overrides segments 1 and 3,
+auto-detects segment 2. Default: NULL (all segments auto-detect).}
 
 \item{create_new_col}{Logical, whether to create new corrected column (default: TRUE)}
 
@@ -95,10 +102,12 @@ correction_result <- apply_spacing_correction_per_segment(
 Other spacing correction functions: 
 \code{\link{apply_manual_spacing_correction}()},
 \code{\link{apply_spacing_correction}()},
+\code{\link{apply_spacing_correction_both_sensors}()},
 \code{\link{apply_spacing_correction_workflow}()},
 \code{\link{calculate_burgess_coefficients}()},
 \code{\link{calculate_zero_offset}()},
 \code{\link{get_correction_coefficients}()},
-\code{\link{print_spacing_correction_summary}()}
+\code{\link{print_spacing_correction_summary}()},
+\code{\link{smooth_segment_junctions}()}
 }
 \concept{spacing correction functions}

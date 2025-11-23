@@ -534,18 +534,122 @@ vh_corrected <- correction$vh_corrected
 
 See `?apply_spacing_correction_per_segment`, `?apply_manual_spacing_correction`, `?detect_changepoints`, and `?calculate_daily_minima` for detailed parameter documentation.
 
+## 2b. Wound Correction
+
+### Why Wound Correction is Needed
+
+When probes are inserted into tree sapwood, they physically damage the tissue, creating "wound" tissue around each probe hole. This wound tissue:
+
+- Has different thermal properties than healthy sapwood
+- Creates a thermal barrier affecting heat pulse propagation
+- Causes **systematic underestimation** of sap velocity (40-60% or more)
+- Effect increases with wound diameter and flow rate
+
+### The Correction Method
+
+Wound correction uses linear coefficients from Burgess et al. (2001) lookup tables:
+
+```
+Vc = B × Vh
+```
+
+Where:
+- `Vc` = Corrected velocity (cm/hr)
+- `B` = Correction coefficient (typically 1.7-2.6, depending on wound diameter)
+- `Vh` = Input velocity (spacing-corrected)
+
+The correction coefficient `B` depends on:
+1. **Wound diameter** - The drill bit size used for probe installation (typically 1.7-3.0 mm)
+2. **Probe spacing** - 5mm (standard) or 6mm (legacy)
+
+### Applying Wound Correction
+
+```{r eval=FALSE}
+# View available wound coefficients
+list_wound_coefficients()
+
+# Apply wound correction (will prompt for confirmation)
+vh_wound_corrected <- apply_wound_correction(
+  vh_data = vh_corrected,        # After spacing correction
+  wound_diameter = 0.20,          # 2.0mm drill bit (in cm)
+  probe_spacing = "5mm"           # Standard ICT probe spacing
+)
+
+# Check the correction factor applied
+unique(vh_wound_corrected$wound_correction_factor)  # e.g., 1.9216
+```
+
+### Reading Wound Diameter from Configuration
+
+Wound diameter can be stored in wood properties YAML files:
+
+```{r eval=FALSE}
+# If wound_diameter is in wood_properties YAML
+vh_wound_corrected <- apply_wound_correction(
+  vh_data = vh_corrected,
+  wood_properties = "eucalyptus"  # Reads wound_diameter from YAML
+)
+```
+
+The YAML file includes:
+```yaml
+probe_installation:
+  wound_diameter: 0.20    # cm (2.0mm drill bit)
+  probe_spacing: '5mm'    # standard
+```
+
+### Wound Correction Coefficients
+
+Common wound diameters and their correction factors (5mm probe spacing):
+
+| Drill Bit | Wound (cm) | B Coefficient | Correction |
+|-----------|------------|---------------|------------|
+| 1.7 mm | 0.17 | 1.73 | +73% |
+| 2.0 mm | 0.20 | 1.92 | +92% |
+| 2.5 mm | 0.25 | ~2.25 | +125% |
+| 3.0 mm | 0.30 | 2.64 | +164% |
+
+### Workflow Position
+
+Wound correction should be applied **after** spacing correction but **before** method calibration:
+
+```{r eval=FALSE}
+# Complete correction workflow:
+# 1. Calculate velocities
+vh_results <- calc_heat_pulse_velocity(heat_pulse_data)
+
+# 2. Quality control
+qc_results <- flag_vh_quality(vh_results)
+vh_flagged <- qc_results$vh_flagged
+
+# 3. Spacing correction
+correction <- apply_spacing_correction_both_sensors(vh_flagged, ...)
+vh_spacing_corrected <- correction$vh_corrected
+
+# 4. Wound correction (THIS STEP)
+vh_wound_corrected <- apply_wound_correction(
+  vh_data = vh_spacing_corrected,
+  wound_diameter = 0.20
+)
+
+# 5. Method calibration (next section)
+# ...
+```
+
+See `?apply_wound_correction` and `?list_wound_coefficients` for detailed documentation.
+
 ## 2c. Method Calibration (Aligning Secondary Methods to HRM)
 
 ### Why Method Calibration?
 
-After spacing correction, **HRM** provides the most reliable sap velocity estimates across all flow conditions because it has been validated with Burgess correction. However, other methods (MHR, Tmax, HRMXa, etc.) may provide useful information at higher flow rates.
+After spacing and wound correction, **HRM** provides the most reliable sap velocity estimates across all flow conditions because it has been validated with Burgess correction. However, other methods (MHR, Tmax, HRMXa, etc.) may provide useful information at higher flow rates.
 
 **Method calibration** aligns secondary methods to the HRM scale using regression in overlapping flow regions. This allows you to:
 1. Use HRM at low flows (most accurate)
 2. Use calibrated secondary methods at higher flows (better sensitivity)
 3. Maintain consistency across the full flow range
 
-**Important:** Calibration should be performed **AFTER** spacing correction, when HRM values are most reliable.
+**Important:** Calibration should be performed **AFTER** spacing and wound correction, when HRM values are most reliable.
 
 ### Workflow 1: Automatic Threshold Optimization (Single Method)
 

@@ -4,7 +4,15 @@
 \alias{plot_sdma_timeseries}
 \title{Plot sDMA Time Series}
 \usage{
-plot_sdma_timeseries(...)
+plot_sdma_timeseries(
+  vh_results,
+  sdma_method = NULL,
+  start_date = NULL,
+  end_date = NULL,
+  sensor_position = "outer",
+  quality_filter = TRUE,
+  show_peclet = TRUE
+)
 }
 \arguments{
 \item{vh_results}{Results from apply_sdma_processing()}

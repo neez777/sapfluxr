@@ -467,6 +467,70 @@ ggplot(qc$vh_flagged, aes(x = datetime, y = Vh_cm_hr, color = quality_flag)) +
   facet_wrap(~sensor_position, ncol = 1)
 ```
 
+**Enhanced Visualization:** Use `plot_vh_timeseries()` with `show_quality_markers = TRUE` for clearer quality flag display:
+
+```{r eval=FALSE}
+# Show quality markers with distinct shapes and colours
+plot_vh_timeseries(
+  qc$vh_flagged,
+  start_date = 1,
+  end_date = 7,
+  quality_filter = FALSE,  # Show ALL data including flagged points
+  show_quality_markers = TRUE
+)
+```
+
+**Quality Flag Symbols:**
+- **Red X (×)**: Outliers detected by rolling median
+- **Orange Diamond (◆)**: Suspect values (negative flow, cross-sensor anomalies)
+- **Grey Triangle (▲)**: Missing pulses (shown on x-axis)
+- **Dark Red Square (■)**: Illogical values (exceeds species max)
+- **Purple Circle (●)**: Calculation failed (returned NA)
+- **Pink Star (★)**: Calculation returned Inf
+- **Yellow Triangle-down (▼)**: Extreme values (outside realistic range)
+
+All quality flags appear in the legend with friendly labels for easy interpretation.
+
+**Visualizing Interpolated Data:**
+
+After applying interpolation, hollow circles indicate gap-filled values:
+
+```{r eval=FALSE}
+# Apply interpolation
+cleaned <- filter_and_interpolate_vh(
+  qc$vh_flagged,
+  flags_to_interpolate = c("DATA_MISSING", "DATA_OUTLIER"),
+  max_gap_hours = 2
+)
+
+# Plot with interpolated points highlighted
+plot_vh_timeseries(
+  cleaned,
+  start_date = 1,
+  end_date = 7,
+  show_interpolated = TRUE  # Hollow circles show gap-filled values
+)
+```
+
+**Combined View** (quality markers + interpolated points):
+
+```{r eval=FALSE}
+# Show both quality issues and how they were addressed
+plot_vh_timeseries(
+  cleaned,
+  start_date = 1,
+  end_date = 7,
+  quality_filter = FALSE,
+  show_quality_markers = TRUE,  # Show original quality flags
+  show_interpolated = TRUE      # Show which points were interpolated
+)
+```
+
+This combined view helps verify that:
+- Quality flags were correctly identified
+- Interpolation was applied appropriately
+- Gap-filled values follow expected patterns
+
 ### 3. Keep Original Data
 
 ```{r eval=FALSE}

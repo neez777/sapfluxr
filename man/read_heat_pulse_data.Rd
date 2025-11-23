@@ -8,6 +8,7 @@ read_heat_pulse_data(
   file_path,
   format = NULL,
   validate_data = TRUE,
+  trim_incomplete_days = FALSE,
   chunk_size = NULL,
   show_progress = NULL,
   ...
@@ -19,6 +20,8 @@ read_heat_pulse_data(
 \item{format}{Character string specifying format. Auto-detected if NULL. Currently ict_current, ict_legacy & csv.}
 
 \item{validate_data}{Logical indicating whether to validate imported data (default: TRUE)}
+
+\item{trim_incomplete_days}{Logical indicating whether to remove first/last days if incomplete (default: FALSE)}
 
 \item{chunk_size}{Integer specifying characters per chunk (default: auto-sized)}
 
@@ -66,6 +69,12 @@ heat_pulse_data <- read_heat_pulse_data("data/tree1_data.txt", show_progress = F
 
 # Specify format explicitly
 heat_pulse_data <- read_heat_pulse_data("data/tree1_data.txt", format = "ict_current")
+
+# Trim incomplete first/last days (recommended for daily aggregations)
+heat_pulse_data <- read_heat_pulse_data(
+  "data/tree1_data.txt",
+  trim_incomplete_days = TRUE
+)
 }
 
 }

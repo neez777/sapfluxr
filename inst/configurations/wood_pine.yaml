@@ -28,6 +28,11 @@ tree_measurements:
   sapwood_area: null          # cm^2, conducting sapwood area
   heartwood_radius: null      # cm, heartwood radius
 
+# Probe installation parameters
+probe_installation:
+  wound_diameter: 0.20        # cm, drill bit diameter (0.20 = 2.0mm, common for ICT probes)
+  probe_spacing: '5mm'        # '5mm' (standard) or '6mm' (legacy)
+
 # Quality thresholds (species-specific defaults, can override in R)
 quality_thresholds:
   max_velocity_cm_hr: 180     # cm/hr, upper bound for pine species
