@@ -39,6 +39,117 @@ show_message <- function(msg, type = "message", duration = NULL) {
     cat(msg)
   }
 }
+#' Trim incomplete days from heat pulse data
+#'
+#' Removes data from the first and last calendar days if they contain
+#' less than 23 hours of measurements. Useful for daily aggregations
+#' like daily minima calculation and changepoint detection.
+#'
+#' @param measurements Data frame with datetime column
+#' @param diagnostics Data frame with pulse_id and datetime columns
+#' @param verbose Logical indicating whether to print messages
+#' @return List with trimmed measurements and diagnostics
+#' @keywords internal
+trim_incomplete_days <- function(measurements, diagnostics, verbose = TRUE) {
+
+  if (nrow(measurements) == 0 || !"datetime" %in% names(measurements)) {
+    return(list(measurements = measurements, diagnostics = diagnostics))
+  }
+
+  # Extract dates
+  valid_times <- !is.na(measurements$datetime)
+  if (!any(valid_times)) {
+    return(list(measurements = measurements, diagnostics = diagnostics))
+  }
+
+  # Get date (without time) for each measurement
+  measurement_dates <- as.Date(measurements$datetime[valid_times])
+
+  # Find first and last dates
+  first_date <- min(measurement_dates, na.rm = TRUE)
+  last_date <- max(measurement_dates, na.rm = TRUE)
+
+  # If dataset spans less than 3 days, don't trim (keep all data)
+  if (as.numeric(difftime(last_date, first_date, units = "days")) < 2) {
+    if (verbose) {
+      message("   ℹ️  Dataset spans < 3 days, skipping incomplete day trimming")
+    }
+    return(list(measurements = measurements, diagnostics = diagnostics))
+  }
+
+  # Count measurements per day
+  dates_to_keep <- measurement_dates
+  dates_to_keep <- dates_to_keep[dates_to_keep > first_date & dates_to_keep < last_date]
+
+  # Check if first/last days have < 23 hours of data (allowing 1 hour buffer for gaps)
+  first_day_times <- measurements$datetime[valid_times][measurement_dates == first_date]
+  last_day_times <- measurements$datetime[valid_times][measurement_dates == last_date]
+
+  first_day_duration_hours <- as.numeric(
+    difftime(max(first_day_times), min(first_day_times), units = "hours")
+  )
+  last_day_duration_hours <- as.numeric(
+    difftime(max(last_day_times), min(last_day_times), units = "hours")
+  )
+
+  # Include first day if it has >= 23 hours
+  if (first_day_duration_hours >= 23) {
+    dates_to_keep <- c(first_date, dates_to_keep)
+  }
+
+  # Include last day if it has >= 23 hours
+  if (last_day_duration_hours >= 23) {
+    dates_to_keep <- c(dates_to_keep, last_date)
+  }
+
+  # Filter measurements
+  measurement_dates_all <- as.Date(measurements$datetime)
+  measurements_trimmed <- measurements[measurement_dates_all %in% dates_to_keep, ]
+
+  # Filter diagnostics to match
+  if (!is.null(diagnostics) && nrow(diagnostics) > 0) {
+    if ("datetime" %in% names(diagnostics)) {
+      diagnostic_dates <- as.Date(diagnostics$datetime)
+      diagnostics_trimmed <- diagnostics[diagnostic_dates %in% dates_to_keep, ]
+    } else if ("pulse_id" %in% names(measurements) && "pulse_id" %in% names(diagnostics)) {
+      # Match by pulse_id if datetime not in diagnostics
+      valid_pulse_ids <- unique(measurements_trimmed$pulse_id)
+      diagnostics_trimmed <- diagnostics[diagnostics$pulse_id %in% valid_pulse_ids, ]
+    } else {
+      diagnostics_trimmed <- diagnostics  # Keep all if can't match
+    }
+  } else {
+    diagnostics_trimmed <- diagnostics
+  }
+
+  # Report trimming
+  if (verbose) {
+    n_measurements_removed <- nrow(measurements) - nrow(measurements_trimmed)
+    n_pulses_removed <- nrow(diagnostics) - nrow(diagnostics_trimmed)
+
+    if (n_measurements_removed > 0) {
+      message(sprintf("   ✂️  Trimmed incomplete days: removed %s measurements (%s pulses)",
+                      format(n_measurements_removed, big.mark = ","),
+                      format(n_pulses_removed, big.mark = ",")))
+      message(sprintf("      First day (%s): %.1f hours %s",
+                      first_date,
+                      first_day_duration_hours,
+                      if (first_day_duration_hours >= 23) "[KEPT]" else "[REMOVED]"))
+      message(sprintf("      Last day (%s): %.1f hours %s",
+                      last_date,
+                      last_day_duration_hours,
+                      if (last_day_duration_hours >= 23) "[KEPT]" else "[REMOVED]"))
+    } else {
+      message("   ℹ️  First and last days are complete (>= 23 hours), no trimming needed")
+    }
+  }
+
+  return(list(
+    measurements = measurements_trimmed,
+    diagnostics = diagnostics_trimmed
+  ))
+}
+
 #' Read Heat Pulse Data from ICT SFM1x Sensors
 #'
 #' Imports and parses raw heat pulse temperature data from ICT SFM1x sensors using character-based chunking.
@@ -53,6 +164,7 @@ show_message <- function(msg, type = "message", duration = NULL) {
 #' @param file_path Character string specifying the path to the data file
 #' @param format Character string specifying format. Auto-detected if NULL. Currently ict_current, ict_legacy & csv.
 #' @param validate_data Logical indicating whether to validate imported data (default: TRUE)
+#' @param trim_incomplete_days Logical indicating whether to remove first/last days if incomplete (default: FALSE)
 #' @param chunk_size Integer specifying characters per chunk (default: auto-sized)
 #' @param show_progress Logical indicating whether to show progress (default: TRUE)
 #' @param ... Additional arguments passed to specific import functions
@@ -85,6 +197,12 @@ show_message <- function(msg, type = "message", duration = NULL) {
 #'
 #' # Specify format explicitly
 #' heat_pulse_data <- read_heat_pulse_data("data/tree1_data.txt", format = "ict_current")
+#'
+#' # Trim incomplete first/last days (recommended for daily aggregations)
+#' heat_pulse_data <- read_heat_pulse_data(
+#'   "data/tree1_data.txt",
+#'   trim_incomplete_days = TRUE
+#' )
 #' }
 #'
 #' @seealso \code{\link{read_multiple_heat_pulse_data}} for importing multiple files
@@ -92,6 +210,7 @@ show_message <- function(msg, type = "message", duration = NULL) {
 read_heat_pulse_data <- function(file_path,
                                  format = NULL,
                                  validate_data = TRUE,
+                                 trim_incomplete_days = FALSE,
                                  chunk_size = NULL,
                                  show_progress = NULL,
                                  ...) {
@@ -216,7 +335,29 @@ read_heat_pulse_data <- function(file_path,
     })
   }
 
-  # Validate if requested (now runs AFTER gap detection)
+  # Trim incomplete days if requested (AFTER gap detection, BEFORE validation)
+  if (trim_incomplete_days && nrow(result$measurements) > 0 && "datetime" %in% names(result$measurements)) {
+    if (show_progress) {
+      show_message("✂️  Trimming incomplete days...\n")
+    }
+
+    trimmed <- trim_incomplete_days(
+      measurements = result$measurements,
+      diagnostics = result$diagnostics,
+      verbose = show_progress
+    )
+
+    # Update result with trimmed data
+    result$measurements <- trimmed$measurements
+    result$diagnostics <- trimmed$diagnostics
+
+    # Update metadata to reflect trimming
+    result$metadata$incomplete_days_trimmed <- TRUE
+    result$metadata$n_pulses <- nrow(result$diagnostics)
+    result$metadata$n_measurements <- nrow(result$measurements)
+  }
+
+  # Validate if requested (now runs AFTER gap detection and trimming)
   if (validate_data) {
     if (show_progress) {
       show_message("✔️ Validating data structure and ranges...\n")

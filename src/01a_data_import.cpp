@@ -141,20 +141,32 @@ List parse_ict_records_cpp(CharacterVector records,
     stop("Number of records must match number of pulse times");
   }
 
-  // First pass: extract numbers from first record to determine structure
-  // Use same extraction function to ensure consistency
-  CharacterVector first_record_vec = CharacterVector::create(records[0]);
-  NumericMatrix first_record_numbers = extract_numbers_from_records_cpp(first_record_vec, 600);
+  // FIXED: Sample multiple pulses to determine structure (handles incomplete first pulse)
+  // The first pulse may be truncated/incomplete, so we need to find the typical structure
+  int n_sample = std::min(20, n_pulses);  // Sample up to 20 pulses
+  int max_numbers = 0;
 
-  // Count non-NA values to get actual number count
-  int total_numbers = 0;
-  for (int k = 0; k < 600; k++) {
-    if (!NumericVector::is_na(first_record_numbers(0, k))) {
-      total_numbers++;
-    } else {
-      break;  // Stop at first NA
+  for (int sample_idx = 0; sample_idx < n_sample; sample_idx++) {
+    CharacterVector sample_record_vec = CharacterVector::create(records[sample_idx]);
+    NumericMatrix sample_numbers = extract_numbers_from_records_cpp(sample_record_vec, 600);
+
+    // Count non-NA values in this pulse
+    int pulse_numbers = 0;
+    for (int k = 0; k < 600; k++) {
+      if (!NumericVector::is_na(sample_numbers(0, k))) {
+        pulse_numbers++;
+      } else {
+        break;  // Stop at first NA
+      }
+    }
+
+    // Track maximum (this will be the complete pulse structure)
+    if (pulse_numbers > max_numbers) {
+      max_numbers = pulse_numbers;
     }
   }
+
+  int total_numbers = max_numbers;
   int temp_values_per_pulse = total_numbers - expected_diagnostics;
 
   // Calculate measurements per pulse (4 sensors × n measurements)
