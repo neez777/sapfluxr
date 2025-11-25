@@ -88,6 +88,7 @@ vh_smoothed <- smooth_segment_junctions(
 }
 \seealso{
 Other spacing correction functions: 
+\code{\link{apply_heartwood_reference_correction}()},
 \code{\link{apply_manual_spacing_correction}()},
 \code{\link{apply_spacing_correction}()},
 \code{\link{apply_spacing_correction_both_sensors}()},
@@ -95,6 +96,7 @@ Other spacing correction functions:
 \code{\link{apply_spacing_correction_workflow}()},
 \code{\link{calculate_burgess_coefficients}()},
 \code{\link{calculate_zero_offset}()},
+\code{\link{check_heartwood_reference_available}()},
 \code{\link{get_correction_coefficients}()},
 \code{\link{print_spacing_correction_summary}()}
 }

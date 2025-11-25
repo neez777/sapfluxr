@@ -309,35 +309,117 @@ These spacing errors cause **systematic bias** in velocity estimates. During per
 2. Derive correction coefficients that account for probe misalignment
 3. Apply a linear correction to all velocity measurements
 
-### The Changepoint Approach
+### Three Correction Methods
 
-For datasets spanning days to months, probe alignment often **changes over time** due to tree swelling/shrinking, seasonal wood movement, or environmental conditions. The changepoint-based correction method handles this by:
+sapfluxr provides three methods for zero-flow correction, listed in order of preference:
 
-1. **Detecting baseline shifts** - Identifies when the zero offset changes
-2. **Segmenting the time series** - Divides data into periods with consistent probe alignment
-3. **Applying segment-specific corrections** - Each segment gets its own zero offset and correction coefficients
+| Method | When to Use | Advantages |
+|--------|-------------|------------|
+| **Heartwood Reference** | Inner sensor is in heartwood | Continuous correction, real-time drift tracking |
+| **Changepoint Detection** | Long deployments, baseline shifts | Automatic, objective, handles drift |
+| **Manual Specification** | Domain knowledge available | Full user control |
 
-This matches the real-world workflow used by researchers analyzing long-term sap flow data.
+---
 
-### Workflow 1: Automatic Changepoint Detection (Both Sensors)
+### Method 1: Heartwood Reference (Preferred)
 
-Let the algorithm detect changepoints from the outer sensor and apply correction to both inner and outer sensors:
+**When the inner sensor is positioned in heartwood** (beyond the sapwood), it provides a continuous "true zero" reference. Since heartwood has no water transport, any velocity measured at the inner sensor represents probe misalignment.
+
+**First, check if heartwood reference is available:**
 
 ```{r eval=FALSE}
-# Step 1: Calculate daily minimum velocities (from outer sensor)
+# Check probe geometry vs sapwood depth
+hw_check <- check_heartwood_reference_available(
+  probe_config = list(length = 35, inner_sensor = 7.5),  # Standard ICT probe
+
+  sapwood_depth = 2.0,        # cm - YOUR tree's sapwood depth
+
+  bark_thickness = 0.3,       # cm - bark thickness (optional)
+  field_of_influence = 1.0    # cm - heat pulse influence radius (default 10mm)
+)
+
+print(hw_check)
+```
+**Output shows:**
+- Inner sensor depth from cambium
+- Margin into heartwood (must be >= field_of_influence/2)
+- Whether heartwood reference is **AVAILABLE** or **NOT AVAILABLE**
+
+**If available, apply heartwood reference correction:**
+
+```{r eval=FALSE}
+# Apply continuous correction using inner sensor as zero reference
+hw_correction <- apply_heartwood_reference_correction(
+  vh_data = vh_results,
+  method = "HRM",
+  k_assumed = 0.0025
+)
+
+# Corrected data has new column: Vh_cm_hr_hrc (heartwood ref corrected)
+vh_corrected <- hw_correction$vh_corrected
+
+# Check offset statistics
+print(hw_correction$offset_summary)
+```
+
+**Understanding the Output:**
+
+The `offset_summary` provides diagnostic information:
+
+| Metric | Good | Acceptable | Warning |
+|--------|------|------------|---------|
+| Mean offset | < 1 cm/hr | 1-3 cm/hr | > 3 cm/hr |
+| SD offset | < 1 cm/hr | 1-2 cm/hr | > 2 cm/hr |
+
+**Quality Interpretation:**
+- `GOOD`: Probe well-aligned, stable offset
+- `ACCEPTABLE`: Moderate misalignment, correction working
+- `WARNING`: Significant misalignment - check probe installation
+- `VARIABLE`: High offset variability - may indicate issues
+
+**How It Works:**
+
+For each measurement:
+1. Inner sensor Vh = instantaneous zero offset
+2. Look up Burgess coefficients (a, b) for that offset
+3. Correct outer sensor: `Vh_corrected = a × Vh_outer + b`
+
+**Advantages:**
+- Continuous (per-measurement) correction
+- Tracks real-time drift
+- No need to identify changepoints
+- Works even when baseline is unstable
+
+**Requirements:**
+- Inner sensor must be in heartwood (use `check_heartwood_reference_available()`)
+- Both inner and outer sensor data required
+- Works with HRM method (Burgess correction validated for HRM)
+
+---
+
+### Method 2: Automatic Changepoint Detection
+
+**When heartwood reference is not available** (inner sensor in sapwood), use changepoint-based correction. This method:
+
+1. **Detects baseline shifts** - Identifies when the zero offset changes
+2. **Segments the time series** - Divides data into periods with consistent alignment
+3. **Applies segment-specific corrections** - Each segment gets its own correction
+
+```{r eval=FALSE}
+# Step 1: Calculate daily minimum velocities (represents baseline)
 daily_min <- calculate_daily_minima(
   vh_data = vh_results,
   sensor_position = "outer",
   method = "HRM"
 )
 
-# Step 2: Detect changepoints (baseline shifts indicating probe movement)
+# Step 2: Detect changepoints (baseline shifts)
 cpt_result <- detect_changepoints(
   daily_min = daily_min,
-  penalty = "MBIC",                  # Options: "MBIC" (conservative), "BIC", "Manual"
-  detection_type = "mean",           # Detect mean changes (baseline shifts)
-  min_segment_days = 7,              # Minimum segment length
-  merge_short_segments = TRUE        # Merge spurious short segments
+  penalty = "MBIC",              # Options: "MBIC" (conservative), "BIC", "Manual"
+  detection_type = "mean",
+  min_segment_days = 7,
+  merge_short_segments = TRUE
 )
 
 # View detected changepoints
@@ -345,7 +427,6 @@ print(cpt_result$changepoints)
 print(cpt_result$segments)
 
 # Step 3: Apply correction to BOTH sensors
-# Uses same segments, but calculates separate baselines per sensor
 correction <- apply_spacing_correction_both_sensors(
   vh_data = vh_results,
   changepoints = cpt_result$changepoints,
@@ -357,96 +438,76 @@ vh_corrected <- correction$vh_corrected
 ```
 
 **Key Points:**
-- Changepoints detected from **outer sensor only** (more reliable, less wounding damage)
+- Changepoints detected from **outer sensor only** (more reliable)
 - Same segments applied to **both inner and outer** sensors
 - Each sensor gets its **own baseline** within each segment
-- Burgess correction only applied to **HRM** (validated method)
-
-**When to Use Automatic Detection:**
-- Long deployments (> 1 month)
-- Data spans wet/dry seasonal transitions
-- You want an objective, reproducible approach
-- Unsure where baseline shifts occurred
 
 **Penalty Selection:**
 - **MBIC** (recommended) - Most conservative, fewest changepoints
 - **BIC** - Moderate, more changepoints than MBIC
 - **Manual** (e.g., `penalty_value = 50`) - Full control over sensitivity
 
-### Workflow 2: Manual Changepoint Specification (Both Sensors)
+---
 
-When you have domain knowledge about probe conditions, specify changepoints manually for both sensors:
+### Method 3: Manual Changepoint Specification
+
+When you have domain knowledge about probe conditions (field notes, known disturbance events):
 
 ```{r eval=FALSE}
-# Simple: Auto-detect baselines for both sensors
+# Specify changepoints manually
 correction <- apply_spacing_correction_both_sensors(
   vh_data = vh_results,
-  changepoints = c("2024-03-15", "2024-06-10"),
+  changepoints = c("2024-03-15", "2024-06-10"),  # Your known changepoints
   method = "HRM"
 )
 
 vh_corrected <- correction$vh_corrected
 ```
 
-**With Per-Sensor Baseline Overrides:**
+**With Baseline Overrides:**
 
-If you have different known zero offsets for inner vs outer sensors (e.g., from cut-stem experiments):
+If you have known zero offsets (e.g., from cut-stem experiments):
 
 ```{r eval=FALSE}
 correction <- apply_spacing_correction_both_sensors(
   vh_data = vh_results,
   changepoints = c("2024-03-15", "2024-06-10"),
   baseline_overrides_outer = list(
-    "seg_1" = 0.8,   # Segment 1: outer sensor manual baseline
-    "seg_2" = 1.2    # Segment 2: outer sensor manual baseline
-    # Segment 3 auto-detects for outer
+    "seg_1" = 0.8,   # Segment 1: known outer sensor offset
+    "seg_2" = 1.2    # Segment 2: known offset
+    # Segment 3 auto-detects
   ),
   baseline_overrides_inner = list(
-    "seg_1" = 1.1,   # Segment 1: inner sensor manual baseline
-    # Segments 2 and 3 auto-detect for inner
+    "seg_1" = 1.1    # Segment 1: known inner sensor offset
+    # Segments 2 and 3 auto-detect
   ),
   method = "HRM"
 )
-
-vh_corrected <- correction$vh_corrected
 ```
 
-**Note:** Segment IDs are "seg_1", "seg_2", "seg_3", etc. You can mix manual and auto-detected baselines - only specify the segments you want to override.
+---
 
-**When to Use Manual Specification:**
-- You have field notes about probe conditions
-- Known disturbance events (rain, repositioning, animal damage)
-- Cut-stem calibration data available
-- Want to test sensitivity to specific changepoints
+### Junction Smoothing (Optional)
 
-### Workflow 3: Junction Smoothing
-
-After applying segment-based corrections, there may be artificial discontinuities at segment boundaries. Smooth these junctions using a moving average:
+After segment-based corrections, smooth discontinuities at segment boundaries:
 
 ```{r eval=FALSE}
-# Apply junction smoothing (HRM only)
 vh_smoothed <- smooth_segment_junctions(
   vh_data = vh_corrected,
   changepoints = cpt_result$changepoints,
   method = "HRM",
-  window_size = 3,  # Default: 3 points either side of junction
-  verbose = TRUE
+  window_size = 3
 )
 ```
 
-**Important Notes:**
-- Junction smoothing is **only applied to HRM** (Burgess correction is HRM-specific)
-- Default window size is 3 points (configurable)
-- Smoothing prevents artificial jumps at changepoint boundaries
-- Apply smoothing AFTER spacing correction but BEFORE method calibration
-- Both inner and outer sensors are smoothed independently
+**Note:** Junction smoothing only applies to changepoint methods, not heartwood reference.
+
+---
 
 ### Diagnostic Plots
 
-Visualise changepoints and correction impacts:
-
 ```{r eval=FALSE}
-# Interactive changepoint visualisation
+# For changepoint methods: visualise segments
 plot_changepoints_interactive(
   daily_min = cpt_result$daily_min_with_segments,
   changepoints = cpt_result$changepoints,
@@ -461,34 +522,16 @@ plot_spacing_correction_comparison(
   show_difference = TRUE
 )
 
-# View Burgess coefficient lookup curves
+# Burgess coefficient lookup curves
 lookup <- calculate_burgess_coefficients()
 plot_burgess_coefficients(
   lookup_table = lookup,
-  zero_vh_observed = c(0.8, 1.2),  # Your observed zero offsets
+  zero_vh_observed = c(0.8, 1.2),
   labels = c("Segment 1", "Segment 2")
 )
 ```
 
-### Understanding Correction Results
-
-```{r eval=FALSE}
-# View segment-specific corrections
-for (seg in correction$segment_results) {
-  cat("\nSegment", seg$segment_id, ":\n")
-  cat("  Period:", format(seg$start_datetime), "to", format(seg$end_datetime), "\n")
-  cat("  Zero offset:", seg$zero_vh, "cm/hr\n")
-  cat("  Baseline source:", seg$baseline_source, "\n")  # "auto-detected" or "user-specified"
-  cat("  Correction:", seg$correction_formula, "\n")
-  cat("  Severity:", seg$severity, "\n")
-}
-
-# Compare uncorrected vs corrected
-summary(vh_results$Vh_cm_hr[vh_results$sensor_position == "outer"])
-summary(vh_corrected$Vh_cm_hr_sc[vh_corrected$sensor_position == "outer"])
-```
-
-**Severity Assessment:**
+### Severity Assessment
 
 | Zero Offset | Severity | Interpretation |
 |-------------|----------|----------------|
@@ -500,20 +543,18 @@ summary(vh_corrected$Vh_cm_hr_sc[vh_corrected$sensor_position == "outer"])
 
 ### Best Practices
 
-1. **Always correct BEFORE downstream analyses** (flux scaling, tree water use)
-2. **Check for baseline shifts** - Plot daily minima to identify potential changepoints
-3. **Use multiple segments for long deployments** - Don't assume constant alignment
-4. **Validate with field notes** - Compare detected changepoints with field observations
-5. **Correct both sensors independently** - They may have different offsets
-6. **Document your approach** - Record whether automatic or manual, and why
-7. **Create diagnostic plots** - Visually confirm segment quality
+1. **Check heartwood reference first** - Use `check_heartwood_reference_available()` before choosing method
+2. **Always correct BEFORE downstream analyses** (flux scaling, tree water use)
+3. **For changepoint methods:** Plot daily minima to identify potential changepoints
+4. **Validate with field notes** - Compare detected changepoints with observations
+5. **Document your approach** - Record which method used and why
 
 ### Integration with Quality Control
 
 Spacing correction should be applied **after** quality flagging:
 
 ```{r eval=FALSE}
-# Recommended workflow order:
+# Recommended workflow:
 # 1. Calculate velocities
 vh_results <- calc_heat_pulse_velocity(heat_pulse_data, methods = "HRM")
 
@@ -521,20 +562,31 @@ vh_results <- calc_heat_pulse_velocity(heat_pulse_data, methods = "HRM")
 qc_results <- flag_vh_quality(vh_results)
 vh_flagged <- qc_results$vh_flagged
 
-# 3. Spacing correction (THIS STEP)
-daily_min <- calculate_daily_minima(vh_flagged)
-cpt_result <- detect_changepoints(daily_min)
-correction <- apply_spacing_correction_per_segment(
-  vh_data = vh_flagged,
-  changepoints = cpt_result$changepoints,
-  sensor_position = "outer"
+# 3. Spacing correction - choose method based on probe position
+hw_check <- check_heartwood_reference_available(
+  probe_config = my_probe_config,
+  sapwood_depth = my_sapwood_depth
 )
+
+if (hw_check$available) {
+  # Preferred: Heartwood reference
+  correction <- apply_heartwood_reference_correction(vh_flagged, method = "HRM")
+} else {
+  # Alternative: Changepoint-based
+  daily_min <- calculate_daily_minima(vh_flagged)
+  cpt_result <- detect_changepoints(daily_min)
+  correction <- apply_spacing_correction_both_sensors(
+    vh_flagged,
+    changepoints = cpt_result$changepoints
+  )
+}
+
 vh_corrected <- correction$vh_corrected
 ```
 
-See `?apply_spacing_correction_per_segment`, `?apply_manual_spacing_correction`, `?detect_changepoints`, and `?calculate_daily_minima` for detailed parameter documentation.
+See `?check_heartwood_reference_available`, `?apply_heartwood_reference_correction`, `?apply_spacing_correction_both_sensors`, `?detect_changepoints`, and `?calculate_daily_minima` for detailed documentation.
 
-## 2b. Wound Correction
+## 2c. Wound Correction
 
 ### Why Wound Correction is Needed
 
@@ -638,7 +690,7 @@ vh_wound_corrected <- apply_wound_correction(
 
 See `?apply_wound_correction` and `?list_wound_coefficients` for detailed documentation.
 
-## 2c. Method Calibration (Aligning Secondary Methods to HRM)
+## 2d. Method Calibration (Aligning Secondary Methods to HRM)
 
 ### Why Method Calibration?
 

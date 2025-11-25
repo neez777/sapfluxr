@@ -446,3 +446,288 @@ test_that("print_spacing_correction_summary() displays correctly", {
     "SPACING CORRECTION SUMMARY REPORT"
   )
 })
+
+
+# Test check_heartwood_reference_available() -----------------------------------
+
+test_that("check_heartwood_reference_available() correctly identifies available case", {
+  # Standard ICT probe: 35mm length, inner sensor 7.5mm from tip
+
+# Inner sensor depth = (35 - 7.5) / 10 = 2.75 cm from handle
+  # With 2cm sapwood and no bark: margin = 2.75 - 2.0 = 0.75 cm
+  # Required margin = 1.0 / 2 = 0.5 cm
+  # 0.75 >= 0.5 → AVAILABLE
+
+  result <- check_heartwood_reference_available(
+    probe_config = list(length = 35, inner_sensor = 7.5),
+    sapwood_depth = 2.0,
+    bark_thickness = 0,
+    field_of_influence = 1.0
+  )
+
+  expect_s3_class(result, "heartwood_reference_check")
+  expect_true(result$available)
+  expect_equal(result$inner_depth_cm, 2.75)
+  expect_equal(result$sapwood_depth_cm, 2.0)
+  expect_equal(result$margin_cm, 0.75)
+  expect_equal(result$required_margin_cm, 0.5)
+})
+
+test_that("check_heartwood_reference_available() correctly identifies unavailable case", {
+  # With 3cm sapwood: margin = 2.75 - 3.0 = -0.25 cm (negative = in sapwood)
+
+  result <- check_heartwood_reference_available(
+    probe_config = list(length = 35, inner_sensor = 7.5),
+    sapwood_depth = 3.0,
+    bark_thickness = 0,
+    field_of_influence = 1.0
+  )
+
+  expect_false(result$available)
+  expect_equal(result$margin_cm, -0.25)
+  expect_true(grepl("WITHIN sapwood", result$recommendation))
+})
+
+test_that("check_heartwood_reference_available() accounts for bark thickness", {
+  # With 0.5cm bark: inner_depth = 2.75 - 0.5 = 2.25 cm
+  # With 2cm sapwood: margin = 2.25 - 2.0 = 0.25 cm
+  # Required = 0.5 cm → NOT AVAILABLE (0.25 < 0.5)
+
+  result <- check_heartwood_reference_available(
+    probe_config = list(length = 35, inner_sensor = 7.5),
+    sapwood_depth = 2.0,
+    bark_thickness = 0.5,
+    field_of_influence = 1.0
+  )
+
+  expect_false(result$available)
+  expect_equal(result$inner_depth_cm, 2.25)
+  expect_equal(result$margin_cm, 0.25)
+})
+
+test_that("check_heartwood_reference_available() respects field_of_influence", {
+  # With default: margin = 0.75, required = 0.5 → AVAILABLE
+  # With field_of_influence = 2.0: required = 1.0 → NOT AVAILABLE
+
+  result_default <- check_heartwood_reference_available(
+    probe_config = list(length = 35, inner_sensor = 7.5),
+    sapwood_depth = 2.0,
+    field_of_influence = 1.0
+  )
+
+  result_strict <- check_heartwood_reference_available(
+    probe_config = list(length = 35, inner_sensor = 7.5),
+    sapwood_depth = 2.0,
+    field_of_influence = 2.0
+  )
+
+  expect_true(result_default$available)
+  expect_false(result_strict$available)
+  expect_equal(result_strict$required_margin_cm, 1.0)
+})
+test_that("check_heartwood_reference_available() validates inputs", {
+  # Invalid sapwood_depth
+  expect_error(
+    check_heartwood_reference_available(
+      probe_config = list(length = 35, inner_sensor = 7.5),
+      sapwood_depth = -1
+    ),
+    "sapwood_depth must be a positive number"
+  )
+
+  # Invalid bark_thickness
+  expect_error(
+    check_heartwood_reference_available(
+      probe_config = list(length = 35, inner_sensor = 7.5),
+      sapwood_depth = 2.0,
+      bark_thickness = -0.5
+    ),
+    "bark_thickness must be a non-negative number"
+  )
+
+  # Invalid probe_config
+  expect_error(
+    check_heartwood_reference_available(
+      probe_config = "invalid",
+      sapwood_depth = 2.0
+    ),
+    "probe_config must be a ProbeConfig object or a named list"
+  )
+})
+
+test_that("check_heartwood_reference_available() print method works", {
+  result <- check_heartwood_reference_available(
+    probe_config = list(length = 35, inner_sensor = 7.5),
+    sapwood_depth = 2.0
+  )
+
+  expect_output(print(result), "HEARTWOOD REFERENCE AVAILABILITY CHECK")
+  expect_output(print(result), "Status: AVAILABLE")
+})
+
+
+# Test apply_heartwood_reference_correction() ----------------------------------
+
+# Helper to create test data with known inner/outer relationship
+create_heartwood_test_data <- function(n = 50, inner_offset = 0.8) {
+  dates <- seq(
+    from = as.POSIXct("2024-01-01 00:00:00"),
+    by = "30 min",
+    length.out = n
+  )
+
+  set.seed(456)
+
+  # Outer sensor: diurnal pattern
+  hour_of_day <- as.numeric(format(dates, "%H")) + as.numeric(format(dates, "%M")) / 60
+  outer_vh <- 5 + 8 * sin((hour_of_day - 6) * pi / 12)
+  outer_vh[outer_vh < 0] <- 0
+  outer_vh <- outer_vh + rnorm(n, 0, 0.3)
+
+  # Inner sensor: constant offset (simulating heartwood with misalignment)
+  inner_vh <- rep(inner_offset, n) + rnorm(n, 0, 0.1)
+
+  data.frame(
+    datetime = rep(dates, 2),
+    pulse_id = rep(1:n, 2),
+    method = "HRM",
+    sensor_position = rep(c("outer", "inner"), each = n),
+    Vh_cm_hr = c(outer_vh, inner_vh),
+    quality_flag = "OK",
+    stringsAsFactors = FALSE
+  )
+}
+
+test_that("apply_heartwood_reference_correction() returns correct structure", {
+  vh_data <- create_heartwood_test_data(n = 50, inner_offset = 0.8)
+
+  result <- apply_heartwood_reference_correction(
+    vh_data = vh_data,
+    method = "HRM",
+    verbose = FALSE
+  )
+
+  expect_s3_class(result, "heartwood_reference_correction_result")
+  expect_true("vh_corrected" %in% names(result))
+  expect_true("offset_summary" %in% names(result))
+  expect_true("metadata" %in% names(result))
+
+  # Check corrected data has new column
+  expect_true("Vh_cm_hr_hrc" %in% names(result$vh_corrected))
+  expect_true("heartwood_ref_applied" %in% names(result$vh_corrected))
+})
+
+test_that("apply_heartwood_reference_correction() calculates offset summary", {
+  inner_offset <- 1.2
+  vh_data <- create_heartwood_test_data(n = 50, inner_offset = inner_offset)
+
+  result <- apply_heartwood_reference_correction(
+    vh_data = vh_data,
+    method = "HRM",
+    verbose = FALSE
+  )
+
+  # Mean offset should be close to the specified inner_offset
+  expect_true(abs(result$offset_summary$mean_offset - inner_offset) < 0.3)
+  expect_true(result$offset_summary$sd_offset < 0.5)  # Low variability
+  expect_true(result$offset_summary$n_observations == 50)
+})
+
+test_that("apply_heartwood_reference_correction() applies Burgess correction", {
+  vh_data <- create_heartwood_test_data(n = 50, inner_offset = 0.8)
+
+  result <- apply_heartwood_reference_correction(
+    vh_data = vh_data,
+    method = "HRM",
+    verbose = FALSE
+  )
+
+  # Get outer sensor data
+  outer_original <- vh_data$Vh_cm_hr[vh_data$sensor_position == "outer"]
+  outer_corrected <- result$vh_corrected$Vh_cm_hr_hrc[
+    result$vh_corrected$sensor_position == "outer"
+  ]
+
+  # Corrected values should differ from original (correction applied)
+  expect_false(all(outer_original == outer_corrected))
+
+  # With positive offset, corrected should generally be lower
+  expect_true(mean(outer_corrected, na.rm = TRUE) < mean(outer_original, na.rm = TRUE))
+})
+
+test_that("apply_heartwood_reference_correction() marks inner sensor as not corrected", {
+  vh_data <- create_heartwood_test_data(n = 50, inner_offset = 0.8)
+
+  result <- apply_heartwood_reference_correction(
+    vh_data = vh_data,
+    method = "HRM",
+    verbose = FALSE
+  )
+
+  inner_applied <- result$vh_corrected$heartwood_ref_applied[
+    result$vh_corrected$sensor_position == "inner"
+  ]
+
+  # Inner sensor should not have correction applied
+  expect_true(all(inner_applied == FALSE))
+})
+
+test_that("apply_heartwood_reference_correction() validates inputs", {
+  vh_data <- create_heartwood_test_data(n = 50)
+
+  # Missing required columns
+  bad_data <- vh_data[, c("datetime", "Vh_cm_hr")]
+  expect_error(
+    apply_heartwood_reference_correction(bad_data, verbose = FALSE),
+    "Missing required columns"
+  )
+
+  # Missing inner sensor
+  outer_only <- vh_data[vh_data$sensor_position == "outer", ]
+  expect_error(
+    apply_heartwood_reference_correction(outer_only, verbose = FALSE),
+    "must contain both 'inner' and 'outer'"
+  )
+})
+
+test_that("apply_heartwood_reference_correction() handles missing matches", {
+  vh_data <- create_heartwood_test_data(n = 50, inner_offset = 0.8)
+
+  # Remove some inner sensor readings
+  inner_rows <- which(vh_data$sensor_position == "inner")
+  vh_data <- vh_data[-inner_rows[1:10], ]  # Remove first 10 inner readings
+
+  result <- apply_heartwood_reference_correction(
+    vh_data = vh_data,
+    method = "HRM",
+    verbose = FALSE
+  )
+
+  # Should have some uncorrected observations
+  expect_true(result$metadata$n_outer_uncorrected > 0)
+})
+
+test_that("apply_heartwood_reference_correction() quality assessment works", {
+  # Good alignment (low offset)
+  vh_good <- create_heartwood_test_data(n = 50, inner_offset = 0.5)
+  result_good <- apply_heartwood_reference_correction(vh_good, verbose = FALSE)
+  expect_equal(result_good$offset_summary$quality, "GOOD")
+
+  # Moderate misalignment
+  vh_moderate <- create_heartwood_test_data(n = 50, inner_offset = 2.0)
+  result_moderate <- apply_heartwood_reference_correction(vh_moderate, verbose = FALSE)
+  expect_equal(result_moderate$offset_summary$quality, "ACCEPTABLE")
+
+  # Significant misalignment
+  vh_warning <- create_heartwood_test_data(n = 50, inner_offset = 4.0)
+  result_warning <- apply_heartwood_reference_correction(vh_warning, verbose = FALSE)
+  expect_equal(result_warning$offset_summary$quality, "WARNING")
+})
+
+test_that("apply_heartwood_reference_correction() print method works", {
+  vh_data <- create_heartwood_test_data(n = 50, inner_offset = 0.8)
+  result <- apply_heartwood_reference_correction(vh_data, verbose = FALSE)
+
+  expect_output(print(result), "HEARTWOOD REFERENCE CORRECTION RESULT")
+  expect_output(print(result), "Offset Summary")
+})
