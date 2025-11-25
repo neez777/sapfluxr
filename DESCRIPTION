@@ -1,6 +1,6 @@
 Package: sapfluxr
 Title: Comprehensive Sap Flow Analysis from Heat Pulse Velocity Sensors
-Version: 0.3.0
+Version: 0.4.0
 Authors@R: c(
     person("Grant", "Joyce", email = "neez1977@gmail.com",
            role = c("aut", "cre"), comment = "Developer"),
@@ -9,13 +9,14 @@ Authors@R: c(
     person("Tim", "Bleby", role = "aut",
            comment = "Scientific review and Excel workflow design")
     )
-Description: A comprehensive R package for processing and analyzing sap flow data
+Description: A comprehensive R package for processing and analysing sap flow data
     from heat pulse velocity sensors. Provides complete pipeline from raw
     temperature measurements to tree-level sap flux calculations, including
     multiple HPV calculation methods (HRM, MHR, HRMXa, HRMXb, Tmax variants),
-    data quality control, corrections for probe spacing and wounding effects,
-    sapwood area integration, and temporal aggregation. Includes both
-    programmatic API and interactive Shiny interface for analysis workflows.
+    data quality control, zero-flow corrections using novel heartwood reference
+    method or changepoint-based approaches, wound corrections, sapwood area
+    integration, and temporal aggregation. Includes both programmatic API and
+    interactive Shiny interface for analysis workflows.
 License: GPL-3
 Encoding: UTF-8
 LazyData: true

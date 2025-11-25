@@ -8,7 +8,7 @@
 
 ## Overview
 
-**sapfluxr** is a comprehensive R package for importing, processing, and analyzing sap flow data from ICT SFM1x sensors. It provides robust tools for handling multiple data formats, automatic format detection, data validation, and calculating heat pulse velocities using various established methods.
+**sapfluxr** is a comprehensive R package for importing, processing, and analysing sap flow data from ICT SFM1x sensors. It provides robust tools for handling multiple data formats, automatic format detection, data validation, and calculating heat pulse velocities using various established methods.
 
 ## Key Features
 
@@ -24,6 +24,20 @@
   - Maximum Heat Ratio (MHR)
   - Modified HRM variants (HRMXa, HRMXb)
   - T-max methods (Cohen, Kluitenberg)
+
+### Zero-Flow Correction (Spacing Adjustment)
+- **Novel Heartwood Reference Method** ✨ (NEW in v0.4.0)
+  - Uses inner sensor positioned in heartwood as continuous zero-flow reference
+  - Provides per-measurement correction (real-time drift tracking)
+  - Physics-based: heartwood has no sap flow = true zero
+  - Automatic geometry checking based on probe configuration and sapwood depth
+- **Changepoint-Based Correction**
+  - Detects baseline shifts using PELT algorithm
+  - Applies segment-specific Burgess corrections
+  - Handles long-term probe alignment changes
+- **Manual Specification**
+  - User-defined changepoints with optional baseline overrides
+  - Integrates field knowledge and cut-stem calibration data
 
 ### Post-Processing & Quality Control
 - **Selectable DMA (sDMA)**: Apply automatic method switching after calculation
@@ -120,6 +134,79 @@ plot_sdma_timeseries(vh_sdma, sdma_method = "sDMA:MHR")
 - Can be applied after corrections: `apply_hpv_corrections() %>% apply_sdma_processing()`
 - Dedicated dual-axis plotting function
 
+## Zero-Flow Correction Methods
+
+Probe spacing errors due to misalignment, tree swelling, or wood movement cause systematic bias in velocity measurements. sapfluxr provides three correction approaches:
+
+### 1. Heartwood Reference (Preferred when available) ✨
+
+**Novel approach using probe geometry:** When the inner temperature sensor is positioned in the heartwood (non-conducting wood), it provides a **continuous zero-flow reference** because heartwood conducts no sap.
+
+```r
+# Check if heartwood reference is available
+hw_check <- check_heartwood_reference_available(
+  probe_config = list(length = 35, inner_sensor = 7.5),  # Standard ICT probe
+  sapwood_depth = 2.0,        # YOUR tree's sapwood depth (cm)
+  bark_thickness = 0.3        # Bark thickness (cm)
+)
+
+print(hw_check)  # Shows if AVAILABLE or NOT AVAILABLE
+
+# If available, apply continuous correction
+if (hw_check$available) {
+  correction <- apply_heartwood_reference_correction(
+    vh_data = vh_flagged,
+    method = "HRM"
+  )
+  vh_corrected <- correction$vh_corrected
+
+  # Check offset statistics
+  print(correction$offset_summary)
+}
+```
+
+**Advantages:**
+- **Continuous correction**: Per-measurement adjustment (not segment-based)
+- **Real-time drift tracking**: Captures probe alignment changes continuously
+- **Physics-based**: No assumption about zero-flow periods needed
+
+**Requirements:**
+- Inner sensor must be positioned in heartwood (checked automatically)
+- Sapwood depth must be known
+
+### 2. Changepoint Detection
+
+**Segment-based correction:** Detects baseline shifts and applies correction per segment.
+
+```r
+# Calculate daily minima
+daily_min <- calculate_daily_minima(vh_flagged, sensor_position = "outer")
+
+# Detect changepoints
+cpt_result <- detect_changepoints(daily_min, penalty = "MBIC")
+
+# Apply correction to both sensors
+correction <- apply_spacing_correction_both_sensors(
+  vh_data = vh_flagged,
+  changepoints = cpt_result$changepoints,
+  method = "HRM"
+)
+```
+
+### 3. Manual Specification
+
+**User-controlled:** Specify changepoints based on field knowledge.
+
+```r
+correction <- apply_spacing_correction_both_sensors(
+  vh_data = vh_flagged,
+  changepoints = c("2024-03-15", "2024-06-10"),
+  method = "HRM"
+)
+```
+
+**See the quickstart vignette for detailed workflows:** `vignette("quickstart", package = "sapfluxr")`
+
 ## Complete Workflow
 
 ```r
@@ -131,8 +218,8 @@ heat_pulse_data <- read_heat_pulse_data("mydata.txt")
 # 1a. (Optional) Fix clock drift if device clock was inaccurate
 heat_pulse_data <- fix_clock_drift(
   data = heat_pulse_data,
-  observed_device_time = as.POSIXct("2025-01-16 08:05:00"),  # What device showed
-  observed_actual_time = as.POSIXct("2025-01-16 08:00:00")   # Actual correct time
+  observed_device_time = as.POSIXct("2025-01-16 08:05:00"),
+  observed_actual_time = as.POSIXct("2025-01-16 08:00:00")
 )
 
 # 2. Calculate heat pulse velocities
@@ -152,22 +239,50 @@ qc_results <- flag_vh_quality(
 )
 vh_flagged <- qc_results$vh_flagged
 
-# Check quality flags (two-tier system: CALC_ and DATA_ prefixes)
+# Check quality flags
 table(vh_flagged$quality_flag)
 
-# View gap report
-print(qc_results$gap_report)
+# 4. Zero-flow correction (NEW in v0.4.0: heartwood reference method)
 
-# 4. (Optional) Apply sDMA post-processing
-vh_sdma <- apply_sdma_processing(vh_flagged, secondary_method = "MHR")
+# First, check if heartwood reference is available
+hw_check <- check_heartwood_reference_available(
+  probe_config = list(length = 35, inner_sensor = 7.5),
+  sapwood_depth = 2.0,     # Your tree's sapwood depth (cm)
+  bark_thickness = 0.3     # Bark thickness (cm)
+)
 
-# 5. Visualise results
-plot_vh_timeseries(vh_flagged, methods = c("HRM", "MHR", "HRMXa"))
-plot_heat_pulse_trace(heat_pulse_data, vh_flagged, pulse_id = 1)
+if (hw_check$available) {
+  # Preferred: Heartwood reference (continuous correction)
+  correction <- apply_heartwood_reference_correction(
+    vh_data = vh_flagged,
+    method = "HRM"
+  )
+  vh_corrected <- correction$vh_corrected
+  print(correction$offset_summary)  # View offset statistics
+
+} else {
+  # Alternative: Changepoint-based correction
+  daily_min <- calculate_daily_minima(vh_flagged, sensor_position = "outer")
+  cpt_result <- detect_changepoints(daily_min, penalty = "MBIC")
+
+  correction <- apply_spacing_correction_both_sensors(
+    vh_data = vh_flagged,
+    changepoints = cpt_result$changepoints,
+    method = "HRM"
+  )
+  vh_corrected <- correction$vh_corrected
+}
+
+# 5. (Optional) Apply sDMA post-processing
+vh_sdma <- apply_sdma_processing(vh_corrected, secondary_method = "MHR")
+
+# 6. Visualise results
+plot_vh_timeseries(vh_corrected, methods = c("HRM", "MHR", "HRMXa"))
+plot_heat_pulse_trace(heat_pulse_data, vh_corrected, pulse_id = 1)
 plot_sdma_timeseries(vh_sdma, sdma_method = "sDMA:MHR")
 
-# 6. Export clean data only
-clean_data <- vh_flagged[vh_flagged$quality_flag == "OK", ]
+# 7. Export clean data only
+clean_data <- vh_corrected[vh_corrected$quality_flag == "OK", ]
 write.csv(clean_data, "sap_velocity_clean.csv", row.names = FALSE)
 ```
 
@@ -186,4 +301,4 @@ This project is licensed under the GPL-3 License - see the [LICENSE](LICENSE) fi
 **Authors**: Grant Joyce
 **Maintainer**: Grant Joyce, neez1977@gmail.com
 **License**: GPL-3
-**Version**: 0.2.0
+**Version**: 0.4.0
