@@ -125,21 +125,17 @@ get_hardcoded_wood_defaults <- function(config_name = "generic_sw") {
 #' Wood Properties R6 Class
 #'
 #' R6 class to store and manage wood thermal and physical properties.
-#' This includes thermal diffusivity, density, moisture content, tree measurements,
-#' and quality thresholds.
+#' This includes measurements, constants, derived properties, wound correction,
+#' tree measurements, and quality thresholds.
 #'
 #' @field config_name Name of the configuration
-#' @field thermal_diffusivity Thermal diffusivity of sapwood (cm²/s)
-#' @field thermal_conductivity Thermal conductivity (W/(m·K))
-#' @field volumetric_heat_capacity Volumetric heat capacity (J/(m³·K))
-#' @field dry_density Oven-dry wood density (kg/m³)
-#' @field fresh_density Basic density - oven-dry mass / green volume (kg/m³)
-#' @field moisture_content Wood moisture content (%)
-#' @field species Tree species identification
-#' @field wood_type Wood classification ("softwood"/"hardwood")
-#' @field temperature Typical wood temperature (°C)
+#' @field wood_measurements List of user-provided measurements (Method 1 or Method 2)
+#' @field wood_constants List of physical constants (thermal/sap/cell wall properties)
+#' @field wood_property List of basic wood identifiers (species, type, temperature)
 #' @field tree_measurements List of tree-specific measurements (dbh, sapwood_depth, etc.)
+#' @field wound_correction List of wound configuration (drill bit, temporal tracking)
 #' @field quality_thresholds List of quality control thresholds
+#' @field derived_properties List of calculated properties (populated by calculate_wood_properties())
 #' @field yaml_source Path to source YAML file (if loaded from file)
 #' @field yaml_data Raw YAML data (if loaded from file)
 #'
@@ -149,61 +145,78 @@ WoodProperties <- R6::R6Class(
 
   public = list(
     config_name = NULL,
-    thermal_diffusivity = NULL,
-    thermal_conductivity = NULL,
-    volumetric_heat_capacity = NULL,
-    dry_density = NULL,
-    fresh_density = NULL,
-    moisture_content = NULL,
-    species = NULL,
-    wood_type = NULL,
-    temperature = NULL,
+    wood_measurements = NULL,
+    wood_constants = NULL,
+    wood_property = NULL,
     tree_measurements = NULL,
+    wound_correction = NULL,
     quality_thresholds = NULL,
+    derived_properties = NULL,
     yaml_source = NULL,
     yaml_data = NULL,
 
     #' @description
     #' Initialize a new WoodProperties object
     #' @param config_name Name of the configuration
-    #' @param thermal_diffusivity Thermal diffusivity (cm²/s)
-    #' @param thermal_conductivity Thermal conductivity (W/(m·K))
-    #' @param volumetric_heat_capacity Volumetric heat capacity (J/(m³·K))
-    #' @param dry_density Oven-dry wood density (kg/m³)
-    #' @param fresh_density Basic density (kg/m³)
-    #' @param moisture_content Moisture content (%)
-    #' @param species Species name
-    #' @param wood_type Wood type
-    #' @param temperature Typical temperature (°C)
+    #' @param wood_measurements List of measurements (Method 1 or Method 2)
+    #' @param wood_constants List of physical constants
+    #' @param wood_property List of basic wood properties
     #' @param tree_measurements List of tree measurements
+    #' @param wound_correction List of wound configuration
     #' @param quality_thresholds List of quality thresholds
+    #' @param derived_properties List of derived properties
     #' @param yaml_source Path to source YAML file
     #' @param yaml_data Raw YAML data
     initialize = function(config_name = "Custom Wood Properties",
-                         thermal_diffusivity = 0.0025,
-                         thermal_conductivity = NULL,
-                         volumetric_heat_capacity = NULL,
-                         dry_density = NULL,
-                         fresh_density = NULL,
-                         moisture_content = NULL,
-                         species = "unknown",
-                         wood_type = "softwood",
-                         temperature = 20,
+                         wood_measurements = NULL,
+                         wood_constants = NULL,
+                         wood_property = NULL,
                          tree_measurements = NULL,
+                         wound_correction = NULL,
                          quality_thresholds = NULL,
+                         derived_properties = NULL,
                          yaml_source = NULL,
                          yaml_data = NULL) {
 
       self$config_name <- config_name
-      self$thermal_diffusivity <- thermal_diffusivity
-      self$thermal_conductivity <- thermal_conductivity
-      self$volumetric_heat_capacity <- volumetric_heat_capacity
-      self$dry_density <- dry_density
-      self$fresh_density <- fresh_density
-      self$moisture_content <- moisture_content
-      self$species <- species
-      self$wood_type <- wood_type
-      self$temperature <- temperature
+
+      # Initialize wood measurements if not provided
+      if (is.null(wood_measurements)) {
+        self$wood_measurements <- list(
+          fresh_weight_g = NULL,
+          dry_weight_g = NULL,
+          fresh_volume_cm3 = NULL,
+          density_dry_kg_m3 = NULL
+        )
+      } else {
+        self$wood_measurements <- wood_measurements
+      }
+
+      # Initialize wood constants if not provided
+      if (is.null(wood_constants)) {
+        self$wood_constants <- list(
+          thermal_diffusivity_default_cm2_s = 0.0025,
+          rho_sap_kg_m3 = 1000,
+          c_sap_J_kg_K = 4186,
+          K_sap_W_m_K = 0.5984,
+          rho_cell_wall_kg_m3 = 1530,
+          c_dry_wood_J_kg_K = 1200
+        )
+      } else {
+        self$wood_constants <- wood_constants
+      }
+
+      # Initialize wood property if not provided
+      if (is.null(wood_property)) {
+        self$wood_property <- list(
+          species = "unknown",
+          wood_type = "softwood",
+          temperature = 20,
+          comments = NULL
+        )
+      } else {
+        self$wood_property <- wood_property
+      }
 
       # Initialize tree measurements if not provided
       if (is.null(tree_measurements)) {
@@ -218,6 +231,19 @@ WoodProperties <- R6::R6Class(
         self$tree_measurements <- tree_measurements
       }
 
+      # Initialize wound correction if not provided
+      if (is.null(wound_correction)) {
+        self$wound_correction <- list(
+          drill_bit_diameter_mm = 2.0,
+          wound_addition_mm = 0.3,
+          initial_date = NULL,
+          final_date = NULL,
+          final_diameter_mm = NULL
+        )
+      } else {
+        self$wound_correction <- wound_correction
+      }
+
       # Initialize quality thresholds if not provided
       if (is.null(quality_thresholds)) {
         self$quality_thresholds <- list(
@@ -227,6 +253,27 @@ WoodProperties <- R6::R6Class(
         )
       } else {
         self$quality_thresholds <- quality_thresholds
+      }
+
+      # Initialize derived properties (will be populated by calculate_wood_properties())
+      if (is.null(derived_properties)) {
+        self$derived_properties <- list(
+          mc_kg_kg = NULL,
+          rho_dw_kg_m3 = NULL,
+          rho_fw_kg_m3 = NULL,
+          basic_density_kg_m3 = NULL,
+          mc_FSP_kg_kg = NULL,
+          specific_gravity = NULL,
+          Fv_FSP = NULL,
+          Kdw_FSP_W_m_K = NULL,
+          Kfw_W_m_K = NULL,
+          cfw_J_kg_K = NULL,
+          thermal_diffusivity_actual_cm2_s = NULL,
+          thermal_diffusivity_correction_factor = NULL,
+          sap_flux_conversion_factor = NULL
+        )
+      } else {
+        self$derived_properties <- derived_properties
       }
 
       self$yaml_source <- yaml_source
@@ -239,25 +286,34 @@ WoodProperties <- R6::R6Class(
     #' @description
     #' Validate wood properties
     validate = function() {
-      # Check thermal diffusivity
-      if (is.null(self$thermal_diffusivity)) {
-        stop("thermal_diffusivity is required")
-      }
+      # Check thermal diffusivity default
+      if (!is.null(self$wood_constants$thermal_diffusivity_default_cm2_s)) {
+        k_default <- self$wood_constants$thermal_diffusivity_default_cm2_s
 
-      if (!is.numeric(self$thermal_diffusivity)) {
-        stop("thermal_diffusivity must be numeric")
-      }
+        if (!is.numeric(k_default)) {
+          stop("thermal_diffusivity_default_cm2_s must be numeric")
+        }
 
-      if (self$thermal_diffusivity <= 0 || self$thermal_diffusivity > 0.01) {
-        warning("thermal_diffusivity is outside typical range (0.001-0.005 cm²/s): ",
-                self$thermal_diffusivity)
+        if (k_default <= 0 || k_default > 0.01) {
+          warning("thermal_diffusivity_default_cm2_s is outside typical range (0.001-0.005 cm²/s): ", k_default)
+        }
       }
 
       # Check wood type
-      if (!is.null(self$wood_type)) {
-        if (!self$wood_type %in% c("softwood", "hardwood", "unknown")) {
+      if (!is.null(self$wood_property$wood_type)) {
+        if (!self$wood_property$wood_type %in% c("softwood", "hardwood", "unknown")) {
           warning("wood_type should be 'softwood', 'hardwood', or 'unknown'. Got: ",
-                  self$wood_type)
+                  self$wood_property$wood_type)
+        }
+      }
+
+      # Check wound correction dates if provided
+      if (!is.null(self$wound_correction$initial_date) && !is.null(self$wound_correction$final_date)) {
+        initial <- as.POSIXct(self$wound_correction$initial_date)
+        final <- as.POSIXct(self$wound_correction$final_date)
+
+        if (final <= initial) {
+          warning("wound_correction final_date should be after initial_date")
         }
       }
 
@@ -267,59 +323,160 @@ WoodProperties <- R6::R6Class(
     #' @description
     #' Print wood properties summary
     print = function() {
-      cat("Wood Properties Configuration\n")
-      cat("==============================\n")
+      cat("\n")
+      cat(strrep("=", 70), "\n")
+      cat("WOOD PROPERTIES CONFIGURATION\n")
+      cat(strrep("=", 70), "\n\n")
+
       cat("Name:", self$config_name, "\n")
-      cat("Species:", self$species, "\n")
-      cat("Type:", self$wood_type, "\n\n")
+      if (!is.null(self$wood_property$species)) {
+        cat("Species:", self$wood_property$species, "\n")
+      }
+      if (!is.null(self$wood_property$wood_type)) {
+        cat("Type:", self$wood_property$wood_type, "\n")
+      }
+      cat("\n")
 
-      cat("Thermal Properties:\n")
-      cat("  Thermal diffusivity:", self$thermal_diffusivity, "cm²/s\n")
-      if (!is.null(self$thermal_conductivity)) {
-        cat("  Thermal conductivity:", self$thermal_conductivity, "W/(m·K)\n")
-      }
-      if (!is.null(self$volumetric_heat_capacity)) {
-        cat("  Volumetric heat capacity:", self$volumetric_heat_capacity, "J/(m³·K)\n")
-      }
+      # Wood Measurements
+      cat(strrep("-", 70), "\n")
+      cat("MEASUREMENTS (User Inputs)\n")
+      cat(strrep("-", 70), "\n")
+      meas <- self$wood_measurements
+      has_method1 <- !is.null(meas$fresh_weight_g) || !is.null(meas$dry_weight_g) || !is.null(meas$fresh_volume_cm3)
+      has_method2 <- !is.null(meas$density_dry_kg_m3)
 
-      cat("\nPhysical Properties:\n")
-      if (!is.null(self$dry_density)) {
-        cat("  Dry density:", self$dry_density, "kg/m³\n")
+      if (has_method1) {
+        cat("Method 1 (Weight/Volume):\n")
+        if (!is.null(meas$fresh_weight_g)) cat("  Fresh weight:", meas$fresh_weight_g, "g\n")
+        if (!is.null(meas$dry_weight_g)) cat("  Dry weight:", meas$dry_weight_g, "g\n")
+        if (!is.null(meas$fresh_volume_cm3)) cat("  Fresh volume:", meas$fresh_volume_cm3, "cm³\n")
       }
-      if (!is.null(self$fresh_density)) {
-        cat("  Basic density:", self$fresh_density, "kg/m³\n")
+      if (has_method2) {
+        cat("Method 2 (Direct Density):\n")
+        cat("  Dry density:", meas$density_dry_kg_m3, "kg/m³\n")
       }
-      if (!is.null(self$moisture_content)) {
-        cat("  Moisture content:", self$moisture_content, "%\n")
+      if (!has_method1 && !has_method2) {
+        cat("  (No measurements provided - using defaults)\n")
       }
+      cat("\n")
 
-      cat("\nTree Measurements:\n")
-      has_measurements <- FALSE
-      if (!is.null(self$tree_measurements$dbh)) {
-        cat("  DBH:", self$tree_measurements$dbh, "cm\n")
-        has_measurements <- TRUE
+      # Wood Constants
+      cat(strrep("-", 70), "\n")
+      cat("CONSTANTS (Thermal & Physical Properties)\n")
+      cat(strrep("-", 70), "\n")
+      const <- self$wood_constants
+      if (!is.null(const$thermal_diffusivity_default_cm2_s)) {
+        cat("  Default thermal diffusivity:", const$thermal_diffusivity_default_cm2_s, "cm²/s\n")
       }
-      if (!is.null(self$tree_measurements$sapwood_depth)) {
-        cat("  Sapwood depth:", self$tree_measurements$sapwood_depth, "cm\n")
-        has_measurements <- TRUE
+      if (!is.null(const$rho_sap_kg_m3)) {
+        cat("  Sap density:", const$rho_sap_kg_m3, "kg/m³\n")
       }
-      if (!is.null(self$tree_measurements$sapwood_area)) {
-        cat("  Sapwood area:", self$tree_measurements$sapwood_area, "cm²\n")
-        has_measurements <- TRUE
+      if (!is.null(const$rho_cell_wall_kg_m3)) {
+        cat("  Cell wall density:", const$rho_cell_wall_kg_m3, "kg/m³\n")
       }
-      if (!has_measurements) {
+      cat("\n")
+
+      # Wound Correction
+      cat(strrep("-", 70), "\n")
+      cat("WOUND CORRECTION\n")
+      cat(strrep("-", 70), "\n")
+      wound <- self$wound_correction
+      if (!is.null(wound$drill_bit_diameter_mm)) {
+        cat("  Drill bit diameter:", wound$drill_bit_diameter_mm, "mm\n")
+      }
+      if (!is.null(wound$wound_addition_mm)) {
+        cat("  Wound addition:", wound$wound_addition_mm, "mm per side\n")
+        initial_wound <- wound$drill_bit_diameter_mm + 2 * wound$wound_addition_mm
+        cat("  → Initial wound diameter:", initial_wound, "mm\n")
+      }
+      if (!is.null(wound$initial_date)) {
+        cat("  Installation date:", as.character(wound$initial_date), "\n")
+      }
+      if (!is.null(wound$final_date) && !is.null(wound$final_diameter_mm)) {
+        cat("  Final measurement date:", as.character(wound$final_date), "\n")
+        cat("  Final wound diameter:", wound$final_diameter_mm, "mm\n")
+      }
+      cat("\n")
+
+      # Derived Properties (if calculated)
+      cat(strrep("-", 70), "\n")
+      cat("DERIVED PROPERTIES (Calculated)\n")
+      cat(strrep("-", 70), "\n")
+      deriv <- self$derived_properties
+      has_derived <- any(!sapply(deriv, is.null))
+
+      if (has_derived) {
+        if (!is.null(deriv$mc_kg_kg)) {
+          cat("  Moisture content:", sprintf("%.3f kg/kg (%.1f%%)", deriv$mc_kg_kg, deriv$mc_kg_kg * 100), "\n")
+        }
+        if (!is.null(deriv$rho_dw_kg_m3)) {
+          cat("  Dry wood density:", deriv$rho_dw_kg_m3, "kg/m³\n")
+        }
+        if (!is.null(deriv$basic_density_kg_m3)) {
+          cat("  Basic density:", deriv$basic_density_kg_m3, "kg/m³\n")
+        }
+        if (!is.null(deriv$specific_gravity)) {
+          cat("  Specific gravity:", sprintf("%.3f", deriv$specific_gravity), "\n")
+        }
+        if (!is.null(deriv$thermal_diffusivity_actual_cm2_s)) {
+          cat("  Actual thermal diffusivity:", sprintf("%.6f cm²/s", deriv$thermal_diffusivity_actual_cm2_s), "\n")
+        }
+        if (!is.null(deriv$thermal_diffusivity_correction_factor)) {
+          cat("  Diffusivity correction factor (Y):", sprintf("%.4f", deriv$thermal_diffusivity_correction_factor), "\n")
+        }
+        if (!is.null(deriv$sap_flux_conversion_factor)) {
+          cat("  Sap flux conversion factor (Z):", sprintf("%.4f", deriv$sap_flux_conversion_factor), "\n")
+        }
+      } else {
+        cat("  (Not yet calculated - run calculate_wood_properties())\n")
+      }
+      cat("\n")
+
+      # Tree Measurements
+      cat(strrep("-", 70), "\n")
+      cat("TREE MEASUREMENTS\n")
+      cat(strrep("-", 70), "\n")
+      tree <- self$tree_measurements
+      has_tree <- FALSE
+      if (!is.null(tree$dbh)) {
+        cat("  DBH:", tree$dbh, "cm\n")
+        has_tree <- TRUE
+      }
+      if (!is.null(tree$sapwood_depth)) {
+        cat("  Sapwood depth:", tree$sapwood_depth, "cm\n")
+        has_tree <- TRUE
+      }
+      if (!is.null(tree$sapwood_area)) {
+        cat("  Sapwood area:", tree$sapwood_area, "cm²\n")
+        has_tree <- TRUE
+      }
+      if (!has_tree) {
         cat("  (None specified)\n")
       }
+      cat("\n")
 
-      cat("\nQuality Thresholds:\n")
-      cat("  Max velocity:", self$quality_thresholds$max_velocity_cm_hr, "cm/hr\n")
-      cat("  Min velocity:", self$quality_thresholds$min_velocity_cm_hr, "cm/hr\n")
-      cat("  Temperature range:",
-          paste(self$quality_thresholds$temperature_range, collapse = " to "), "°C\n")
+      # Quality Thresholds
+      cat(strrep("-", 70), "\n")
+      cat("QUALITY THRESHOLDS\n")
+      cat(strrep("-", 70), "\n")
+      thresh <- self$quality_thresholds
+      if (!is.null(thresh$max_velocity_cm_hr)) {
+        cat("  Max velocity:", thresh$max_velocity_cm_hr, "cm/hr\n")
+      }
+      if (!is.null(thresh$min_velocity_cm_hr)) {
+        cat("  Min velocity:", thresh$min_velocity_cm_hr, "cm/hr\n")
+      }
+      if (!is.null(thresh$temperature_range)) {
+        cat("  Temperature range:", paste(thresh$temperature_range, collapse = " to "), "°C\n")
+      }
+      cat("\n")
 
       if (!is.null(self$yaml_source)) {
-        cat("\nSource:", basename(self$yaml_source), "\n")
+        cat(strrep("=", 70), "\n")
+        cat("Source:", basename(self$yaml_source), "\n")
+        cat(strrep("=", 70), "\n")
       }
+      cat("\n")
 
       invisible(self)
     }
@@ -416,26 +573,73 @@ load_wood_properties <- function(config_name = NULL,
     yaml_source <- "hardcoded_defaults"
   }
 
-  # Extract wood properties
-  wood_props <- config_data$wood_property
-  if (is.null(wood_props)) {
-    stop("YAML file must contain 'wood_property' section: ", yaml_file)
+  # Extract wood measurements
+  wood_meas <- config_data$wood_measurements
+  if (is.null(wood_meas)) {
+    wood_meas <- list(
+      fresh_weight_g = NULL,
+      dry_weight_g = NULL,
+      fresh_volume_cm3 = NULL,
+      density_dry_kg_m3 = NULL
+    )
   }
 
-  # Apply wood property overrides
+  # Extract wood constants
+  wood_const <- config_data$wood_constants
+  if (is.null(wood_const)) {
+    wood_const <- list(
+      thermal_diffusivity_default_cm2_s = 0.0025,
+      rho_sap_kg_m3 = 1000,
+      c_sap_J_kg_K = 4186,
+      K_sap_W_m_K = 0.5984,
+      rho_cell_wall_kg_m3 = 1530,
+      c_dry_wood_J_kg_K = 1200
+    )
+  }
+
+  # Apply overrides to wood constants (if provided)
   if (!is.null(overrides)) {
-    wood_props <- modifyList(wood_props, overrides)
+    wood_const <- modifyList(wood_const, overrides)
+  }
+
+  # Extract wood property section
+  wood_prop <- config_data$wood_property
+  if (is.null(wood_prop)) {
+    wood_prop <- list(
+      species = "unknown",
+      wood_type = "softwood",
+      temperature = 20,
+      comments = NULL
+    )
   }
 
   # Extract tree measurements
   tree_meas <- config_data$tree_measurements
   if (is.null(tree_meas)) {
-    tree_meas <- list()
+    tree_meas <- list(
+      dbh = NULL,
+      bark_thickness = NULL,
+      sapwood_depth = NULL,
+      sapwood_area = NULL,
+      heartwood_radius = NULL
+    )
   }
 
   # Apply tree measurement overrides
   if (!is.null(tree_overrides)) {
     tree_meas <- modifyList(tree_meas, tree_overrides)
+  }
+
+  # Extract wound correction
+  wound_corr <- config_data$wound_correction
+  if (is.null(wound_corr)) {
+    wound_corr <- list(
+      drill_bit_diameter_mm = 2.0,
+      wound_addition_mm = 0.3,
+      initial_date = NULL,
+      final_date = NULL,
+      final_diameter_mm = NULL
+    )
   }
 
   # Extract quality thresholds
@@ -448,20 +652,36 @@ load_wood_properties <- function(config_name = NULL,
     )
   }
 
+  # Extract derived properties (if they exist in YAML)
+  deriv_props <- config_data$derived_properties
+  if (is.null(deriv_props)) {
+    deriv_props <- list(
+      mc_kg_kg = NULL,
+      rho_dw_kg_m3 = NULL,
+      rho_fw_kg_m3 = NULL,
+      basic_density_kg_m3 = NULL,
+      mc_FSP_kg_kg = NULL,
+      specific_gravity = NULL,
+      Fv_FSP = NULL,
+      Kdw_FSP_W_m_K = NULL,
+      Kfw_W_m_K = NULL,
+      cfw_J_kg_K = NULL,
+      thermal_diffusivity_actual_cm2_s = NULL,
+      thermal_diffusivity_correction_factor = NULL,
+      sap_flux_conversion_factor = NULL
+    )
+  }
+
   # Create WoodProperties object
   wood_config <- WoodProperties$new(
     config_name = config_data$metadata$config_name,
-    thermal_diffusivity = wood_props$thermal_diffusivity,
-    thermal_conductivity = wood_props$thermal_conductivity,
-    volumetric_heat_capacity = wood_props$volumetric_heat_capacity,
-    dry_density = wood_props$dry_density,
-    fresh_density = wood_props$fresh_density,
-    moisture_content = wood_props$moisture_content,
-    species = wood_props$species,
-    wood_type = wood_props$wood_type,
-    temperature = wood_props$temperature,
+    wood_measurements = wood_meas,
+    wood_constants = wood_const,
+    wood_property = wood_prop,
     tree_measurements = tree_meas,
+    wound_correction = wound_corr,
     quality_thresholds = quality,
+    derived_properties = deriv_props,
     yaml_source = yaml_source,
     yaml_data = config_data
   )

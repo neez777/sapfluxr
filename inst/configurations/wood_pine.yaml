@@ -1,40 +1,89 @@
 # Sap Flow Analysis Configuration - Pine Wood Properties
-# Generated on: 2025-09-24
+# Generated on: 2025-01-25
 # Typical properties for Pine species
 
 metadata:
   config_name: Pine Wood Properties
-  description: Typical wood properties for Pine species
-  created_date: '2025-09-24'
-  version: '1.0'
+  description: Typical wood properties for Pine species (Pinus spp.)
+  created_date: '2025-01-25'
+  version: '2.0'
+  default: false
 
+# ============================================================================
+# USER INPUTS - Wood Measurements (provide ONE method)
+# ============================================================================
+wood_measurements:
+  # Method 1: Weight and Volume Measurements
+  fresh_weight_g: null
+  dry_weight_g: null
+  fresh_volume_cm3: null
+
+  # Method 2: Dual Density Input (RECOMMENDED - calculates all properties including Z factor)
+  density_dry_kg_m3: 450      # Typical for Pine (can override with measurements)
+  density_fresh_kg_m3: null   # Fresh density (measure on field-moist sample)
+
+# ============================================================================
+# WOOD CONSTANTS - Physical properties
+# ============================================================================
+wood_constants:
+  thermal_diffusivity_default_cm2_s: 0.00145
+  rho_sap_kg_m3: 1000
+  c_sap_J_kg_K: 4186
+  K_sap_W_m_K: 0.5984
+  rho_cell_wall_kg_m3: 1530
+  c_dry_wood_J_kg_K: 1200
+
+# ============================================================================
+# WOOD PROPERTIES - Basic identifiers
+# ============================================================================
 wood_property:
-  thermal_diffusivity: 0.00145    # cm^2/s, will be estimated from density and moisture
-  thermal_conductivity: 0.22   # W/(m*K), will be estimated if null
-  volumetric_heat_capacity: 963700  # J/(m^3*K), will be estimated if null
-  dry_density: 450            # kg/m^3, typical for pine
-  fresh_density: 380          # kg/m^3, fresh (green) wood density at field moisture
-  moisture_content: 35        # %, softwoods often higher moisture content
-  species: Pinus spp.         # species identification
-  wood_type: softwood         # softwood classification
-  temperature: 15             # degC, often cooler climates
-  comments: Typical values for Pine species - may vary significantly by species and site
+  species: Pinus spp.
+  wood_type: 'softwood'
+  temperature: 15
+  comments: Typical values for Pine species - adjust for specific species/site conditions
 
-# Tree-specific measurements (optional - can override per tree in R)
+# ============================================================================
+# TREE MEASUREMENTS - Optional
+# ============================================================================
 tree_measurements:
-  dbh: null                   # cm, diameter at breast height
-  bark_thickness: null        # cm, bark thickness
-  sapwood_depth: null         # cm, sapwood depth (often wider in pine)
-  sapwood_area: null          # cm^2, conducting sapwood area
-  heartwood_radius: null      # cm, heartwood radius
+  dbh: null
+  bark_thickness: null
+  sapwood_depth: null
+  sapwood_area: null
+  heartwood_radius: null
 
-# Probe installation parameters
-probe_installation:
-  wound_diameter: 0.20        # cm, drill bit diameter (0.20 = 2.0mm, common for ICT probes)
-  probe_spacing: '5mm'        # '5mm' (standard) or '6mm' (legacy)
+# ============================================================================
+# WOUND CORRECTION - Temporal wound expansion tracking
+# ============================================================================
+wound_correction:
+  drill_bit_diameter_mm: 2.0
+  wound_addition_mm: 0.3
+  initial_date: null
+  final_date: null
+  final_diameter_mm: null
 
-# Quality thresholds (species-specific defaults, can override in R)
+# ============================================================================
+# QUALITY THRESHOLDS
+# ============================================================================
 quality_thresholds:
-  max_velocity_cm_hr: 180     # cm/hr, upper bound for pine species
-  min_velocity_cm_hr: -50     # cm/hr, lower bound (allows reverse flow)
-  temperature_range: [-15, 45]  # degC, cooler climate species, wider range
+  max_velocity_cm_hr: 180
+  min_velocity_cm_hr: -50
+  temperature_range: [-15, 45]
+
+# ============================================================================
+# DERIVED PROPERTIES (calculated automatically)
+# ============================================================================
+derived_properties:
+  mc_kg_kg: null
+  rho_dw_kg_m3: null
+  rho_fw_kg_m3: null
+  basic_density_kg_m3: null
+  mc_FSP_kg_kg: null
+  specific_gravity: null
+  Fv_FSP: null
+  Kdw_FSP_W_m_K: null
+  Kfw_W_m_K: null
+  cfw_J_kg_K: null
+  thermal_diffusivity_actual_cm2_s: null
+  thermal_diffusivity_correction_factor: null
+  sap_flux_conversion_factor: null

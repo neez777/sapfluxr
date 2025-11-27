@@ -25,14 +25,15 @@ If spacing correction was applied, should also have \code{Vh_cm_hr_sc} column.}
 
 \item{wound_diameter}{Wound diameter in cm (typically 0.17-0.30 cm, i.e., 1.7-3.0 mm).
 This is usually the drill bit diameter used for probe installation.
-If NULL, attempts to read from wood_properties. Default: NULL}
+DEPRECATED: Use wood_properties parameter instead for temporal wound tracking.
+If NULL, will use wood_properties. Default: NULL}
 
 \item{probe_spacing}{Probe spacing: "5mm" (standard, default) or "6mm" (legacy).
 Determines which coefficient lookup table to use.}
 
-\item{wood_properties}{Optional WoodProperties object or path to YAML file.
-If provided and wound_diameter is NULL, will attempt to read wound_diameter
-from the configuration.}
+\item{wood_properties}{Optional WoodProperties object.
+If provided, uses wound configuration for temporal wound diameter calculation.
+Supports both static and time-varying wound diameters.}
 
 \item{use_spacing_corrected}{Logical. If TRUE and \code{Vh_cm_hr_sc} column exists,
 applies wound correction to spacing-corrected velocities. Default: TRUE}

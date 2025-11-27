@@ -39,31 +39,23 @@ format_parameter_summary <- function(probe_config, wood_properties, params, meth
   )
 
   # Wood properties section
-  # Extract values with safe defaults
-  species_val <- if (!is.null(wood_properties$wood_property$species)) {
-    wood_properties$wood_property$species
-  } else {
-    "Unknown"
-  }
-
-  diffusivity_val <- if (!is.null(wood_properties$wood_constants$thermal_diffusivity_default_cm2_s)) {
-    wood_properties$wood_constants$thermal_diffusivity_default_cm2_s
-  } else {
-    0.0025  # fallback default
-  }
-
-  wood_type_val <- if (!is.null(wood_properties$wood_property$wood_type)) {
-    tools::toTitleCase(wood_properties$wood_property$wood_type)
-  } else {
-    "Unknown"
-  }
-
   wood_section <- paste0(
     "\U0001F333 WOOD PROPERTIES\n",
     sprintf("  Configuration:      %s\n", wood_properties$config_name),
-    sprintf("  Species:            %s\n", species_val),
-    sprintf("  Thermal diffusivity: %.5f cm\U00B2/s\n", diffusivity_val),
-    sprintf("  Wood type:          %s\n", wood_type_val)
+    sprintf("  Species:            %s\n",
+            if (!is.null(wood_properties$wood_property$species)) wood_properties$wood_property$species else "Unknown"),
+    sprintf("  Thermal diffusivity: %.5f cm\U00B2/s\n",
+            if (!is.null(wood_properties$wood_constants$thermal_diffusivity_default_cm2_s)) {
+              wood_properties$wood_constants$thermal_diffusivity_default_cm2_s
+            } else {
+              0.0025  # fallback default
+            }),
+    sprintf("  Wood type:          %s\n",
+            if (!is.null(wood_properties$wood_property$wood_type)) {
+              tools::toTitleCase(wood_properties$wood_property$wood_type)
+            } else {
+              "Unknown"
+            })
   )
 
   # Add optional wood properties (derived properties)

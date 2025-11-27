@@ -63,6 +63,146 @@ wound_coefficients_6mm <- data.frame(
 
 
 # =============================================================================
+# TEMPORAL WOUND DIAMETER CALCULATION
+# =============================================================================
+
+#' Calculate Time-Varying Wound Diameter
+#'
+#' Calculates wound diameter for given timestamps using linear interpolation
+#' between initial and final wound measurements. Accounts for wound expansion
+#' over time.
+#'
+#' @param timestamps POSIXct vector of measurement timestamps
+#' @param wound_config List or WoodProperties object containing wound configuration.
+#'   If WoodProperties object, uses the wound_correction section.
+#'   If list, must contain:
+#'   \describe{
+#'     \item{drill_bit_diameter_mm}{Drill bit diameter (mm)}
+#'     \item{wound_addition_mm}{Wound tissue addition per side (mm), default 0.3}
+#'     \item{initial_date}{Installation date (POSIXct or string)}
+#'     \item{final_date}{Final measurement date (POSIXct or string), optional}
+#'     \item{final_diameter_mm}{Final wound diameter (mm), optional}
+#'   }
+#'
+#' @return Numeric vector of wound diameters (cm) for each timestamp
+#'
+#' @details
+#' **Calculation Method:**
+#'
+#' Initial wound diameter = drill_bit_diameter + 2 × wound_addition
+#'
+#' If final measurements are provided, diameter is interpolated linearly:
+#' \itemize{
+#'   \item Before initial_date: Use initial diameter
+#'   \item Between initial_date and final_date: Linear interpolation
+#'   \item After final_date: Use final diameter
+#' }
+#'
+#' If no final measurements, all timestamps use the initial diameter (static).
+#'
+#' **Units:**
+#' Input in mm, output in cm (for compatibility with wound coefficient tables).
+#'
+#' @examples
+#' \dontrun{
+#' # Setup wound configuration
+#' wound_cfg <- list(
+#'   drill_bit_diameter_mm = 2.0,
+#'   wound_addition_mm = 0.3,
+#'   initial_date = as.POSIXct("2024-03-01"),
+#'   final_date = as.POSIXct("2024-07-01"),
+#'   final_diameter_mm = 2.6
+#' )
+#'
+#' # Calculate for specific dates
+#' dates <- as.POSIXct(c("2024-03-01", "2024-05-01", "2024-07-01"))
+#' wound_diams <- calc_wound_diameter(dates, wound_cfg)
+#' # Returns wound diameters in cm
+#' }
+#'
+#' @family wound correction functions
+#' @export
+calc_wound_diameter <- function(timestamps, wound_config) {
+
+  # -------------------------------------------------------------------------
+  # Input validation and config extraction
+  # -------------------------------------------------------------------------
+
+  if (!inherits(timestamps, "POSIXct")) {
+    stop("timestamps must be POSIXct")
+  }
+
+  # Extract wound config if WoodProperties object
+  if (inherits(wound_config, "WoodProperties")) {
+    wound_config <- wound_config$wound_correction
+  }
+
+  if (!is.list(wound_config)) {
+    stop("wound_config must be a list or WoodProperties object")
+  }
+
+  # Check required fields
+  if (is.null(wound_config$drill_bit_diameter_mm)) {
+    stop("wound_config must contain drill_bit_diameter_mm")
+  }
+
+  # Set defaults
+  wound_addition <- if (is.null(wound_config$wound_addition_mm)) 0.3 else wound_config$wound_addition_mm
+
+  # Calculate initial wound diameter (mm)
+  initial_diameter_mm <- wound_config$drill_bit_diameter_mm + 2 * wound_addition
+
+  # -------------------------------------------------------------------------
+  # Static wound diameter (no temporal tracking)
+  # -------------------------------------------------------------------------
+
+  if (is.null(wound_config$initial_date) ||
+      is.null(wound_config$final_date) ||
+      is.null(wound_config$final_diameter_mm)) {
+
+    # No temporal tracking - use static initial diameter
+    wound_diameter_cm <- rep(initial_diameter_mm / 10, length(timestamps))  # Convert mm to cm
+
+    return(wound_diameter_cm)
+  }
+
+  # -------------------------------------------------------------------------
+  # Temporal wound diameter (linear interpolation)
+  # -------------------------------------------------------------------------
+
+  # Parse dates
+  initial_date <- as.POSIXct(wound_config$initial_date)
+  final_date <- as.POSIXct(wound_config$final_date)
+  final_diameter_mm <- wound_config$final_diameter_mm
+
+  # Validate dates
+  if (final_date <= initial_date) {
+    stop("final_date must be after initial_date")
+  }
+
+  # Calculate wound expansion rate
+  wound_period_days <- as.numeric(difftime(final_date, initial_date, units = "days"))
+  wound_increment_mm <- final_diameter_mm - initial_diameter_mm
+  daily_wound_rate_mm <- wound_increment_mm / wound_period_days
+
+  # Calculate days since installation for each timestamp
+  days_since_install <- as.numeric(difftime(timestamps, initial_date, units = "days"))
+
+  # Calculate wound diameter (mm) with linear interpolation
+  wound_diameter_mm <- initial_diameter_mm + (days_since_install * daily_wound_rate_mm)
+
+  # Apply bounds
+  wound_diameter_mm[days_since_install < 0] <- initial_diameter_mm
+  wound_diameter_mm[days_since_install > wound_period_days] <- final_diameter_mm
+
+  # Convert to cm
+  wound_diameter_cm <- wound_diameter_mm / 10
+
+  return(wound_diameter_cm)
+}
+
+
+# =============================================================================
 # MAIN WOUND CORRECTION FUNCTION
 # =============================================================================
 
@@ -83,14 +223,15 @@ wound_coefficients_6mm <- data.frame(
 #'
 #' @param wound_diameter Wound diameter in cm (typically 0.17-0.30 cm, i.e., 1.7-3.0 mm).
 #'   This is usually the drill bit diameter used for probe installation.
-#'   If NULL, attempts to read from wood_properties. Default: NULL
+#'   DEPRECATED: Use wood_properties parameter instead for temporal wound tracking.
+#'   If NULL, will use wood_properties. Default: NULL
 #'
 #' @param probe_spacing Probe spacing: "5mm" (standard, default) or "6mm" (legacy).
 #'   Determines which coefficient lookup table to use.
 #'
-#' @param wood_properties Optional WoodProperties object or path to YAML file.
-#'   If provided and wound_diameter is NULL, will attempt to read wound_diameter
-#'   from the configuration.
+#' @param wood_properties Optional WoodProperties object.
+#'   If provided, uses wound configuration for temporal wound diameter calculation.
+#'   Supports both static and time-varying wound diameters.
 #'
 #' @param use_spacing_corrected Logical. If TRUE and \code{Vh_cm_hr_sc} column exists,
 #'   applies wound correction to spacing-corrected velocities. Default: TRUE
@@ -195,34 +336,61 @@ apply_wound_correction <- function(vh_data,
     stop("probe_spacing must be '5mm' or '6mm'")
 
   # -------------------------------------------------------------------------
-  # Resolve wound diameter
+  # Resolve wound diameter (static or temporal)
   # -------------------------------------------------------------------------
 
-  # Try to get from wood_properties if not specified
+  wound_diameter_vector <- NULL  # Will hold diameter for each row (temporal) or single value (static)
+  use_temporal <- FALSE
 
-  if (is.null(wound_diameter) && !is.null(wood_properties)) {
-    wound_diameter <- get_wound_diameter_from_config(wood_properties)
-  }
+  # Try to use WoodProperties object for temporal wound tracking
+  if (!is.null(wood_properties) && inherits(wood_properties, "WoodProperties")) {
+    wound_cfg <- wood_properties$wound_correction
 
-  # If still NULL, prompt user in interactive mode
-  if (is.null(wound_diameter)) {
-    if (interactive()) {
-      wound_diameter <- prompt_wound_diameter()
-    } else {
-      stop("wound_diameter must be specified (in cm, e.g., 0.20 for 2.0 mm drill bit)")
+    # Check if temporal wound tracking is configured
+    if (!is.null(wound_cfg$drill_bit_diameter_mm)) {
+      # Calculate time-varying wound diameters
+      wound_diameter_vector <- calc_wound_diameter(vh_data$datetime, wood_properties)
+      use_temporal <- TRUE
+
+      message("Using temporal wound diameter tracking")
     }
   }
 
-  # Validate wound diameter range
-  if (wound_diameter < 0.15 || wound_diameter > 0.35) {
-    warning("wound_diameter ", wound_diameter, " cm is outside typical range (0.17-0.30 cm)")
+  # Fall back to static wound diameter if temporal not available
+  if (!use_temporal) {
+    # Try old get_wound_diameter_from_config approach (backward compatibility)
+    if (is.null(wound_diameter) && !is.null(wood_properties)) {
+      wound_diameter <- get_wound_diameter_from_config(wood_properties)
+    }
+
+    # If still NULL, prompt user in interactive mode
+    if (is.null(wound_diameter)) {
+      if (interactive()) {
+        wound_diameter <- prompt_wound_diameter()
+      } else {
+        stop("wound_diameter must be specified (in cm) or provide wood_properties with wound configuration")
+      }
+    }
+
+    # Validate wound diameter range
+    if (wound_diameter < 0.15 || wound_diameter > 0.35) {
+      warning("wound_diameter ", wound_diameter, " cm is outside typical range (0.17-0.30 cm)")
+    }
+
+    # Create static diameter vector
+    wound_diameter_vector <- rep(wound_diameter, nrow(vh_data))
+
+    message("Using static wound diameter: ", wound_diameter, " cm")
   }
 
   # -------------------------------------------------------------------------
-  # Get correction coefficient
+  # Get correction coefficients for each row
   # -------------------------------------------------------------------------
 
-  B <- get_wound_correction_coefficient(wound_diameter, probe_spacing)
+  # Get correction coefficient for each wound diameter
+  B_vector <- sapply(wound_diameter_vector, function(wd) {
+    get_wound_correction_coefficient(wd, probe_spacing)
+  })
 
   # -------------------------------------------------------------------------
   # Interactive confirmation
@@ -262,15 +430,15 @@ apply_wound_correction <- function(vh_data,
   # Apply correction
   # -------------------------------------------------------------------------
 
-  vh_data$Vc_cm_hr <- vh_data[[input_col]] * B
-  vh_data$wound_correction_factor <- B
-  vh_data$wound_diameter_cm <- wound_diameter
+  vh_data$Vc_cm_hr <- vh_data[[input_col]] * B_vector
+  vh_data$wound_correction_factor <- B_vector
+  vh_data$wound_diameter_cm <- wound_diameter_vector
 
   # -------------------------------------------------------------------------
   # Print summary
   # -------------------------------------------------------------------------
 
-  print_wound_correction_summary(vh_data, wound_diameter, B, input_col)
+  print_wound_correction_summary(vh_data, wound_diameter_vector, B_vector, input_col, use_temporal)
 
   return(vh_data)
 }
@@ -471,7 +639,7 @@ prompt_wound_correction_confirmation <- function(wound_diameter,
 #' @param B Correction factor applied
 #' @param input_col Input column name
 #' @keywords internal
-print_wound_correction_summary <- function(vh_data, wound_diameter, B, input_col) {
+print_wound_correction_summary <- function(vh_data, wound_diameter_vector, B_vector, input_col, use_temporal = FALSE) {
 
   cat("\n")
   cat(strrep("=", 67), "\n")
@@ -484,8 +652,24 @@ print_wound_correction_summary <- function(vh_data, wound_diameter, B, input_col
   input_range <- range(vh_data[[input_col]], na.rm = TRUE)
   output_range <- range(vh_data$Vc_cm_hr, na.rm = TRUE)
 
-  cat(sprintf("  Wound diameter:      %.2f cm (%.1f mm)\n", wound_diameter, wound_diameter * 10))
-  cat(sprintf("  Correction factor:   %.4f\n", B))
+  if (use_temporal) {
+    # Temporal wound diameter
+    wound_range <- range(wound_diameter_vector, na.rm = TRUE)
+    B_range <- range(B_vector, na.rm = TRUE)
+
+    cat(sprintf("  Wound diameter:      %.2f - %.2f cm (%.1f - %.1f mm) [TEMPORAL]\n",
+                wound_range[1], wound_range[2],
+                wound_range[1] * 10, wound_range[2] * 10))
+    cat(sprintf("  Correction factor:   %.4f - %.4f\n", B_range[1], B_range[2]))
+  } else {
+    # Static wound diameter
+    wound_diameter <- wound_diameter_vector[1]
+    B <- B_vector[1]
+
+    cat(sprintf("  Wound diameter:      %.2f cm (%.1f mm)\n", wound_diameter, wound_diameter * 10))
+    cat(sprintf("  Correction factor:   %.4f\n", B))
+  }
+
   cat(sprintf("  Input column:        %s\n", input_col))
   cat(sprintf("  Output column:       Vc_cm_hr\n\n"))
 

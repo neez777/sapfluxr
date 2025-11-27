@@ -1,41 +1,122 @@
 # Sap Flow Analysis Configuration - Wood Property Defaults
-# Generated on: 2025-09-24
-# Edit this file to customise your default wood parameters
+# Generated on: 2025-01-25
+# Edit this file to customise wood parameters for your tree/species
+#
+# USAGE:
+#   Method 1: Provide fresh_weight_g, dry_weight_g, fresh_volume_cm3 (preferred)
+#   Method 2: Provide density_dry_kg_m3 directly (alternative)
+#   You must provide ONE of these methods.
 
 metadata:
   config_name: Typical Softwood Properties
   description: Default wood properties for temperate softwood species
-  created_date: '2025-09-24'
-  version: '1.0'
+  created_date: '2025-01-25'
+  version: '2.0'
   default: true
 
+# ============================================================================
+# USER INPUTS - Wood Measurements (provide ONE method)
+# ============================================================================
+wood_measurements:
+  # Method 1: Weight and Volume Measurements
+  # Measure fresh and oven-dry weights, and fresh (green) volume
+  fresh_weight_g: null        # Fresh weight of sapwood sample (g)
+  dry_weight_g: null          # Oven-dry weight of sapwood sample (g)
+  fresh_volume_cm3: null      # Fresh (green) volume of sample (cm³)
+
+  # Method 2: Dual Density Input (RECOMMENDED - easier than Method 1)
+  # Measure both densities on same sample (fresh volume assumed constant)
+  density_dry_kg_m3: null     # Oven-dry wood density (kg/m³)
+  density_fresh_kg_m3: null   # Fresh (field-moist) wood density (kg/m³)
+
+# ============================================================================
+# WOOD CONSTANTS - Physical properties (have defaults, can be modified)
+# ============================================================================
+wood_constants:
+  # Thermal properties
+  thermal_diffusivity_default_cm2_s: 0.0025  # Default thermal diffusivity (cm²/s)
+                                              # Used for initial HPV calculations
+                                              # Will be refined from wood measurements if provided
+
+  # Water/sap properties (at 20°C)
+  rho_sap_kg_m3: 1000                 # Density of sap/water (kg/m³)
+  c_sap_J_kg_K: 4186                  # Specific heat capacity of water (J/kg/K)
+  K_sap_W_m_K: 0.5984                 # Thermal conductivity of water (W/m/K)
+
+  # Cell wall properties
+  rho_cell_wall_kg_m3: 1530           # Density of cell wall tissue (kg/m³)
+  c_dry_wood_J_kg_K: 1200             # Specific heat capacity of dry wood at 20°C (J/kg/K)
+
+# ============================================================================
+# WOOD PROPERTIES - Basic identifiers
+# ============================================================================
 wood_property:
-  thermal_diffusivity: 0.0025    # cm^2/s, will be estimated from density and moisture if null
-  thermal_conductivity: null   # W/(m*K), will be estimated if null
-  volumetric_heat_capacity: null  # J/(m^3*K), will be estimated if null
-  dry_density: 400            # kg/m^3, oven-dry density
-  fresh_density: 350          # kg/m^3, fresh (green) wood density at field moisture
-  moisture_content: 30        # %, moisture content on dry weight basis
-  species: unknown            # species identification
+  species: unknown            # Species identification
   wood_type: 'softwood'       # softwood/hardwood classification
-  temperature: 20             # degC, wood temperature during measurement
+  temperature: 20             # degC, typical wood temperature during measurement
   comments: Typical values for temperate softwood species
 
-# Tree-specific measurements (optional - can override per tree in R)
+# ============================================================================
+# TREE MEASUREMENTS - Optional, can override per tree in R
+# ============================================================================
 tree_measurements:
   dbh: null                   # cm, diameter at breast height
   bark_thickness: null        # cm, bark thickness
-  sapwood_depth: null         # cm, sapwood depth
-  sapwood_area: null          # cm^2, conducting sapwood area
+  sapwood_depth: null         # cm, sapwood depth from cambium
+  sapwood_area: null          # cm², conducting sapwood area
   heartwood_radius: null      # cm, heartwood radius
 
-# Probe installation parameters
-probe_installation:
-  wound_diameter: 0.20        # cm, drill bit diameter (0.20 = 2.0mm, common for ICT probes)
-  probe_spacing: '5mm'        # '5mm' (standard) or '6mm' (legacy)
+# ============================================================================
+# WOUND CORRECTION - Temporal wound expansion tracking
+# ============================================================================
+wound_correction:
+  # Drill bit and initial wound size
+  drill_bit_diameter_mm: 2.0        # Drill bit diameter (mm) used for probe installation
+  wound_addition_mm: 0.3            # Wound tissue addition per side (mm)
+                                    # Literature suggests ~0.3mm wound tissue forms on each side
+                                    # Initial wound = drill_bit + 2×wound_addition
+                                    # Example: 2.0mm drill + 2×0.3mm = 2.6mm initial wound
 
-# Quality thresholds (species-specific defaults, can override in R)
+  # Temporal wound expansion (optional - for wound tracking over time)
+  # If not tracking wound expansion, only initial wound diameter is used
+  initial_date: null                # Date of sensor installation (YYYY-MM-DD)
+  final_date: null                  # Date of final wound measurement (YYYY-MM-DD)
+  final_diameter_mm: null           # Measured wound diameter at final_date (mm)
+                                    # Wound diameter will be interpolated linearly between dates
+
+# ============================================================================
+# QUALITY THRESHOLDS - Species-specific defaults (can override in R)
+# ============================================================================
 quality_thresholds:
-  max_velocity_cm_hr: 200     # cm/hr, upper bound for this species
-  min_velocity_cm_hr: -50     # cm/hr, lower bound (allows reverse flow)
-  temperature_range: [-10, 60]  # degC, acceptable temperature range
+  max_velocity_cm_hr: 200           # cm/hr, upper bound for this species
+  min_velocity_cm_hr: -50           # cm/hr, lower bound (allows reverse flow)
+  temperature_range: [-10, 60]      # degC, acceptable temperature range
+
+# ============================================================================
+# DERIVED PROPERTIES (calculated automatically, stored for reference)
+# ============================================================================
+# These values are calculated by calculate_wood_properties() function
+# Do not edit manually - they will be overwritten
+derived_properties:
+  # Moisture and density
+  mc_kg_kg: null                              # Moisture content (kg water / kg dry wood)
+  rho_dw_kg_m3: null                          # Dry wood density (kg/m³)
+  rho_fw_kg_m3: null                          # Fresh wood density (kg/m³)
+  basic_density_kg_m3: null                   # Basic density = dry mass / fresh volume (kg/m³)
+
+  # Fiber saturation point properties
+  mc_FSP_kg_kg: null                          # Moisture content at fiber saturation point
+  specific_gravity: null                      # Specific gravity (dimensionless) = ρdw / ρsap
+  Fv_FSP: null                                # Void fraction at fiber saturation point
+
+  # Thermal properties (calculated from measurements)
+  Kdw_FSP_W_m_K: null                         # Thermal conductivity of dry wood at FSP (W/m/K)
+  Kfw_W_m_K: null                             # Thermal conductivity of fresh sapwood (W/m/K)
+  cfw_J_kg_K: null                            # Specific heat capacity of fresh sapwood (J/kg/K)
+  thermal_diffusivity_actual_cm2_s: null      # Actual thermal diffusivity (kax) (cm²/s)
+
+  # Conversion factors
+  thermal_diffusivity_correction_factor: null # Y = kax / k_default
+                                              # Factor for recalculating Vh with actual k
+  sap_flux_conversion_factor: null            # Z = (ρdw/ρs) × ((cdw + mc×cs)/cs)
+                                              # Factor for converting Vh to sap flux density Jv

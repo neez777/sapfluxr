@@ -4,16 +4,22 @@
 \alias{print_wound_correction_summary}
 \title{Print Wound Correction Summary}
 \usage{
-print_wound_correction_summary(vh_data, wound_diameter, B, input_col)
+print_wound_correction_summary(
+  vh_data,
+  wound_diameter_vector,
+  B_vector,
+  input_col,
+  use_temporal = FALSE
+)
 }
 \arguments{
 \item{vh_data}{Corrected data frame}
 
+\item{input_col}{Input column name}
+
 \item{wound_diameter}{Wound diameter used}
 
 \item{B}{Correction factor applied}
-
-\item{input_col}{Input column name}
 }
 \description{
 Prints summary of wound correction results.

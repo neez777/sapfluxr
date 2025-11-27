@@ -10,35 +10,27 @@ Wood Properties R6 Class
 }
 \details{
 R6 class to store and manage wood thermal and physical properties.
-This includes thermal diffusivity, density, moisture content, tree measurements,
-and quality thresholds.
+This includes measurements, constants, derived properties, wound correction,
+tree measurements, and quality thresholds.
 }
 \section{Public fields}{
 \if{html}{\out{<div class="r6-fields">}}
 \describe{
 \item{\code{config_name}}{Name of the configuration}
 
-\item{\code{thermal_diffusivity}}{Thermal diffusivity of sapwood (cm²/s)}
+\item{\code{wood_measurements}}{List of user-provided measurements (Method 1 or Method 2)}
 
-\item{\code{thermal_conductivity}}{Thermal conductivity (W/(m·K))}
+\item{\code{wood_constants}}{List of physical constants (thermal/sap/cell wall properties)}
 
-\item{\code{volumetric_heat_capacity}}{Volumetric heat capacity (J/(m³·K))}
-
-\item{\code{dry_density}}{Oven-dry wood density (kg/m³)}
-
-\item{\code{fresh_density}}{Basic density - oven-dry mass / green volume (kg/m³)}
-
-\item{\code{moisture_content}}{Wood moisture content (\%)}
-
-\item{\code{species}}{Tree species identification}
-
-\item{\code{wood_type}}{Wood classification ("softwood"/"hardwood")}
-
-\item{\code{temperature}}{Typical wood temperature (°C)}
+\item{\code{wood_property}}{List of basic wood identifiers (species, type, temperature)}
 
 \item{\code{tree_measurements}}{List of tree-specific measurements (dbh, sapwood_depth, etc.)}
 
+\item{\code{wound_correction}}{List of wound configuration (drill bit, temporal tracking)}
+
 \item{\code{quality_thresholds}}{List of quality control thresholds}
+
+\item{\code{derived_properties}}{List of calculated properties (populated by calculate_wood_properties())}
 
 \item{\code{yaml_source}}{Path to source YAML file (if loaded from file)}
 
@@ -63,17 +55,13 @@ Initialize a new WoodProperties object
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{WoodProperties$new(
   config_name = "Custom Wood Properties",
-  thermal_diffusivity = 0.0025,
-  thermal_conductivity = NULL,
-  volumetric_heat_capacity = NULL,
-  dry_density = NULL,
-  fresh_density = NULL,
-  moisture_content = NULL,
-  species = "unknown",
-  wood_type = "softwood",
-  temperature = 20,
+  wood_measurements = NULL,
+  wood_constants = NULL,
+  wood_property = NULL,
   tree_measurements = NULL,
+  wound_correction = NULL,
   quality_thresholds = NULL,
+  derived_properties = NULL,
   yaml_source = NULL,
   yaml_data = NULL
 )}\if{html}{\out{</div>}}
@@ -84,27 +72,19 @@ Initialize a new WoodProperties object
 \describe{
 \item{\code{config_name}}{Name of the configuration}
 
-\item{\code{thermal_diffusivity}}{Thermal diffusivity (cm²/s)}
+\item{\code{wood_measurements}}{List of measurements (Method 1 or Method 2)}
 
-\item{\code{thermal_conductivity}}{Thermal conductivity (W/(m·K))}
+\item{\code{wood_constants}}{List of physical constants}
 
-\item{\code{volumetric_heat_capacity}}{Volumetric heat capacity (J/(m³·K))}
-
-\item{\code{dry_density}}{Oven-dry wood density (kg/m³)}
-
-\item{\code{fresh_density}}{Basic density (kg/m³)}
-
-\item{\code{moisture_content}}{Moisture content (\%)}
-
-\item{\code{species}}{Species name}
-
-\item{\code{wood_type}}{Wood type}
-
-\item{\code{temperature}}{Typical temperature (°C)}
+\item{\code{wood_property}}{List of basic wood properties}
 
 \item{\code{tree_measurements}}{List of tree measurements}
 
+\item{\code{wound_correction}}{List of wound configuration}
+
 \item{\code{quality_thresholds}}{List of quality thresholds}
+
+\item{\code{derived_properties}}{List of derived properties}
 
 \item{\code{yaml_source}}{Path to source YAML file}
 

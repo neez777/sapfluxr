@@ -151,7 +151,7 @@ calc_heat_pulse_velocity <- function(heat_pulse_data,
 
   # Build default parameters from configurations
   default_params <- list(
-    diffusivity = wood_properties$wood_constants$thermal_diffusivity_default_cm2_s,  # From wood properties
+    diffusivity = wood_properties$thermal_diffusivity,  # From wood properties
     probe_spacing = probe_config$required_parameters$x,  # From probe config
     tp_1 = probe_config$heat_pulse_duration,            # From probe config (NEW!)
     L = 0.5,               # Lower proportion of deltaTmax for HRMX
