@@ -207,6 +207,173 @@ correction <- apply_spacing_correction_both_sensors(
 
 **See the quickstart vignette for detailed workflows:** `vignette("quickstart", package = "sapfluxr")`
 
+## Wood Properties Configuration
+
+sapfluxr uses a flexible wood properties system that supports two input methods for calculating derived thermal properties and conversion factors.
+
+### Built-in Species Configurations
+
+Three configurations are included:
+- **generic_sw** (default): Generic temperate softwood
+- **eucalyptus**: Eucalyptus species properties
+- **pine**: Pinus species properties
+
+### Two Input Methods
+
+Both methods calculate **all derived properties** including thermal diffusivity correction factor (Y) and sap flux conversion factor (Z).
+
+**Method 1: Weight & Volume Measurements**
+
+Direct laboratory measurements of fresh weight, dry weight, and fresh volume.
+
+```r
+# Load configuration
+wood <- load_wood_properties("generic_sw")
+
+# Set measurements from laboratory analysis
+wood$wood_measurements$fresh_weight_g <- 0.5493
+wood$wood_measurements$dry_weight_g <- 0.2641
+wood$wood_measurements$fresh_volume_cm3 <- 0.4506
+
+# Calculate all derived properties
+wood <- calculate_wood_properties(wood)
+
+# View results
+print(wood)
+```
+
+**Method 2: Dual Density (RECOMMENDED - Easier than Method 1)**
+
+Measure both dry and fresh density on the same sample. Moisture content is back-calculated from the density ratio: `mc = (ρfw/ρdw) - 1`, allowing calculation of all thermal properties including the Z factor.
+
+```r
+# Load and configure
+wood <- load_wood_properties("eucalyptus")
+
+# Provide BOTH densities measured on the same sample
+wood$wood_measurements$density_dry_kg_m3 <- 550     # Oven-dry density
+wood$wood_measurements$density_fresh_kg_m3 <- 1100  # Fresh (field-moist) density
+
+# Calculate ALL derived properties (including Z factor!)
+wood <- calculate_wood_properties(wood)
+
+# Check calculated moisture content and Z factor
+print(wood$derived_properties$mc_kg_kg)                    # 1.0 kg/kg (100%)
+print(wood$derived_properties$sap_flux_conversion_factor)  # Z factor
+```
+
+**Why Method 2 is recommended:**
+- Easier than Method 1 (no fresh weight timing issues, simpler volume measurement)
+- Still calculates Z factor (critical for Vh → Jv conversion)
+- Only slightly more work than measuring single density
+- Volume cancels out in calculations, so actual volume doesn't need to be known precisely
+
+### Wood Properties Workflow Order
+
+The complete workflow progresses through these stages:
+
+1. **Spacing Correction** → Corrects probe spacing errors
+2. **Recalculate Vh** → Re-run HPV calculations with updated thermal diffusivity (Y factor)
+3. **Wound Correction** → Applies temporal wound expansion correction
+4. **Flux Density Conversion** → Converts Vh to Jv using Z factor
+
+```r
+# 1. Calculate heat pulse velocity
+vh_data <- calc_heat_pulse_velocity(heat_pulse_data, wood_properties = wood)
+
+# 2. Apply spacing correction
+vh_corrected <- apply_spacing_correction_both_sensors(vh_data, ...)
+
+# 3. Apply wound correction with temporal tracking
+wood$wound_correction$drill_bit_diameter_mm <- 2.0
+wood$wound_correction$wound_addition_mm <- 0.3
+wood$wound_correction$initial_date <- "2025-01-01"
+wood$wound_correction$final_date <- "2025-12-31"
+wood$wound_correction$final_diameter_mm <- 4.5
+
+vh_wound_corrected <- apply_wound_correction(
+  vh_corrected,
+  wood_properties = wood,
+  probe_spacing = "5mm"
+)
+
+# 4. Convert to sap flux density (Jv)
+flux_data <- apply_flux_conversion(
+  vh_wound_corrected,
+  wood_properties = wood,
+  velocity_col = "Vc_cm_hr"
+)
+```
+
+### Wound Correction Configuration
+
+Wound correction accounts for wound tissue formation around the heater probe. The initial wound size is calculated as:
+
+```
+initial_wound = drill_bit_diameter + (2 × wound_addition)
+```
+
+Default values:
+- `drill_bit_diameter_mm`: 2.0 mm
+- `wound_addition_mm`: 0.3 mm per side
+
+This gives an initial wound of 2.6 mm (0.26 cm).
+
+**Temporal wound tracking** (optional) models linear wound expansion over time:
+
+```r
+# Configure temporal wound tracking
+wood$wound_correction$initial_date <- "2025-01-01"      # Installation date
+wood$wound_correction$final_date <- "2025-12-31"        # Final measurement date
+wood$wound_correction$final_diameter_mm <- 4.5          # Measured final wound size
+```
+
+### Sap Flux Conversion (Z Factor)
+
+The Z factor converts heat pulse velocity (Vh) to sap flux density (Jv):
+
+```
+Jv = Z × Vh
+```
+
+Where Z accounts for the heat capacity of the wood matrix using the formula from Burgess et al. (2001):
+
+```
+Z = (ρdw/ρs) × ((cdw + mc × cs) / cs)
+```
+
+Both input methods (weight/volume and dual density) calculate the Z factor. Method 2 back-calculates moisture content from the density ratio, allowing complete property derivation.
+
+### Custom Wood Properties
+
+Create custom configurations for your specific tree:
+
+```r
+# Option 1: Override existing configuration
+wood <- load_wood_properties(
+  "eucalyptus",
+  overrides = list(
+    thermal_diffusivity_default_cm2_s = 0.003,
+    rho_sap_kg_m3 = 1010
+  ),
+  tree_overrides = list(
+    dbh = 45.2,
+    sapwood_depth = 3.5,
+    sapwood_area = 125.6
+  )
+)
+
+# Option 2: Create from scratch
+custom_wood <- create_custom_wood_properties(
+  config_name = "My Custom Tree",
+  species = "Pinus radiata",
+  thermal_diffusivity = 0.0028,
+  dry_density = 450,
+  moisture_content = 35,
+  dbh = 45.2
+)
+```
+
 ## Complete Workflow
 
 ```r
@@ -222,11 +389,27 @@ heat_pulse_data <- fix_clock_drift(
   observed_actual_time = as.POSIXct("2025-01-16 08:00:00")
 )
 
+# 1b. Configure wood properties
+wood <- load_wood_properties("eucalyptus")
+
+# Add wood measurements (Method 2: Dual Density - RECOMMENDED)
+wood$wood_measurements$density_dry_kg_m3 <- 550
+wood$wood_measurements$density_fresh_kg_m3 <- 1100
+
+# Calculate derived properties (thermal diffusivity, Z factor, etc.)
+wood <- calculate_wood_properties(wood)
+
+# Alternative: Method 1 (Weight & Volume)
+# wood$wood_measurements$fresh_weight_g <- 0.5493
+# wood$wood_measurements$dry_weight_g <- 0.2641
+# wood$wood_measurements$fresh_volume_cm3 <- 0.4506
+# wood <- calculate_wood_properties(wood)
+
 # 2. Calculate heat pulse velocities
 vh_results <- calc_heat_pulse_velocity(
   heat_pulse_data,
   methods = c("HRM", "MHR", "HRMXa", "Tmax_Klu"),
-  wood_properties = "eucalyptus"
+  wood_properties = wood
 )
 
 # 3. Apply comprehensive quality control
@@ -273,17 +456,37 @@ if (hw_check$available) {
   vh_corrected <- correction$vh_corrected
 }
 
-# 5. (Optional) Apply sDMA post-processing
-vh_sdma <- apply_sdma_processing(vh_corrected, secondary_method = "MHR")
+# 5. (Optional) Apply wound correction with temporal tracking
+wood$wound_correction$drill_bit_diameter_mm <- 2.0
+wood$wound_correction$wound_addition_mm <- 0.3
+wood$wound_correction$initial_date <- "2025-01-01"
+wood$wound_correction$final_date <- "2025-12-31"
+wood$wound_correction$final_diameter_mm <- 4.5
 
-# 6. Visualise results
-plot_vh_timeseries(vh_corrected, methods = c("HRM", "MHR", "HRMXa"))
-plot_heat_pulse_trace(heat_pulse_data, vh_corrected, pulse_id = 1)
+vh_wound_corrected <- apply_wound_correction(
+  vh_corrected,
+  wood_properties = wood,
+  probe_spacing = "5mm"
+)
+
+# 6. Convert to sap flux density (Jv)
+flux_data <- apply_flux_conversion(
+  vh_wound_corrected,
+  wood_properties = wood,
+  velocity_col = "Vc_cm_hr"  # Use wound-corrected velocity
+)
+
+# 7. (Optional) Apply sDMA post-processing
+vh_sdma <- apply_sdma_processing(flux_data, secondary_method = "MHR")
+
+# 8. Visualise results
+plot_vh_timeseries(flux_data, methods = c("HRM", "MHR", "HRMXa"))
+plot_heat_pulse_trace(heat_pulse_data, flux_data, pulse_id = 1)
 plot_sdma_timeseries(vh_sdma, sdma_method = "sDMA:MHR")
 
-# 7. Export clean data only
-clean_data <- vh_corrected[vh_corrected$quality_flag == "OK", ]
-write.csv(clean_data, "sap_velocity_clean.csv", row.names = FALSE)
+# 9. Export clean data only
+clean_data <- flux_data[flux_data$quality_flag == "OK", ]
+write.csv(clean_data, "sap_flux_density_clean.csv", row.names = FALSE)
 ```
 
 ## License
