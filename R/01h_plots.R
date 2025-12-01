@@ -5,13 +5,14 @@
 #' @importFrom patchwork plot_annotation plot_layout
 NULL
 
-#' Plot Heat Pulse Trace with Calculation Windows
-#'
-#' Creates a diagnostic plot showing temperature traces for a single heat pulse
+#'#' Creates a diagnostic plot showing temperature traces for a single heat pulse#' with calculation windows and timepoints overlaid for different methods.#' Can accept either pulse_id or datetime as input.
+#
 #' with calculation windows and timepoints overlaid for different methods.
+#' Can accept either pulse_id or datetime as input.
 #'
 #' @param heat_pulse_data A heat_pulse_data object from read_heat_pulse_data()
 #' @param vh_results Results tibble from calc_heat_pulse_velocity()
+#' @param datetime POSIXct datetime or character datetime to find nearest pulse (optional if pulse_id provided)
 #' @param pulse_id Pulse ID to plot
 #' @param show_methods Character vector of methods to show windows for.
 #'   If NULL, shows all methods present in results. Default: NULL
@@ -42,7 +43,8 @@ NULL
 #' @export
 plot_heat_pulse_trace <- function(heat_pulse_data,
                                    vh_results,
-                                   pulse_id,
+                                   pulse_id = NULL,
+                                   datetime = NULL,
                                    show_methods = NULL,
                                    sensor_position = "both",
                                    pre_pulse = 30) {
@@ -67,22 +69,59 @@ plot_heat_pulse_trace <- function(heat_pulse_data,
     stop("sensor_position must be 'inner', 'outer', or 'both'")
   }
 
+  # Handle pulse_id vs datetime input
+  if (is.null(pulse_id) && is.null(datetime)) {
+    stop("Either pulse_id or datetime must be provided")
+  }
+
+  pulse_datetime <- NULL
+
+  if (!is.null(datetime)) {
+    if (is.character(datetime)) {
+      datetime <- as.POSIXct(datetime, tz = "UTC")
+    }
+    pulse_times <- heat_pulse_data$measurements %>%
+      dplyr::group_by(pulse_id) %>%
+      dplyr::summarise(datetime = dplyr::first(datetime), .groups = "drop")
+    time_diffs <- abs(as.numeric(difftime(pulse_times$datetime, datetime, units = "secs")))
+    nearest_idx <- which.min(time_diffs)
+    pulse_id <- pulse_times$pulse_id[nearest_idx]
+    pulse_datetime <- pulse_times$datetime[nearest_idx]
+    message(sprintf("Found nearest pulse: ID %d at %s (%.1f minutes from requested time)",
+                    pulse_id,
+                    format(pulse_datetime, "%Y-%m-%d %H:%M:%S"),
+                    time_diffs[nearest_idx] / 60))
+  } else {
+    pulse_datetime <- heat_pulse_data$measurements %>%
+      dplyr::filter(pulse_id == !!pulse_id) %>%
+      dplyr::pull(datetime) %>%
+      dplyr::first()
+    if (is.null(pulse_datetime) || length(pulse_datetime) == 0) {
+      stop("Pulse ID ", pulse_id, " not found in heat_pulse_data")
+    }
+  }
+
   # If "both", create side-by-side plots
   if (sensor_position == "both") {
     if (!requireNamespace("patchwork", quietly = TRUE)) {
       stop("Package 'patchwork' is required for side-by-side plots. Install with: install.packages('patchwork')")
     }
 
-    p_outer <- plot_heat_pulse_trace(heat_pulse_data, vh_results, pulse_id,
-                                      show_methods, "outer", pre_pulse)
-    p_inner <- plot_heat_pulse_trace(heat_pulse_data, vh_results, pulse_id,
-                                      show_methods, "inner", pre_pulse)
+    p_outer <- plot_heat_pulse_trace(heat_pulse_data, vh_results, pulse_id = pulse_id,
+                                      show_methods = show_methods, sensor_position = "outer", pre_pulse = pre_pulse)
+    p_inner <- plot_heat_pulse_trace(heat_pulse_data, vh_results, pulse_id = pulse_id,
+                                      show_methods = show_methods, sensor_position = "inner", pre_pulse = pre_pulse)
 
     # Combine side-by-side with shared legend
+    # Create title with both datetime and pulse_id
+    title_text <- sprintf("Heat Pulse Trace - %s (Pulse ID: %d)",
+                         format(pulse_datetime, "%Y-%m-%d %H:%M:%S"),
+                         pulse_id)
+
     combined <- (p_outer | p_inner) +
       patchwork::plot_layout(guides = "collect") +
       patchwork::plot_annotation(
-        title = paste0("Heat Pulse Trace - Pulse ID: ", pulse_id),
+        title = title_text,
         theme = ggplot2::theme(plot.title = ggplot2::element_text(face = "bold", size = 14, hjust = 0.5))
       ) &
       ggplot2::theme(legend.position = "bottom")
@@ -158,13 +197,8 @@ plot_heat_pulse_trace <- function(heat_pulse_data,
     pulse_results <- pulse_results[pulse_results$method %in% show_methods, ]
   }
 
-  # Create base plot
-  plot_title <- if (sensor_position == "both") {
-    paste0("Heat Pulse Trace - Pulse ID: ", pulse_id)
-  } else {
-    paste0(sensor_title, " - Pulse ID: ", pulse_id)
-  }
-
+  # Create title with both datetime and pulse_id
+if (sensor_position == "both") {    plot_title <- sprintf("Heat Pulse Trace - %s (Pulse ID: %d)",                         format(pulse_datetime, "%Y-%m-%d %H:%M:%S"),                         pulse_id)  } else {    plot_title <- sprintf("%s - %s (Pulse ID: %d)",                         sensor_title,                         format(pulse_datetime, "%Y-%m-%d %H:%M:%S"),                         pulse_id)  }
   p <- ggplot2::ggplot(plot_data, ggplot2::aes(x = time_sec, y = deltaT, color = sensor_label)) +
     ggplot2::geom_line(linewidth = 0.8) +
     ggplot2::geom_vline(xintercept = 0, linetype = "dashed", color = "black", linewidth = 0.5) +
@@ -217,15 +251,15 @@ plot_heat_pulse_trace <- function(heat_pulse_data,
 
       if (nrow(method_data) == 0) next
 
-      # Special handling for MHR: show both window and point
-      if (method == "MHR" && !is.na(method_data$calc_window_start_sec[1]) &&
-          !is.na(method_data$calc_window_end_sec[1])) {
+      # Special handling for MHR: mark peaks with vertical lines (NOT shaded region)
+      if (method == "MHR" && !is.na(method_data$mhr_upstream_peak_sec[1]) &&
+          !is.na(method_data$mhr_downstream_peak_sec[1])) {
 
-        window_start <- method_data$calc_window_start_sec[1]
-        window_end <- method_data$calc_window_end_sec[1]
+        upstream_peak <- method_data$mhr_upstream_peak_sec[1]
+        downstream_peak <- method_data$mhr_downstream_peak_sec[1]
 
-        # Find the deltaT value at calc_time for the downstream sensor
-        temp_at_downstream <- plot_data$deltaT[plot_data$time_sec == window_end &
+        # Find the deltaT value at downstream peak
+        temp_at_downstream <- plot_data$deltaT[plot_data$time_sec == downstream_peak &
                                            plot_data$sensor == downstream_sensor]
         if (length(temp_at_downstream) > 0) {
           temp_at_downstream <- temp_at_downstream[1]
@@ -233,8 +267,8 @@ plot_heat_pulse_trace <- function(heat_pulse_data,
           temp_at_downstream <- 0
         }
 
-        # Find the deltaT value at calc_time for the upstream sensor
-        temp_at_upstream <- plot_data$deltaT[plot_data$time_sec == window_start &
+        # Find the deltaT value at upstream peak
+        temp_at_upstream <- plot_data$deltaT[plot_data$time_sec == upstream_peak &
                                            plot_data$sensor == upstream_sensor]
         if (length(temp_at_upstream) > 0) {
           temp_at_upstream <- temp_at_upstream[1]
@@ -242,47 +276,47 @@ plot_heat_pulse_trace <- function(heat_pulse_data,
           temp_at_upstream <- 0
         }
 
-        # Add shaded window showing time span between upstream and downstream peaks
+        # MHR uses peak times, not averaging windows - visualise as vertical lines at peaks
         p <- p +
-          ggplot2::annotate("rect",
-                            xmin = window_start, xmax = window_end,
-                            ymin = -Inf, ymax = Inf,
-                            fill = "#FFA500", alpha = 0.15) +
-          ggplot2::annotate("text",
-                            x = (window_start + window_end) / 2,
-                            y = y_max * (0.85 - annotation_y_offset * 0.05),
-                            label = "MHR window",
-                            size = 3, fontface = "bold", color = "#FF8C00") +
-          # Add vertical line and point at downstream peak
+          # Vertical line at downstream peak (red/orange)
           ggplot2::annotate("segment",
-                            x = window_end, xend = window_end,
+                            x = downstream_peak, xend = downstream_peak,
                             y = 0, yend = temp_at_downstream,
-                            linetype = "dashed", color = "#FF8C00", linewidth = 0.7) +
+                            linetype = "dashed", color = "#DC143C", linewidth = 1) +
           ggplot2::annotate("point",
-                            x = window_end, y = temp_at_downstream,
-                            size = 3, color = "#FF8C00") +
-          # Add vertical line and point at upstream peak
+                            x = downstream_peak, y = temp_at_downstream,
+                            size = 4, color = "#DC143C") +
+          ggplot2::annotate("text",
+                            x = downstream_peak,
+                            y = temp_at_downstream * 1.15,
+                            label = "MHR\ndownstream\npeak",
+                            size = 2.5, fontface = "bold", color = "#DC143C", lineheight = 0.8) +
+          # Vertical line at upstream peak (green)
           ggplot2::annotate("segment",
-                          x = window_start, xend = window_start,
-                          y = 0, yend = temp_at_upstream,
-                          linetype = "dashed", color = "#FF8C00", linewidth = 0.7) +
+                            x = upstream_peak, xend = upstream_peak,
+                            y = 0, yend = temp_at_upstream,
+                            linetype = "dashed", color = "#228B22", linewidth = 1) +
           ggplot2::annotate("point",
-                            x = window_start, y = temp_at_upstream,
-                            size = 3, color = "#FF8C00")
-
+                            x = upstream_peak, y = temp_at_upstream,
+                            size = 4, color = "#228B22") +
+          ggplot2::annotate("text",
+                            x = upstream_peak,
+                            y = temp_at_upstream * 1.15,
+                            label = "MHR\nupstream\npeak",
+                            size = 2.5, fontface = "bold", color = "#228B22", lineheight = 0.8)
 
         annotation_y_offset <- annotation_y_offset + 1
 
       # Special handling for HRMXb: shows separate downstream and upstream windows
       } else if (method == "HRMXb" &&
-                 !is.na(method_data$downstream_window_start_sec[1]) &&
-                 !is.na(method_data$upstream_window_start_sec[1])) {
+                 !is.na(method_data$hrmxb_downstream_start_sec[1]) &&
+                 !is.na(method_data$hrmxb_upstream_start_sec[1])) {
 
         # HRMXb uses two separate windows: one for downstream, one for upstream
-        downstream_start <- method_data$downstream_window_start_sec[1]
-        downstream_end <- method_data$downstream_window_end_sec[1]
-        upstream_start <- method_data$upstream_window_start_sec[1]
-        upstream_end <- method_data$upstream_window_end_sec[1]
+        downstream_start <- method_data$hrmxb_downstream_start_sec[1]
+        downstream_end <- method_data$hrmxb_downstream_end_sec[1]
+        upstream_start <- method_data$hrmxb_upstream_start_sec[1]
+        upstream_end <- method_data$hrmxb_upstream_end_sec[1]
 
         # Colors for HRMXb - red for downstream, green for upstream
         fill_color_down <- "#FFB6C6"  # Light red/pink for downstream
@@ -392,32 +426,46 @@ plot_heat_pulse_trace <- function(heat_pulse_data,
         annotation_y_offset <- annotation_y_offset + 1
 
 
-      } else if (!is.na(method_data$calc_window_start_sec[1]) && !is.na(method_data$calc_window_end_sec[1])) {
-        # Windowed methods (HRM, HRMXa, HRMXb) - color-coded
-        window_start <- method_data$calc_window_start_sec[1]
-        window_end <- method_data$calc_window_end_sec[1]
+      # HRM: Averaging window (shaded region)
+      } else if (method == "HRM" &&
+                 !is.na(method_data$hrm_window_start_sec[1]) &&
+                 !is.na(method_data$hrm_window_end_sec[1])) {
 
-        # Determine color based on method
-        if (method == "HRM") {
-          fill_color <- "grey60"
-          text_color <- "black"
-          add_lines <- FALSE  # HRM doesn't get vertical lines
-        } else if (method == "HRMXa") {
-          fill_color <- "#4169E1"  # Royal blue
-          text_color <- "#0000CD"  # Medium blue
-          add_lines <- TRUE
-        } else if (method == "HRMXb") {
-          fill_color <- "#32CD32"  # Lime green
-          text_color <- "#228B22"  # Forest green
-          add_lines <- TRUE
-        } else {
-          # Fallback for any other windowed method
-          fill_color <- "grey60"
-          text_color <- "black"
-          add_lines <- FALSE
-        }
+        window_start <- method_data$hrm_window_start_sec[1]
+        window_end <- method_data$hrm_window_end_sec[1]
 
-        # Add shaded window
+        p <- p +
+          ggplot2::annotate("rect",
+                            xmin = window_start, xmax = window_end,
+                            ymin = -Inf, ymax = Inf,
+                            fill = "grey60", alpha = 0.3) +
+          ggplot2::annotate("text",
+                            x = (window_start + window_end) / 2,
+                            y = y_max * (0.85 - annotation_y_offset * 0.05),
+                            label = "HRM averaging window",
+                            size = 3, fontface = "bold", color = "black")
+
+        annotation_y_offset <- annotation_y_offset + 1
+
+      # HRMXa: Dynamic window based on temperature thresholds (shaded region)
+      } else if (method == "HRMXa" &&
+                 !is.na(method_data$hrmxa_window_start_sec[1]) &&
+                 !is.na(method_data$hrmxa_window_end_sec[1])) {
+
+        window_start <- method_data$hrmxa_window_start_sec[1]
+        window_end <- method_data$hrmxa_window_end_sec[1]
+
+        fill_color <- "#4169E1"  # Royal blue
+        text_color <- "#0000CD"  # Medium blue
+
+        # Find the maximum deltaT across all sensors at window boundaries
+        temp_at_start <- max(plot_data$deltaT[plot_data$time_sec == window_start], na.rm = TRUE)
+        if (!is.finite(temp_at_start)) temp_at_start <- 0
+
+        temp_at_end <- max(plot_data$deltaT[plot_data$time_sec == window_end], na.rm = TRUE)
+        if (!is.finite(temp_at_end)) temp_at_end <- 0
+
+        # Add shaded window with boundary markers
         p <- p +
           ggplot2::annotate("rect",
                             xmin = window_start, xmax = window_end,
@@ -426,72 +474,59 @@ plot_heat_pulse_trace <- function(heat_pulse_data,
           ggplot2::annotate("text",
                             x = (window_start + window_end) / 2,
                             y = y_max * (0.85 - annotation_y_offset * 0.05),
-                            label = paste0(method, " window"),
-                            size = 3, fontface = "bold", color = text_color)
-
-        # Add vertical lines at window boundaries for HRMXa and HRMXb
-        if (add_lines) {
-          # Find the maximum deltaT across all sensors at window_start
-          temp_at_start <- max(plot_data$deltaT[plot_data$time_sec == window_start], na.rm = TRUE)
-          if (!is.finite(temp_at_start)) temp_at_start <- 0
-
-          # Find the maximum deltaT across all sensors at window_end
-          temp_at_end <- max(plot_data$deltaT[plot_data$time_sec == window_end], na.rm = TRUE)
-          if (!is.finite(temp_at_end)) temp_at_end <- 0
-
-          p <- p +
-            ggplot2::annotate("segment",
-                              x = window_start, xend = window_start,
-                              y = 0, yend = temp_at_start,
-                              linetype = "dashed", color = text_color, linewidth = 0.7) +
-            ggplot2::annotate("point",
-                              x = window_start, y = temp_at_start,
-                              size = 3, color = text_color) +
-            ggplot2::annotate("segment",
-                              x = window_end, xend = window_end,
-                              y = 0, yend = temp_at_end,
-                              linetype = "dashed", color = text_color, linewidth = 0.7) +
-            ggplot2::annotate("point",
-                              x = window_end, y = temp_at_end,
-                              size = 3, color = text_color)
-        }
+                            label = "HRMXa window",
+                            size = 3, fontface = "bold", color = text_color) +
+          ggplot2::annotate("segment",
+                            x = window_start, xend = window_start,
+                            y = 0, yend = temp_at_start,
+                            linetype = "dashed", color = text_color, linewidth = 0.7) +
+          ggplot2::annotate("point",
+                            x = window_start, y = temp_at_start,
+                            size = 3, color = text_color) +
+          ggplot2::annotate("segment",
+                            x = window_end, xend = window_end,
+                            y = 0, yend = temp_at_end,
+                            linetype = "dashed", color = text_color, linewidth = 0.7) +
+          ggplot2::annotate("point",
+                            x = window_end, y = temp_at_end,
+                            size = 3, color = text_color)
 
         annotation_y_offset <- annotation_y_offset + 1
 
-      } else if (!is.na(method_data$calc_time_sec[1])) {
-        # Point methods (Tmax only now, since MHR handled above)
-        calc_time <- method_data$calc_time_sec[1]
+      # Tmax methods: Single peak time (vertical line)
+      } else if (method %in% c("Tmax_Coh", "Tmax_Klu") &&
+                 !is.na(method_data$tmax_peak_time_sec[1])) {
 
-        # Find the deltaT value at this time for the selected downstream sensor
-        temp_at_calc <- plot_data$deltaT[plot_data$time_sec == calc_time &
-                                           plot_data$sensor == downstream_sensor]
-        if (length(temp_at_calc) > 0) {
-          temp_at_calc <- temp_at_calc[1]
+        peak_time <- method_data$tmax_peak_time_sec[1]
+
+        # Find the deltaT value at peak time for the downstream sensor
+        temp_at_peak <- plot_data$deltaT[plot_data$time_sec == peak_time &
+                                          plot_data$sensor == downstream_sensor]
+        if (length(temp_at_peak) > 0) {
+          temp_at_peak <- temp_at_peak[1]
         } else {
-          temp_at_calc <- 0
+          temp_at_peak <- 0
         }
 
-        # Create label - use unicode for delta and subscripts
-        if (grepl("Tmax", method)) {
-          label_text <- paste0("\u0394Tmax")  # ΔTmax
-        } else {
-          label_text <- method
-        }
+        # Create label
+        label_text <- paste0(method, "\npeak")
 
         p <- p +
           ggplot2::annotate("segment",
-                            x = calc_time, xend = calc_time,
-                            y = 0, yend = temp_at_calc,
+                            x = peak_time, xend = peak_time,
+                            y = 0, yend = temp_at_peak,
                             linetype = "dashed", color = "darkgreen", linewidth = 0.7) +
           ggplot2::annotate("point",
-                            x = calc_time, y = temp_at_calc,
+                            x = peak_time, y = temp_at_peak,
                             size = 3, color = "darkgreen") +
           ggplot2::annotate("text",
-                            x = calc_time,
-                            y = temp_at_calc * 1.08,
+                            x = peak_time,
+                            y = temp_at_peak * 1.08,
                             label = label_text,
                             size = 3, fontface = "bold",
-                            color = "darkgreen")
+                            color = "darkgreen", lineheight = 0.8)
+
+        annotation_y_offset <- annotation_y_offset + 1
       }
     }
   }

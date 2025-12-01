@@ -91,13 +91,20 @@ A tibble containing calculated heat pulse velocities with columns:
 \item{method}{Calculation method used (e.g., "HRM", "MHR")}
 \item{sensor_position}{Inner or outer sensor position}
 \item{Vh_cm_hr}{Heat pulse velocity in cm/hr}
-\item{temp_ratio}{Temperature ratio used in calculation. For HRM/MHR/HRMX: v1/v2 ratio. NA for Tmax methods (which use calc_time_sec instead). This enables efficient recalculation with different thermal diffusivity values.}
-\item{calc_window_start_sec}{Start of calculation window (seconds after pulse). For HRM and HRMX: averaging window start. For MHR: time when upstream sensor reaches maximum. NA for Tmax methods.}
-\item{calc_window_end_sec}{End of calculation window (seconds after pulse). For HRM and HRMX: averaging window end. For MHR: time when downstream sensor reaches maximum. NA for Tmax methods.}
-\item{calc_time_sec}{Specific time of calculation (seconds after pulse). For Tmax methods: time to peak. For MHR: time when downstream sensor reaches maximum. NA for HRM/HRMX.}
-\item{peclet_number}{Peclet number (dimensionless) for HRM results. Pe = (Vh × x) / (D × 3600). Used for method switching in apply_sdma_processing(). NA for non-HRM methods.}
-\item{selected_method}{Reserved for future use (currently NA for all methods)}
+\item{temp_ratio}{Temperature ratio used in calculation. For HRM/MHR/HRMX: v1/v2 ratio. NA for Tmax methods. Enables efficient recalculation with different thermal diffusivity values.}
 \item{quality_flag}{Data quality indicator}
+\item{hrm_window_start_sec}{HRM: Start of averaging window (seconds after pulse). NA for other methods.}
+\item{hrm_window_end_sec}{HRM: End of averaging window (seconds after pulse). NA for other methods.}
+\item{hrm_peclet_number}{HRM: Peclet number (dimensionless). Pe = (Vh × x) / (D × 3600). Used for method switching. NA for other methods.}
+\item{mhr_upstream_peak_sec}{MHR: Time when upstream sensor reaches maximum (seconds after pulse). NA for other methods.}
+\item{mhr_downstream_peak_sec}{MHR: Time when downstream sensor reaches maximum (seconds after pulse). NA for other methods.}
+\item{hrmxa_window_start_sec}{HRMXa: Start of dynamic sampling window based on L threshold (seconds after pulse). NA for other methods.}
+\item{hrmxa_window_end_sec}{HRMXa: End of dynamic sampling window based on H threshold (seconds after pulse). NA for other methods.}
+\item{hrmxb_downstream_start_sec}{HRMXb: Start of downstream sensor sampling window (seconds after pulse). NA for other methods.}
+\item{hrmxb_downstream_end_sec}{HRMXb: End of downstream sensor sampling window (seconds after pulse). NA for other methods.}
+\item{hrmxb_upstream_start_sec}{HRMXb: Start of upstream sensor sampling window (seconds after pulse). NA for other methods.}
+\item{hrmxb_upstream_end_sec}{HRMXb: End of upstream sensor sampling window (seconds after pulse). NA for other methods.}
+\item{tmax_peak_time_sec}{Tmax (Coh/Klu): Time to downstream temperature peak (seconds after pulse). NA for other methods.}
 }
 \description{
 Calculates heat pulse velocity (Vh) from heat pulse temperature data using multiple methods

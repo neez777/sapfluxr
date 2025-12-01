@@ -2,12 +2,15 @@
 % Please edit documentation in R/01h_plots.R
 \name{plot_heat_pulse_trace}
 \alias{plot_heat_pulse_trace}
-\title{Plot Heat Pulse Trace with Calculation Windows}
+\title{#' Creates a diagnostic plot showing temperature traces for a single heat pulse#' with calculation windows and timepoints overlaid for different methods.#' Can accept either pulse_id or datetime as input.
+with calculation windows and timepoints overlaid for different methods.
+Can accept either pulse_id or datetime as input.}
 \usage{
 plot_heat_pulse_trace(
   heat_pulse_data,
   vh_results,
-  pulse_id,
+  pulse_id = NULL,
+  datetime = NULL,
   show_methods = NULL,
   sensor_position = "both",
   pre_pulse = 30
@@ -19,6 +22,8 @@ plot_heat_pulse_trace(
 \item{vh_results}{Results tibble from calc_heat_pulse_velocity()}
 
 \item{pulse_id}{Pulse ID to plot}
+
+\item{datetime}{POSIXct datetime or character datetime to find nearest pulse (optional if pulse_id provided)}
 
 \item{show_methods}{Character vector of methods to show windows for.
 If NULL, shows all methods present in results. Default: NULL}
@@ -32,8 +37,9 @@ If "both" (default), creates side-by-side plots for comparison. Default: "both"}
 A ggplot2 object (single plot) or patchwork object (side-by-side plots)
 }
 \description{
-Creates a diagnostic plot showing temperature traces for a single heat pulse
+#' Creates a diagnostic plot showing temperature traces for a single heat pulse#' with calculation windows and timepoints overlaid for different methods.#' Can accept either pulse_id or datetime as input.
 with calculation windows and timepoints overlaid for different methods.
+Can accept either pulse_id or datetime as input.
 }
 \examples{
 \dontrun{

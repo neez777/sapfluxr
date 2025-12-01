@@ -71,13 +71,20 @@
 #'   \item{method}{Calculation method used (e.g., "HRM", "MHR")}
 #'   \item{sensor_position}{Inner or outer sensor position}
 #'   \item{Vh_cm_hr}{Heat pulse velocity in cm/hr}
-#'   \item{temp_ratio}{Temperature ratio used in calculation. For HRM/MHR/HRMX: v1/v2 ratio. NA for Tmax methods (which use calc_time_sec instead). This enables efficient recalculation with different thermal diffusivity values.}
-#'   \item{calc_window_start_sec}{Start of calculation window (seconds after pulse). For HRM and HRMX: averaging window start. For MHR: time when upstream sensor reaches maximum. NA for Tmax methods.}
-#'   \item{calc_window_end_sec}{End of calculation window (seconds after pulse). For HRM and HRMX: averaging window end. For MHR: time when downstream sensor reaches maximum. NA for Tmax methods.}
-#'   \item{calc_time_sec}{Specific time of calculation (seconds after pulse). For Tmax methods: time to peak. For MHR: time when downstream sensor reaches maximum. NA for HRM/HRMX.}
-#'   \item{peclet_number}{Peclet number (dimensionless) for HRM results. Pe = (Vh × x) / (D × 3600). Used for method switching in apply_sdma_processing(). NA for non-HRM methods.}
-#'   \item{selected_method}{Reserved for future use (currently NA for all methods)}
+#'   \item{temp_ratio}{Temperature ratio used in calculation. For HRM/MHR/HRMX: v1/v2 ratio. NA for Tmax methods. Enables efficient recalculation with different thermal diffusivity values.}
 #'   \item{quality_flag}{Data quality indicator}
+#'   \item{hrm_window_start_sec}{HRM: Start of averaging window (seconds after pulse). NA for other methods.}
+#'   \item{hrm_window_end_sec}{HRM: End of averaging window (seconds after pulse). NA for other methods.}
+#'   \item{hrm_peclet_number}{HRM: Peclet number (dimensionless). Pe = (Vh × x) / (D × 3600). Used for method switching. NA for other methods.}
+#'   \item{mhr_upstream_peak_sec}{MHR: Time when upstream sensor reaches maximum (seconds after pulse). NA for other methods.}
+#'   \item{mhr_downstream_peak_sec}{MHR: Time when downstream sensor reaches maximum (seconds after pulse). NA for other methods.}
+#'   \item{hrmxa_window_start_sec}{HRMXa: Start of dynamic sampling window based on L threshold (seconds after pulse). NA for other methods.}
+#'   \item{hrmxa_window_end_sec}{HRMXa: End of dynamic sampling window based on H threshold (seconds after pulse). NA for other methods.}
+#'   \item{hrmxb_downstream_start_sec}{HRMXb: Start of downstream sensor sampling window (seconds after pulse). NA for other methods.}
+#'   \item{hrmxb_downstream_end_sec}{HRMXb: End of downstream sensor sampling window (seconds after pulse). NA for other methods.}
+#'   \item{hrmxb_upstream_start_sec}{HRMXb: Start of upstream sensor sampling window (seconds after pulse). NA for other methods.}
+#'   \item{hrmxb_upstream_end_sec}{HRMXb: End of upstream sensor sampling window (seconds after pulse). NA for other methods.}
+#'   \item{tmax_peak_time_sec}{Tmax (Coh/Klu): Time to downstream temperature peak (seconds after pulse). NA for other methods.}
 #'
 #' @examples
 #' \dontrun{
@@ -554,15 +561,24 @@ calc_vh_single_pulse <- function(pulse_data, pulse_id, parameters, methods, plot
   res_sensor_position <- character(n_results)
   res_Vh_cm_hr <- numeric(n_results)
   res_temp_ratio <- numeric(n_results)
-  res_calc_window_start <- numeric(n_results)
-  res_calc_window_end <- numeric(n_results)
-  res_calc_time <- numeric(n_results)
-  res_peclet_number <- numeric(n_results)
-  res_selected_method <- rep(NA_character_, n_results)
-  res_downstream_start <- numeric(n_results)
-  res_downstream_end <- numeric(n_results)
-  res_upstream_start <- numeric(n_results)
-  res_upstream_end <- numeric(n_results)
+
+  # Method-specific window columns (explicit naming)
+  res_hrm_window_start <- rep(NA_real_, n_results)
+  res_hrm_window_end <- rep(NA_real_, n_results)
+  res_hrm_peclet_number <- rep(NA_real_, n_results)
+
+  res_mhr_upstream_peak <- rep(NA_real_, n_results)
+  res_mhr_downstream_peak <- rep(NA_real_, n_results)
+
+  res_hrmxa_window_start <- rep(NA_real_, n_results)
+  res_hrmxa_window_end <- rep(NA_real_, n_results)
+
+  res_hrmxb_downstream_start <- rep(NA_real_, n_results)
+  res_hrmxb_downstream_end <- rep(NA_real_, n_results)
+  res_hrmxb_upstream_start <- rep(NA_real_, n_results)
+  res_hrmxb_upstream_end <- rep(NA_real_, n_results)
+
+  res_tmax_peak_time <- rep(NA_real_, n_results)
 
   # Fill in results (2 rows per method: outer and inner)
   idx <- 1
@@ -574,14 +590,27 @@ calc_vh_single_pulse <- function(pulse_data, pulse_id, parameters, methods, plot
     res_sensor_position[idx] <- "outer"
     res_Vh_cm_hr[idx] <- method_result$outer
     res_temp_ratio[idx] <- if (is.null(method_result$temp_ratio_outer)) NA_real_ else method_result$temp_ratio_outer
-    res_calc_window_start[idx] <- method_result$window_start_outer
-    res_calc_window_end[idx] <- method_result$window_end_outer
-    res_calc_time[idx] <- method_result$calc_time_outer
-    res_peclet_number[idx] <- if (is.null(method_result$peclet_outer)) NA_real_ else method_result$peclet_outer
-    res_downstream_start[idx] <- if (is.null(method_result$downstream_window_start_outer)) NA_real_ else method_result$downstream_window_start_outer
-    res_downstream_end[idx] <- if (is.null(method_result$downstream_window_end_outer)) NA_real_ else method_result$downstream_window_end_outer
-    res_upstream_start[idx] <- if (is.null(method_result$upstream_window_start_outer)) NA_real_ else method_result$upstream_window_start_outer
-    res_upstream_end[idx] <- if (is.null(method_result$upstream_window_end_outer)) NA_real_ else method_result$upstream_window_end_outer
+
+    # Populate method-specific window columns
+    if (method_name == "HRM") {
+      res_hrm_window_start[idx] <- method_result$window_start_outer
+      res_hrm_window_end[idx] <- method_result$window_end_outer
+      res_hrm_peclet_number[idx] <- if (is.null(method_result$peclet_outer)) NA_real_ else method_result$peclet_outer
+    } else if (method_name == "MHR") {
+      res_mhr_upstream_peak[idx] <- method_result$window_start_outer
+      res_mhr_downstream_peak[idx] <- method_result$window_end_outer
+    } else if (method_name == "HRMXa") {
+      res_hrmxa_window_start[idx] <- method_result$window_start_outer
+      res_hrmxa_window_end[idx] <- method_result$window_end_outer
+    } else if (method_name == "HRMXb") {
+      res_hrmxb_downstream_start[idx] <- if (is.null(method_result$downstream_window_start_outer)) NA_real_ else method_result$downstream_window_start_outer
+      res_hrmxb_downstream_end[idx] <- if (is.null(method_result$downstream_window_end_outer)) NA_real_ else method_result$downstream_window_end_outer
+      res_hrmxb_upstream_start[idx] <- if (is.null(method_result$upstream_window_start_outer)) NA_real_ else method_result$upstream_window_start_outer
+      res_hrmxb_upstream_end[idx] <- if (is.null(method_result$upstream_window_end_outer)) NA_real_ else method_result$upstream_window_end_outer
+    } else if (method_name %in% c("Tmax_Coh", "Tmax_Klu")) {
+      res_tmax_peak_time[idx] <- method_result$calc_time_outer
+    }
+
     idx <- idx + 1
 
     # Inner sensor
@@ -589,14 +618,27 @@ calc_vh_single_pulse <- function(pulse_data, pulse_id, parameters, methods, plot
     res_sensor_position[idx] <- "inner"
     res_Vh_cm_hr[idx] <- method_result$inner
     res_temp_ratio[idx] <- if (is.null(method_result$temp_ratio_inner)) NA_real_ else method_result$temp_ratio_inner
-    res_calc_window_start[idx] <- method_result$window_start_inner
-    res_calc_window_end[idx] <- method_result$window_end_inner
-    res_calc_time[idx] <- method_result$calc_time_inner
-    res_peclet_number[idx] <- if (is.null(method_result$peclet_inner)) NA_real_ else method_result$peclet_inner
-    res_downstream_start[idx] <- if (is.null(method_result$downstream_window_start_inner)) NA_real_ else method_result$downstream_window_start_inner
-    res_downstream_end[idx] <- if (is.null(method_result$downstream_window_end_inner)) NA_real_ else method_result$downstream_window_end_inner
-    res_upstream_start[idx] <- if (is.null(method_result$upstream_window_start_inner)) NA_real_ else method_result$upstream_window_start_inner
-    res_upstream_end[idx] <- if (is.null(method_result$upstream_window_end_inner)) NA_real_ else method_result$upstream_window_end_inner
+
+    # Populate method-specific window columns
+    if (method_name == "HRM") {
+      res_hrm_window_start[idx] <- method_result$window_start_inner
+      res_hrm_window_end[idx] <- method_result$window_end_inner
+      res_hrm_peclet_number[idx] <- if (is.null(method_result$peclet_inner)) NA_real_ else method_result$peclet_inner
+    } else if (method_name == "MHR") {
+      res_mhr_upstream_peak[idx] <- method_result$window_start_inner
+      res_mhr_downstream_peak[idx] <- method_result$window_end_inner
+    } else if (method_name == "HRMXa") {
+      res_hrmxa_window_start[idx] <- method_result$window_start_inner
+      res_hrmxa_window_end[idx] <- method_result$window_end_inner
+    } else if (method_name == "HRMXb") {
+      res_hrmxb_downstream_start[idx] <- if (is.null(method_result$downstream_window_start_inner)) NA_real_ else method_result$downstream_window_start_inner
+      res_hrmxb_downstream_end[idx] <- if (is.null(method_result$downstream_window_end_inner)) NA_real_ else method_result$downstream_window_end_inner
+      res_hrmxb_upstream_start[idx] <- if (is.null(method_result$upstream_window_start_inner)) NA_real_ else method_result$upstream_window_start_inner
+      res_hrmxb_upstream_end[idx] <- if (is.null(method_result$upstream_window_end_inner)) NA_real_ else method_result$upstream_window_end_inner
+    } else if (method_name %in% c("Tmax_Coh", "Tmax_Klu")) {
+      res_tmax_peak_time[idx] <- method_result$calc_time_inner
+    }
+
     idx <- idx + 1
   }
 
@@ -608,15 +650,25 @@ calc_vh_single_pulse <- function(pulse_data, pulse_id, parameters, methods, plot
     sensor_position = res_sensor_position,
     Vh_cm_hr = res_Vh_cm_hr,
     temp_ratio = res_temp_ratio,
-    calc_window_start_sec = res_calc_window_start,
-    calc_window_end_sec = res_calc_window_end,
-    calc_time_sec = res_calc_time,
-    peclet_number = res_peclet_number,
-    selected_method = res_selected_method,
-    downstream_window_start_sec = res_downstream_start,
-    downstream_window_end_sec = res_downstream_end,
-    upstream_window_start_sec = res_upstream_start,
-    upstream_window_end_sec = res_upstream_end,
+
+    # Method-specific window columns (explicit naming eliminates ambiguity)
+    hrm_window_start_sec = res_hrm_window_start,
+    hrm_window_end_sec = res_hrm_window_end,
+    hrm_peclet_number = res_hrm_peclet_number,
+
+    mhr_upstream_peak_sec = res_mhr_upstream_peak,
+    mhr_downstream_peak_sec = res_mhr_downstream_peak,
+
+    hrmxa_window_start_sec = res_hrmxa_window_start,
+    hrmxa_window_end_sec = res_hrmxa_window_end,
+
+    hrmxb_downstream_start_sec = res_hrmxb_downstream_start,
+    hrmxb_downstream_end_sec = res_hrmxb_downstream_end,
+    hrmxb_upstream_start_sec = res_hrmxb_upstream_start,
+    hrmxb_upstream_end_sec = res_hrmxb_upstream_end,
+
+    tmax_peak_time_sec = res_tmax_peak_time,
+
     stringsAsFactors = FALSE
   )
 

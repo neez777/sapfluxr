@@ -384,10 +384,8 @@ detect_and_fill_missing_pulse_timestamps <- function(measurements,
   has_non_na_pulse_id <- has_pulse_id && any(!is.na(measurements$pulse_id))
 
   if (verbose) {
-    message(sprintf("    DEBUG: Has pulse_id column: %s", has_pulse_id))
-    message(sprintf("    DEBUG: Has non-NA pulse_ids: %s", has_non_na_pulse_id))
     if (has_pulse_id) {
-      message(sprintf("    DEBUG: Non-NA pulse_id count: %d / %d",
+      message(sprintf("Dataset contains %d measurements with pulse_id out of %d total measurements",
                      sum(!is.na(measurements$pulse_id)), nrow(measurements)))
     }
   }
@@ -406,7 +404,7 @@ detect_and_fill_missing_pulse_timestamps <- function(measurements,
 
     if (verbose) {
       message(sprintf("    Working with %d pulses (pulse-level detection)", nrow(pulse_times)))
-      message(sprintf("    DEBUG: First 5 pulse times: %s",
+      message(sprintf("    First 5 pulse times: %s",
                      paste(format(head(unique_datetimes, 5)), collapse = ", ")))
     }
   } else {
@@ -492,7 +490,6 @@ detect_and_fill_missing_pulse_timestamps <- function(measurements,
     if (is.na(expected_interval_hours) || expected_interval_hours <= 0) {
       # Debug output to help diagnose the issue
       if (verbose) {
-        message("    DEBUG: Interval detection failed")
         message("      Number of unique datetimes: ", length(unique_datetimes))
         message("      Number of time differences: ", length(time_diffs))
         message("      Time diff range: ", min(time_diffs, na.rm = TRUE), " to ", max(time_diffs, na.rm = TRUE), " hours")
@@ -528,8 +525,7 @@ detect_and_fill_missing_pulse_timestamps <- function(measurements,
   gap_counter <- 0
 
   if (verbose) {
-    message(sprintf("    DEBUG: Checking %d consecutive pulse pairs for gaps", length(actual_times) - 1))
-    message(sprintf("    DEBUG: Gap threshold: %.2f hours (%.1f minutes)",
+    message(sprintf("    Detection tolerance: %.1f hours (%.0f minutes)",
                    expected_interval_hours * 1.5, expected_interval_hours * 1.5 * 60))
   }
 
@@ -549,7 +545,7 @@ detect_and_fill_missing_pulse_timestamps <- function(measurements,
       n_gaps_found <- n_gaps_found + 1
 
       if (verbose && n_gaps_found <= 5) {  # Only show first 5 gaps
-        message(sprintf("    DEBUG: Gap #%d found - %.2f hours between %s and %s",
+        message(sprintf("      Gap %d: %.1f hours between %s and %s",
                        n_gaps_found, gap_duration_hours,
                        format(time_A, "%Y-%m-%d %H:%M:%S"),
                        format(time_B, "%Y-%m-%d %H:%M:%S")))
@@ -616,7 +612,6 @@ detect_and_fill_missing_pulse_timestamps <- function(measurements,
   n_expected <- n_actual + n_filled
 
   if (verbose) {
-    message(sprintf("    DEBUG: Gap detection complete"))
     message(sprintf("      Gaps found: %d", length(gap_info)))
     message(sprintf("      Missing pulses (total): %d", n_missing_total))
     message(sprintf("      Missing pulses (filled): %d", n_filled))

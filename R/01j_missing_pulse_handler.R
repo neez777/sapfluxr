@@ -1,4 +1,4 @@
-# R/01a_missing_pulse_handler.R
+# R/01j_missing_pulse_handler.R
 # Functions for detecting and handling missing pulses in diagnostic data
 
 #' Detect Missing Pulses in Diagnostic Data
@@ -185,4 +185,100 @@ apply_pulse_ids_to_measurements <- function(measurements, original_diagnostics, 
 
   cat("    Measurements update complete!\n")
   result
+}
+# R/01e_missing_pulse_results.R
+# Helper for creating placeholder results for missing pulses
+
+#' Create Placeholder Results for Missing Pulses
+#'
+#' When diagnostics indicate a missing pulse (is_missing_pulse = TRUE),
+#' create result rows with NA values and DATA_MISSING flag.
+#'
+#' @param diagnostics Diagnostics tibble with is_missing_pulse column
+#' @param methods Character vector of methods to calculate
+#' @return Tibble with placeholder results for missing pulses
+#' @keywords internal
+create_missing_pulse_results <- function(diagnostics, methods) {
+
+  # Find missing pulses
+  missing_pulses <- diagnostics %>%
+    dplyr::filter(is_missing_pulse)
+
+  if (nrow(missing_pulses) == 0) {
+    return(NULL)
+  }
+
+  # Create placeholder rows for each missing pulse × method × sensor
+  results_list <- vector("list", nrow(missing_pulses) * length(methods) * 2)
+  idx <- 1
+
+  for (i in seq_len(nrow(missing_pulses))) {
+    pulse_row <- missing_pulses[i, ]
+
+    for (method in methods) {
+      # Outer sensor
+      results_list[[idx]] <- tibble::tibble(
+        datetime = pulse_row$datetime,
+        pulse_id = pulse_row$pulse_id,
+        method = method,
+        sensor_position = "outer",
+        Vh_cm_hr = NA_real_,
+        temp_ratio = NA_real_,
+
+        # Method-specific window columns (all NA for missing pulses)
+        hrm_window_start_sec = NA_real_,
+        hrm_window_end_sec = NA_real_,
+        hrm_peclet_number = NA_real_,
+
+        mhr_upstream_peak_sec = NA_real_,
+        mhr_downstream_peak_sec = NA_real_,
+
+        hrmxa_window_start_sec = NA_real_,
+        hrmxa_window_end_sec = NA_real_,
+
+        hrmxb_downstream_start_sec = NA_real_,
+        hrmxb_downstream_end_sec = NA_real_,
+        hrmxb_upstream_start_sec = NA_real_,
+        hrmxb_upstream_end_sec = NA_real_,
+
+        tmax_peak_time_sec = NA_real_,
+
+        quality_flag = "DATA_MISSING"
+      )
+      idx <- idx + 1
+
+      # Inner sensor
+      results_list[[idx]] <- tibble::tibble(
+        datetime = pulse_row$datetime,
+        pulse_id = pulse_row$pulse_id,
+        method = method,
+        sensor_position = "inner",
+        Vh_cm_hr = NA_real_,
+        temp_ratio = NA_real_,
+
+        # Method-specific window columns (all NA for missing pulses)
+        hrm_window_start_sec = NA_real_,
+        hrm_window_end_sec = NA_real_,
+        hrm_peclet_number = NA_real_,
+
+        mhr_upstream_peak_sec = NA_real_,
+        mhr_downstream_peak_sec = NA_real_,
+
+        hrmxa_window_start_sec = NA_real_,
+        hrmxa_window_end_sec = NA_real_,
+
+        hrmxb_downstream_start_sec = NA_real_,
+        hrmxb_downstream_end_sec = NA_real_,
+        hrmxb_upstream_start_sec = NA_real_,
+        hrmxb_upstream_end_sec = NA_real_,
+
+        tmax_peak_time_sec = NA_real_,
+
+        quality_flag = "DATA_MISSING"
+      )
+      idx <- idx + 1
+    }
+  }
+
+  dplyr::bind_rows(results_list)
 }
