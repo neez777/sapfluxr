@@ -1,4 +1,4 @@
-# R/02c_wood_properties_calculations.R
+# R/02b_wood_calculations.R
 # Wood Properties Calculation Functions
 # Calculates derived thermal and physical properties from measurements
 

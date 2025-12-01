@@ -1,4 +1,4 @@
-# ==============================================================================
+# R/04b_sdma_methods.R
 # R/04j_sdma_methods.R
 #
 # PARKED FOR FUTURE IMPLEMENTATION
@@ -13,12 +13,20 @@
 # the active workflow to allow implementation of earlier steps (wound correction,
 # quality control, etc.) without entanglement.
 #
+# IMPORTANT: Column Structure Update Needed (2025-12-01)
+# This file uses OLD generic column names (peclet_number, calc_window_start_sec, etc.).
+# When re-integrating, update to use NEW method-specific columns:
+#   - peclet_number → hrm_peclet_number
+#   - calc_window_start_sec → method-specific columns (hrm_window_start_sec, etc.)
+#   - See 01e_heat_pulse_velocity_core.R for current vh_results schema
+#
 # When ready to re-integrate:
-# 1. Verify it works with corrected velocities (Vc) not just raw (Vh)
-# 2. Update documentation examples
-# 3. Re-add to NAMESPACE (currently commented out)
-# 4. Add UI elements back to Shiny app (currently disabled)
-# 5. Test with full workflow
+# 1. Update to use new method-specific column names (CRITICAL)
+# 2. Verify it works with corrected velocities (Vc) not just raw (Vh)
+# 3. Update documentation examples
+# 4. Re-add to NAMESPACE (currently commented out)
+# 5. Add UI elements back to Shiny app (currently disabled)
+# 6. Test with full workflow
 #
 # Original extraction date: 2025
 # Original location: R/01e_heat_pulse_velocity_core.R (lines 1288-1730)
@@ -115,13 +123,13 @@ apply_sdma_processing <- function(vh_results,
 
   # Check that HRM has Peclet numbers
   hrm_data <- vh_results[vh_results$method == "HRM", ]
-  if (all(is.na(hrm_data$peclet_number))) {
+  if (all(is.na(hrm_data$hrm_peclet_number))) {
     stop("HRM results do not contain Peclet numbers.\n",
          "  This may be from an older version. Please recalculate HRM results.")
   }
 
   # Check Peclet number range to determine if sDMA is necessary
-  max_peclet <- max(hrm_data$peclet_number, na.rm = TRUE)
+  max_peclet <- max(hrm_data$hrm_peclet_number, na.rm = TRUE)
 
   if (!is.na(max_peclet) && max_peclet <= 1.0) {
     # All Peclet numbers are <= 1, so sDMA would never switch to secondary method

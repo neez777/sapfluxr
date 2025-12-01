@@ -1,5 +1,5 @@
-# R/03d_spacing_correction_enhanced.R
-# Enhanced Spacing Correction Functions
+# R/03j_spacing_both_sensors.R
+# Spacing Correction for Both Sensors Simultaneously
 # Handles both sensors with same segments, junction smoothing (HRM only)
 
 #' Enhanced Spacing Correction Functions
