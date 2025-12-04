@@ -63,17 +63,38 @@ graph TB
     SDMA3 --> SDMAOut[sDMA Velocity<br/>with selected_method column]
     SDMA4 --> SDMAOut
 
-    SDMAOut --> Correct
-    Correct[Apply Corrections] --> Space{Probe Spacing<br/>Correction Needed?}
-    Space -->|Yes| SpaceCorr[Measure at Zero Flow<br/>Calculate probe_spacing_corrected]
-    Space -->|No| Wound
-    SpaceCorr --> Wound{Wound<br/>Correction?}
+    SDMAOut --> DataStructure
+    DataStructure[Initialize Hybrid Structure<br/>Vh_cm_hr_raw preserved<br/>Vh_cm_hr = current pointer] --> CorrectionPath{Choose<br/>Correction Path}
 
-    Wound -->|Yes| WoundCorr[Apply polynomial wound correction]
-    Wound -->|No| Convert
-    WoundCorr --> Convert[Convert to Sap Flux Density<br/>sap_flux_density = f moisture_content, Vh]
+    CorrectionPath -->|Path A: Universal| ZeroFlow[Zero-Flow Offset Correction<br/>apply_zero_flow_offset<br/>Define zero-flow periods<br/>Calculate mean offset]
+    CorrectionPath -->|Path B: HRM-Specific| SpaceCorr
 
-    Convert --> Output[(Output Results<br/>Vh by method, depth,<br/>timestamp, diagnostics,<br/>quality flags)]
+    ZeroFlow --> ZFValidate[Create Vh_cm_hr_zf<br/>Update pointer<br/>Store offset results]
+    ZFValidate --> ZFWound{Apply Wound<br/>Correction?}
+
+    SpaceCorr[Spacing Correction Workflow<br/>apply_spacing_correction_workflow<br/>HRM only] --> SCDetect[Detect Zero-Flow Offset<br/>From defined periods]
+    SCDetect --> SCValidate{Validate Offset<br/>≤ Physical Limit?}
+    SCValidate -->|Yes: Valid| SCApply[Apply Burgess Correction<br/>Lookup coefficients B, C<br/>Create Vh_cm_hr_sc]
+    SCValidate -->|No: Invalid| SCFallback[Fallback to Linear Offset<br/>Create Vh_cm_hr_zf<br/>Offset > max physical]
+
+    SCApply --> SCWound{Apply Wound<br/>Correction?}
+    SCFallback --> ZFWound
+
+    ZFWound -->|Yes| ZFWoundCorr[Wound Correction<br/>apply_wound_correction<br/>Input: Vh_cm_hr_zf<br/>Output: Vh_cm_hr_zf_wc]
+    ZFWound -->|No| Convert
+
+    SCWound -->|Yes| SCWoundCorr[Wound Correction<br/>apply_wound_correction<br/>Input: Vh_cm_hr_sc<br/>Output: Vh_cm_hr_sc_wc]
+    SCWound -->|No| Convert
+
+    ZFWoundCorr --> WCUpdate1[Update pointer<br/>Vh_cm_hr → Vh_cm_hr_zf_wc<br/>Track correction history]
+    SCWoundCorr --> WCUpdate2[Update pointer<br/>Vh_cm_hr → Vh_cm_hr_sc_wc<br/>Track correction history]
+
+    WCUpdate1 --> Convert
+    WCUpdate2 --> Convert
+
+    Convert[Convert to Sap Flux Density<br/>sap_flux_density = f moisture_content, Vh<br/>Uses current Vh_cm_hr pointer]
+
+    Convert --> Output[(Output Results<br/>All correction stages preserved:<br/>Vh_cm_hr_raw, Vh_cm_hr_zf, Vh_cm_hr_sc,<br/>Vh_cm_hr_*_wc, Vh_cm_hr current,<br/>metadata attributes)]
 
     style Start fill:#e1f5ff
     style Output fill:#ffe1e1
@@ -83,5 +104,8 @@ graph TB
     style ClockDrift fill:#ffe1ff
     style QualityControl fill:#ffe1e1
     style PostProcess fill:#fff4e1
-    style Space fill:#e1ffe1
-    style Wound fill:#e1ffe1
+    style CorrectionPath fill:#fff4e1
+    style SCValidate fill:#fff4e1
+    style ZFWound fill:#e1ffe1
+    style SCWound fill:#e1ffe1
+    style DataStructure fill:#e1ffe1
