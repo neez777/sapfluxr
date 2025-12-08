@@ -186,7 +186,7 @@ calc_hrmx_cpp <- function(deltaT_do, deltaT_di, deltaT_uo, deltaT_ui, dTratio_do
 #' @return Integer vector of outlier indices (1-based for R compatibility)
 #'
 #' @details
-#' For each point i, calculates mean and SD of window [(i-window):(i+window)].
+#' For each point i, calculates mean and SD of window `(i-window):(i+window)`.
 #' Points deviating by more than threshold × SD from the local mean are flagged.
 #'
 #' **Performance:** O(n × window) but with fast C++ loops and minimal overhead.
