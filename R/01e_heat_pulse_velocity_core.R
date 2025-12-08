@@ -157,8 +157,18 @@ calc_heat_pulse_velocity <- function(heat_pulse_data,
   # Otherwise assume wood_properties is already a WoodProperties object
 
   # Build default parameters from configurations
+  # IMPORTANT: Prefer actual thermal diffusivity if calculated from measurements
+  # Otherwise fall back to default assumed value
+  if (!is.null(wood_properties$derived_properties$thermal_diffusivity_actual_cm2_s)) {
+    k_value <- wood_properties$derived_properties$thermal_diffusivity_actual_cm2_s
+    k_source <- "calculated from wood measurements"
+  } else {
+    k_value <- wood_properties$wood_constants$thermal_diffusivity_default_cm2_s
+    k_source <- "default (assumed value)"
+  }
+
   default_params <- list(
-    diffusivity = wood_properties$wood_constants$thermal_diffusivity_default_cm2_s,  # From wood properties
+    diffusivity = k_value,  # Prefer actual k from measurements, or use default
     probe_spacing = probe_config$required_parameters$x,  # From probe config
     tp_1 = probe_config$heat_pulse_duration,            # From probe config (NEW!)
     L = 0.5,               # Lower proportion of deltaTmax for HRMX
@@ -208,7 +218,8 @@ calc_heat_pulse_velocity <- function(heat_pulse_data,
       wood_properties = wood_properties,
       params = params,
       methods = methods,
-      n_pulses = length(pulse_ids)
+      n_pulses = length(pulse_ids),
+      k_source = k_source  # Pass k source info
     )
 
     if (!confirmed) {
@@ -436,6 +447,10 @@ calc_heat_pulse_velocity_internal <- function(measurements_by_pulse, pulse_ids, 
   attr(combined_results, "diffusivity") <- params$diffusivity
   attr(combined_results, "probe_spacing") <- params$probe_spacing
 
+  # Track correction history (starts with none applied)
+  attr(combined_results, "current_vh_column") <- "Vh_cm_hr_raw"
+  attr(combined_results, "corrections_applied") <- character(0)
+
   return(combined_results)
 }
 
@@ -648,7 +663,8 @@ calc_vh_single_pulse <- function(pulse_data, pulse_id, parameters, methods, plot
     pulse_id = res_pulse_id,
     method = res_method,
     sensor_position = res_sensor_position,
-    Vh_cm_hr = res_Vh_cm_hr,
+    Vh_cm_hr_raw = res_Vh_cm_hr,  # Raw uncorrected values
+    Vh_cm_hr = res_Vh_cm_hr,      # "Current" pointer (starts as copy of raw)
     temp_ratio = res_temp_ratio,
 
     # Method-specific window columns (explicit naming eliminates ambiguity)

@@ -222,6 +222,7 @@ create_missing_pulse_results <- function(diagnostics, methods) {
         pulse_id = pulse_row$pulse_id,
         method = method,
         sensor_position = "outer",
+        Vh_cm_hr_raw = NA_real_,
         Vh_cm_hr = NA_real_,
         temp_ratio = NA_real_,
 
@@ -253,6 +254,7 @@ create_missing_pulse_results <- function(diagnostics, methods) {
         pulse_id = pulse_row$pulse_id,
         method = method,
         sensor_position = "inner",
+        Vh_cm_hr_raw = NA_real_,
         Vh_cm_hr = NA_real_,
         temp_ratio = NA_real_,
 

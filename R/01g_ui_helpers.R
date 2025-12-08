@@ -10,7 +10,7 @@
 #' @param n_pulses Number of pulses to process
 #' @return Character string with formatted summary
 #' @keywords internal
-format_parameter_summary <- function(probe_config, wood_properties, params, methods, n_pulses) {
+format_parameter_summary <- function(probe_config, wood_properties, params, methods, n_pulses, k_source = NULL) {
 
   # Build header
   header <- paste0(
@@ -88,10 +88,17 @@ format_parameter_summary <- function(probe_config, wood_properties, params, meth
                                         basename(wood_properties$yaml_source))))
 
   # Calculation parameters section
+  # Build diffusivity line with source information
+  if (!is.null(k_source)) {
+    diffusivity_line <- sprintf("  Diffusivity:        %.5f cm\U00B2/s (%s)\n", params$diffusivity, k_source)
+  } else {
+    diffusivity_line <- sprintf("  Diffusivity:        %.5f cm\U00B2/s (from wood properties)\n", params$diffusivity)
+  }
+
   calc_section <- paste0(
     "\U00002699\U0000FE0F  CALCULATION PARAMETERS\n",
     sprintf("  Methods:            %s\n", paste(methods, collapse = ", ")),
-    sprintf("  Diffusivity:        %.5f cm\U00B2/s (from wood properties)\n", params$diffusivity),
+    diffusivity_line,
     sprintf("  Probe spacing:      %.2f cm (from probe config)\n", params$probe_spacing),
     sprintf("  Pre-pulse period:   %s sec\n", params$pre_pulse),
     sprintf("  HRM window:         %s-%s sec\n", params$HRM_start, params$HRM_end),
@@ -126,10 +133,10 @@ format_parameter_summary <- function(probe_config, wood_properties, params, meth
 #' @param n_pulses Number of pulses
 #' @return Logical indicating whether user confirmed
 #' @keywords internal
-prompt_parameter_confirmation <- function(probe_config, wood_properties, params, methods, n_pulses) {
+prompt_parameter_confirmation <- function(probe_config, wood_properties, params, methods, n_pulses, k_source = NULL) {
 
   # Show summary
-  summary <- format_parameter_summary(probe_config, wood_properties, params, methods, n_pulses)
+  summary <- format_parameter_summary(probe_config, wood_properties, params, methods, n_pulses, k_source)
   cat(summary)
 
   # Prompt for confirmation

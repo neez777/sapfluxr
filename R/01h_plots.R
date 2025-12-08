@@ -1092,3 +1092,189 @@ plot_pulse_temps <- function(pulse_data, deltaT_do, deltaT_di, deltaT_uo, deltaT
   graphics::lines(pulse_data$datetime, deltaT_ui, lty = 4)
   graphics::legend("topleft", lty = c(1, 2, 3, 4), legend = c("DO", "UO", "DI", "UI"), bty = "n")
 }
+
+
+#' Build Correction Status Label
+#'
+#' Creates a human-readable subtitle showing which corrections have been applied
+#' to the heat pulse velocity data. Examines the metadata attributes to determine
+#' correction history.
+#'
+#' @param vh_data Data frame with vh_results structure containing correction metadata
+#'
+#' @return Character string describing corrections applied, suitable for plot subtitle
+#'
+#' @details
+#' Examines the following metadata attributes:
+#' \itemize{
+#'   \item \code{corrections_applied} - Character vector of correction types
+#'   \item \code{current_vh_column} - Name of current "best" Vh column
+#' }
+#'
+#' Returns strings like:
+#' \itemize{
+#'   \item "Raw velocities (Vh_cm_hr_raw)"
+#'   \item "Corrected: zero-flow offset (Vh_cm_hr_zf)"
+#'   \item "Corrected: spacing correction (Vh_cm_hr_sc)"
+#'   \item "Corrected: zero-flow offset + wound correction (Vh_cm_hr_zf_wc)"
+#'   \item "Corrected: spacing correction + wound correction (Vh_cm_hr_sc_wc)"
+#' }
+#'
+#' @family plotting functions
+#' @keywords internal
+#' @export
+build_correction_status_label <- function(vh_data) {
+
+  # Extract metadata
+  corrections <- attr(vh_data, "corrections_applied")
+  current_col <- attr(vh_data, "current_vh_column")
+
+  # Handle missing attributes
+  if (is.null(corrections)) {
+    corrections <- character(0)
+  }
+  if (is.null(current_col)) {
+    current_col <- "Vh_cm_hr"
+  }
+
+  # No corrections applied
+  if (length(corrections) == 0) {
+    return(sprintf("Raw velocities (%s)", current_col))
+  }
+
+  # Build correction description
+  correction_names <- character(length(corrections))
+
+  for (i in seq_along(corrections)) {
+    correction_names[i] <- switch(
+      corrections[i],
+      "zero_flow_offset" = "zero-flow offset",
+      "spacing" = "spacing correction",
+      "wound" = "wound correction",
+      corrections[i]  # Fallback to raw name
+    )
+  }
+
+  # Combine into sentence
+  if (length(correction_names) == 1) {
+    correction_text <- correction_names[1]
+  } else if (length(correction_names) == 2) {
+    correction_text <- paste(correction_names, collapse = " + ")
+  } else {
+    correction_text <- paste(
+      paste(correction_names[-length(correction_names)], collapse = ", "),
+      correction_names[length(correction_names)],
+      sep = " + "
+    )
+  }
+
+  sprintf("Corrected: %s (%s)", correction_text, current_col)
+}
+
+
+#' Plot Correction Comparison
+#'
+#' Creates side-by-side time series plots comparing raw and corrected heat pulse
+#' velocity values. Useful for visualising the impact of corrections.
+#'
+#' @param vh_data Data frame with vh_results structure containing both raw and
+#'   corrected values
+#' @param sensor Character, sensor position to plot. Default: "outer"
+#' @param method Character, calculation method to plot. Default: "HRM"
+#' @param show_legend Logical, show legend explaining corrections. Default: TRUE
+#'
+#' @return ggplot2 object showing raw vs. corrected comparison
+#'
+#' @details
+#' Creates a two-panel plot:
+#' \itemize{
+#'   \item Left panel: Raw velocities (Vh_cm_hr_raw)
+#'   \item Right panel: Corrected velocities (current Vh_cm_hr)
+#' }
+#'
+#' The subtitle automatically shows which corrections were applied using
+#' \code{\link{build_correction_status_label}}.
+#'
+#' @family plotting functions
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' # After applying corrections
+#' vh_corrected <- apply_zero_flow_offset(vh_results, zero_periods)
+#' vh_corrected <- apply_wound_correction(vh_corrected, species = "eucalyptus")
+#'
+#' # Compare raw vs. corrected
+#' plot_correction_comparison(vh_corrected, sensor = "outer", method = "HRM")
+#' }
+plot_correction_comparison <- function(vh_data,
+                                        sensor = "outer",
+                                        method = "HRM",
+                                        show_legend = TRUE) {
+
+  if (!requireNamespace("ggplot2", quietly = TRUE)) {
+    stop("ggplot2 package required for this plot. Install with: install.packages('ggplot2')")
+  }
+
+  if (!requireNamespace("tidyr", quietly = TRUE)) {
+    stop("tidyr package required for this plot. Install with: install.packages('tidyr')")
+  }
+
+  # Filter to requested sensor/method
+  plot_data <- vh_data[
+    vh_data$sensor_position == sensor & vh_data$method == method,
+  ]
+
+  if (nrow(plot_data) == 0) {
+    stop("No data found for sensor '", sensor, "' and method '", method, "'")
+  }
+
+  # Get current correction column
+  current_col <- attr(vh_data, "current_vh_column")
+  if (is.null(current_col)) {
+    current_col <- "Vh_cm_hr"
+  }
+
+  # Check if corrections were actually applied
+  if (!"Vh_cm_hr_raw" %in% names(plot_data)) {
+    warning("Vh_cm_hr_raw column not found. Data may not have correction structure.")
+    return(NULL)
+  }
+
+  # Reshape data for comparison
+  comparison_data <- plot_data[, c("datetime", "Vh_cm_hr_raw", "Vh_cm_hr")]
+  names(comparison_data) <- c("datetime", "Raw", "Corrected")
+
+  comparison_long <- tidyr::pivot_longer(
+    comparison_data,
+    cols = c("Raw", "Corrected"),
+    names_to = "version",
+    values_to = "Vh_cm_hr"
+  )
+
+  # Build subtitle
+  subtitle_text <- build_correction_status_label(vh_data)
+
+  # Create plot
+  p <- ggplot2::ggplot(comparison_long, ggplot2::aes(x = datetime, y = Vh_cm_hr)) +
+    ggplot2::geom_line(ggplot2::aes(colour = version), linewidth = 0.6) +
+    ggplot2::facet_wrap(~ version, ncol = 2, scales = "free_y") +
+    ggplot2::scale_colour_manual(
+      values = c("Raw" = "#E69F00", "Corrected" = "#0072B2"),
+      guide = if (show_legend) ggplot2::guide_legend() else "none"
+    ) +
+    ggplot2::labs(
+      title = sprintf("Correction Comparison: %s / %s", sensor, method),
+      subtitle = subtitle_text,
+      x = "Date/Time",
+      y = expression(V[h] ~ (cm ~ hr^-1)),
+      colour = NULL
+    ) +
+    ggplot2::theme_minimal() +
+    ggplot2::theme(
+      legend.position = "bottom",
+      strip.text = ggplot2::element_text(face = "bold", size = 11)
+    )
+
+  return(p)
+}

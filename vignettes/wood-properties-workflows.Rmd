@@ -1,0 +1,584 @@
+---
+title: "Wood Properties: Two Workflow Approaches"
+author: "Grant Joyce"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Wood Properties: Two Workflow Approaches}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 5,
+  eval = FALSE  # Don't execute code (demonstration only)
+)
+```
+
+# Introduction
+
+Heat pulse velocity (HPV) calculations require thermal diffusivity (k) as a key parameter. The accuracy of your k value directly impacts your results:
+
+- **10% error in k → 10% error in calculated Vh**
+- Using actual k from wood measurements eliminates systematic error
+
+This vignette explains sapfluxr's two workflow approaches for handling wood properties and thermal diffusivity.
+
+# Choosing Your Workflow
+
+## Workflow 1: User-Provided Wood Properties (PREFERRED)
+
+**Choose this if:**
+- You have access to wood samples
+- You want highest accuracy
+- You're preparing results for publication
+- You need accurate sap flux conversion
+
+**You'll need to:**
+- Collect wood core sample
+- Measure fresh and dry weights, and volume (Method 1)
+- OR measure dry and fresh densities (Method 2 - easier)
+- Calculate derived properties
+
+**Result:** Calculations use actual thermal diffusivity from your wood
+
+## Workflow 2: Default Properties + Optional Calibration
+
+**Choose this if:**
+- You don't have wood samples
+- You're doing exploratory analysis
+- You want quick preliminary results
+
+**Limitations:**
+- Uses assumed k = 0.0025 cm²/s (may differ from actual)
+- Flux conversion factor is estimated
+- May need reprocessing if k differs significantly
+
+**Result:** Calculations use default thermal diffusivity (with optional validation)
+
+---
+
+# Workflow 1: User-Provided Wood Properties
+
+## Method 1: Weight & Volume Measurements
+
+### 1.1 Collect Wood Sample
+
+```{r}
+# Collect wood core from sapwood
+# Typical sample: 5mm diameter × 30-50mm length
+# Immediately seal in airtight container
+```
+
+### 1.2 Measure Properties
+
+```{r}
+# Measure fresh (field-moist) properties
+fresh_weight_g <- 2.45      # Weigh immediately after collection
+fresh_volume_cm3 <- 2.73    # Water displacement method
+
+# Oven dry sample (103°C for 24+ hours until constant weight)
+dry_weight_g <- 1.38        # Weigh after drying
+```
+
+### 1.3 Create Wood Properties Configuration
+
+```{r}
+library(sapfluxr)
+
+# Create configuration from measurements
+wood <- create_custom_wood_properties(
+  config_name = "Eucalyptus Site A",
+  species = "Eucalyptus grandis",
+  wood_type = "hardwood",
+
+  # Method 1: Weight & Volume
+  fresh_weight = 2.45,      # g
+  dry_weight = 1.38,        # g
+  fresh_volume = 2.73,      # cm³
+
+  # Optional tree measurements
+  dbh = 45.2,               # cm
+  sapwood_depth = 3.2       # cm
+)
+```
+
+### 1.4 Calculate Derived Properties
+
+```{r}
+# Calculate all derived properties including actual k
+wood <- calculate_wood_properties(wood)
+
+# View results
+print(wood)
+```
+
+**Output:**
+```
+WOOD PROPERTIES CALCULATED
+==================================================================
+
+Input Method: Weight and Volume Measurements
+  Fresh weight: 2.45 g
+  Dry weight: 1.38 g
+  Fresh volume: 2.73 cm³
+
+CALCULATED PROPERTIES
+------------------------------------------------------------------
+  Moisture content: 0.7754 kg/kg (77.5%)
+  Dry wood density: 505.5 kg/m³
+  Fresh wood density: 897.4 kg/m³
+  Basic density: 505.5 kg/m³
+  Specific gravity: 0.5055
+
+  Actual thermal diffusivity: 0.002311 cm²/s
+  Default thermal diffusivity: 0.002500 cm²/s
+  Correction factor: 0.9244
+
+  Sap flux conversion factor: 0.5133
+    → Use this to convert Vh to Jv: Jv = 0.5133 × Vh
+```
+
+### 1.5 Use in HPV Calculation
+
+```{r}
+# Import data
+data <- read_heat_pulse_data("tree_data.txt")
+
+# Calculate HPV - automatically uses actual k
+vh <- calc_heat_pulse_velocity(
+  data,
+  wood_properties = wood,
+  methods = c("HRM", "MHR")
+)
+```
+
+**Parameter summary shows:**
+```
+CALCULATION PARAMETERS
+  Methods:            HRM, MHR
+  Diffusivity:        0.00231 cm²/s (calculated from wood measurements)
+  Probe spacing:      0.50 cm (from probe config)
+```
+
+### 1.6 Complete Workflow
+
+```{r}
+# Apply corrections
+zero_periods <- list(
+  list(start = "2024-05-01 00:00:00", end = "2024-05-05 23:59:59")
+)
+
+vh <- apply_zero_flow_offset(vh, zero_periods = zero_periods)
+vh <- apply_wound_correction(vh, wood_properties = wood)
+
+# Convert to flux density
+flux <- calculate_sap_flux_density(vh, wood_properties = wood)
+
+# View results
+summary(flux$Jv_cm3_cm2_hr)
+```
+
+---
+
+## Method 2: Dual Density (EASIER)
+
+**Advantages over Method 1:**
+- No fresh weight timing issues
+- Simpler volume measurement (only need to measure once)
+- Volume cancels out in calculations
+- Same accuracy as Method 1
+
+### 2.1 Measure Properties
+
+```{r}
+# Measure dry density
+dry_density_kg_m3 <- 540    # Oven-dry wood density
+
+# Measure fresh density (same sample, before drying)
+fresh_density_kg_m3 <- 1010  # Fresh (field-moist) density
+```
+
+**How to measure densities:**
+1. Measure fresh volume (V) and fresh weight (W_fresh)
+   - fresh_density = W_fresh / V
+2. Oven dry sample
+3. Measure dry weight (W_dry)
+   - dry_density = W_dry / V (using same volume)
+
+**Key insight:** Volume cancels out in moisture content calculation!
+
+### 2.2 Create Configuration
+
+```{r}
+library(sapfluxr)
+
+# Create configuration from densities
+wood <- create_custom_wood_properties(
+  config_name = "Pine Site B",
+  species = "Pinus radiata",
+  wood_type = "softwood",
+
+  # Method 2: Dual Density (EASIER)
+  fresh_density = 1010,     # kg/m³
+  dry_density = 540,        # kg/m³
+
+  # Optional
+  dbh = 38.5
+)
+
+# Calculate derived properties (including moisture content!)
+wood <- calculate_wood_properties(wood)
+
+print(wood)
+```
+
+**Output:**
+```
+CALCULATED PROPERTIES
+------------------------------------------------------------------
+  Moisture content: 0.8704 kg/kg (87.0%)  ← Back-calculated!
+  Dry wood density: 540.0 kg/m³
+  Fresh wood density: 1010.0 kg/m³
+
+  Actual thermal diffusivity: 0.002499 cm²/s
+  Correction factor: 0.9997
+  Sap flux conversion factor: 0.6248
+```
+
+### 2.3 Use in Analysis
+
+```{r}
+# Same as Method 1 - automatic k selection works identically
+vh <- calc_heat_pulse_velocity(data, wood_properties = wood)
+# Uses actual k = 0.002499 cm²/s ✓
+```
+
+---
+
+# Workflow 2: Default Properties + Optional Calibration
+
+## When You Don't Have Wood Measurements
+
+### 2.1 Use Default Properties
+
+```{r}
+library(sapfluxr)
+
+# Import data
+data <- read_heat_pulse_data("tree_data.txt")
+
+# Use default properties (no wood measurements required)
+wood <- get_default_wood_properties()
+
+# Calculate HPV
+vh <- calc_heat_pulse_velocity(data, wood_properties = wood)
+```
+
+**Parameter summary shows:**
+```
+CALCULATION PARAMETERS
+  Diffusivity:        0.00250 cm²/s (default - assumed value)
+```
+
+**What defaults include:**
+- Thermal diffusivity = 0.0025 cm²/s (assumed)
+- Generic softwood properties
+- Pre-calculated derived properties (optimised to produce k ≈ 0.0025)
+
+### 2.2 Apply Corrections
+
+```{r}
+# Define zero-flow periods
+zero_periods <- list(
+  list(start = "2024-05-01 00:00:00", end = "2024-05-05 23:59:59")
+)
+
+# Apply zero-flow offset correction
+vh <- apply_zero_flow_offset(vh, zero_periods = zero_periods)
+
+# Apply wound correction
+vh <- apply_wound_correction(vh, wood_properties = wood)
+```
+
+### 2.3 OPTIONAL: Validate Thermal Diffusivity
+
+**If you have zero-flow periods**, you can estimate actual thermal diffusivity:
+
+```{r}
+# Estimate k from time to maximum temperature during zero-flow
+k_est <- estimate_k_from_tmax(
+  data,
+  zero_periods = zero_periods,
+  sensors = c("outer", "inner"),
+  probe_spacing = 0.5,
+  k_nominal = 0.0025
+)
+
+# View results
+print(k_est)
+```
+
+**Example output:**
+```
+THERMAL DIFFUSIVITY ESTIMATION SUMMARY
+======================================================================
+
+Calculation Method: Tmax at zero flow: k = x²/(4*t_max)
+Probe Spacing: 0.5 cm
+
+RESULTS
+----------------------------------------------------------------------
+  Nominal k (assumed): 0.0025 cm²/s
+  Estimated k (mean): 0.002131 cm²/s
+  Estimated k (SD): 0.000043 cm²/s
+  Difference: -0.000369 cm²/s (-14.8%)
+
+RECOMMENDATION: REPROCESS RECOMMENDED
+
+BY SENSOR
+----------------------------------------------------------------------
+  OUTER: 0.002145 cm²/s
+  INNER: 0.002117 cm²/s
+
+SYMMETRY CHECK
+----------------------------------------------------------------------
+  OUTER:
+    Downstream t_max: 68.3 s
+    Upstream t_max: 68.1 s
+    Difference: 0.2 s
+    Status: PASS
+```
+
+### 2.4 Decision: Reprocess if Needed
+
+```{r}
+# Check recommendation
+if (k_est$recommendation %in% c("reprocess_recommended", "reprocess_critical")) {
+
+  cat("\nThermal diffusivity differs by >10% - reprocessing recommended\n")
+  cat("Estimated k:", k_est$k_mean, "cm²/s\n")
+  cat("Original k:", 0.0025, "cm²/s\n\n")
+
+  # Reprocess with calibrated k
+  vh <- calc_heat_pulse_velocity(
+    data,
+    diffusivity = k_est$k_mean  # Use estimated k
+  )
+
+  # Reapply corrections
+  vh <- apply_zero_flow_offset(vh, zero_periods = zero_periods)
+  vh <- apply_wound_correction(vh, wood_properties = wood)
+
+  cat("Reprocessing complete with calibrated k\n")
+
+} else {
+  cat("k difference <10% - original results acceptable\n")
+}
+```
+
+**Interpretation guidelines:**
+
+| Difference | Action | Rationale |
+|------------|--------|-----------|
+| < 5% | No reprocessing needed | k values agree well |
+| 5-10% | Reprocessing optional | Within typical range |
+| 10-20% | Reprocessing recommended | Publication quality requires accuracy |
+| > 20% | Reprocessing critical | Substantial systematic error |
+
+### 2.5 Convert to Flux
+
+```{r}
+# Convert to flux density
+flux <- calculate_sap_flux_density(vh, wood_properties = wood)
+
+# Note: Conversion factor is estimated from defaults
+cat("Using sap flux conversion factor:",
+    wood$derived_properties$sap_flux_conversion_factor, "\n")
+# ⚠️ Estimated value - actual may differ
+```
+
+---
+
+# Comparing the Two Workflows
+
+## Example Comparison
+
+```{r}
+# Workflow 1: With actual measurements
+wood_measured <- create_custom_wood_properties(
+  fresh_weight = 2.45, dry_weight = 1.38, fresh_volume = 2.73
+)
+wood_measured <- calculate_wood_properties(wood_measured)
+
+vh_measured <- calc_heat_pulse_velocity(data, wood_properties = wood_measured)
+# Uses k = 0.00231 cm²/s (actual)
+
+# Workflow 2: With defaults
+wood_default <- get_default_wood_properties()
+vh_default <- calc_heat_pulse_velocity(data, wood_properties = wood_default)
+# Uses k = 0.00250 cm²/s (assumed)
+
+# Compare
+k_actual <- wood_measured$derived_properties$thermal_diffusivity_actual_cm2_s
+k_default <- 0.0025
+difference_pct <- (k_actual - k_default) / k_default * 100
+
+cat("Actual k:", k_actual, "cm²/s\n")
+cat("Default k:", k_default, "cm²/s\n")
+cat("Difference:", difference_pct, "%\n")
+
+# Since Vh is proportional to k:
+cat("\nExpected difference in Vh:", difference_pct, "%\n")
+```
+
+**Example output:**
+```
+Actual k: 0.00231 cm²/s
+Default k: 0.0025 cm²/s
+Difference: -7.6 %
+
+Expected difference in Vh: -7.6 %
+```
+
+---
+
+# Best Practices
+
+## Which Workflow Should I Use?
+
+### Use Workflow 1 (measurements) if:
+- ✅ You're preparing results for publication
+- ✅ You have access to wood samples
+- ✅ You want highest accuracy
+- ✅ You need accurate flux conversion
+- ✅ You're studying a specific tree/species
+
+### Use Workflow 2 (defaults) if:
+- ✅ You're doing exploratory analysis
+- ✅ Wood samples are unavailable
+- ✅ Quick preliminary results are acceptable
+- ✅ You can identify zero-flow periods (for validation)
+
+## Tips for Wood Sample Collection
+
+**Method 1 (Weight/Volume):**
+- Collect samples during active growing season
+- Measure fresh weight immediately (before moisture loss)
+- Seal sample in airtight container until weighing
+- Use water displacement for volume (most accurate)
+- Oven dry at 103°C until constant weight (24-48 hours)
+
+**Method 2 (Dual Density - EASIER):**
+- Can measure fresh density in field
+- Less time-sensitive than Method 1
+- Volume only needs to be measured once
+- Same sample can be used for both densities
+- Recommended for ease of use
+
+## Understanding the Results
+
+### thermal_diffusivity_actual_cm2_s
+- Actual k calculated from your wood measurements
+- Used automatically in HPV calculations
+- Eliminates systematic error from assumed k
+
+### thermal_diffusivity_correction_factor
+- Ratio of actual k / default k
+- Near 1.0 means actual k ≈ default k
+- Far from 1.0 means significant difference
+
+### sap_flux_conversion_factor
+- Converts Vh to actual sap flux density Jv
+- Accounts for wood matrix heat capacity
+- Essential for tree water use calculations
+- Varies with moisture content and wood density
+
+---
+
+# Advanced Topics
+
+## What if My k Differs Significantly?
+
+**If Workflow 2 k calibration shows >20% difference:**
+
+1. **Check probe alignment:**
+   ```{r}
+   # Examine symmetry results
+   print(k_est$symmetry_results)
+   # If asymmetry > 5 seconds → probe misalignment likely
+   ```
+
+2. **Check zero-flow period definition:**
+   ```{r}
+   # Are these truly zero-flow conditions?
+   # Plot velocity during zero-flow period to verify
+   plot(vh$datetime, vh$Vh_cm_hr, type = "l")
+   abline(v = as.POSIXct(c("2024-05-01 00:00:00", "2024-05-05 23:59:59")),
+          col = "red", lty = 2)
+   ```
+
+3. **Consider species-specific k:**
+   - Generic default k = 0.0025 cm²/s
+   - Your species may have different k
+   - Collect wood sample for actual measurement (Workflow 1)
+
+## Radial Variation in Thermal Diffusivity
+
+Some species show depth-dependent k:
+
+```{r}
+# Estimate k separately for outer and inner sensors
+k_outer <- k_est$k_by_sensor$outer
+k_inner <- k_est$k_by_sensor$inner
+
+if (abs(k_outer - k_inner) / mean(c(k_outer, k_inner)) > 0.15) {
+  cat("High radial variation in k detected\n")
+  cat("Consider using sensor-specific k values\n")
+}
+```
+
+---
+
+# Summary
+
+## Workflow Decision Tree
+
+```
+Do you have wood samples?
+    │
+    ├─ YES → Workflow 1 (PREFERRED)
+    │        ├─ Measure properties (Method 1 or 2)
+    │        ├─ Calculate derived properties
+    │        └─ HPV calculations use actual k ✓
+    │
+    └─ NO  → Workflow 2 (EXPLORATORY)
+             ├─ Use default k = 0.0025
+             ├─ Optional: Validate k from zero-flow
+             │   └─ If k differs >10% → Consider reprocessing
+             └─ Results use assumed k ⚠️
+```
+
+## Key Takeaways
+
+1. **Automatic k selection** - If you provide measurements, they're used automatically
+2. **Two input methods** - Weight/volume OR dual density (easier)
+3. **Transparent** - Parameter summary shows which k is being used
+4. **Validation available** - Can estimate k from zero-flow periods
+5. **Non-breaking** - Existing code continues to work
+
+## Further Reading
+
+- Knowledge doc: `knowledge_docs/08_Wood_Properties_Workflow.md`
+- Implementation plan: `WOOD_PROPERTIES_WORKFLOW_UPDATE_PLAN.md`
+- Function reference: `?calculate_wood_properties`, `?estimate_k_from_tmax`
+
+---
+
+**Vignette version:** 1.0
+**Last updated:** 2025-12-03
+**Package version:** sapfluxr v0.6.0+

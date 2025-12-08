@@ -25,19 +25,23 @@
   - Modified HRM variants (HRMXa, HRMXb)
   - T-max methods (Cohen, Kluitenberg)
 
-### Zero-Flow Correction (Spacing Adjustment)
-- **Novel Heartwood Reference Method** ✨ (NEW in v0.4.0)
-  - Uses inner sensor positioned in heartwood as continuous zero-flow reference
-  - Provides per-measurement correction (real-time drift tracking)
-  - Physics-based: heartwood has no sap flow = true zero
-  - Automatic geometry checking based on probe configuration and sapwood depth
-- **Changepoint-Based Correction**
-  - Detects baseline shifts using PELT algorithm
-  - Applies segment-specific Burgess corrections
-  - Handles long-term probe alignment changes
-- **Manual Specification**
-  - User-defined changepoints with optional baseline overrides
-  - Integrates field knowledge and cut-stem calibration data
+### Zero-Flow Correction
+- **Simple Linear Offset** (Universal)
+  - Empirical correction using identified zero-flow periods
+  - Works for all methods (HRM, MHR, Tmax, etc.)
+  - Subtracts mean offset observed during zero-flow
+- **Burgess Spacing Correction** (HRM/HRMX Only)
+  - Physics-based correction using Burgess et al. (2001)
+  - **Novel Heartwood Reference Method** ✨ (NEW in v0.4.0)
+    - Uses inner sensor in heartwood as continuous zero reference
+    - Per-measurement correction, real-time drift tracking
+    - Automatic geometry checking
+  - **Changepoint-Based Correction**
+    - Detects baseline shifts using PELT algorithm
+    - Segment-specific corrections for long deployments
+  - **Manual Specification**
+    - User-defined changepoints with optional overrides
+    - Integrates field knowledge and cut-stem calibration
 
 ### Post-Processing & Quality Control
 - **Selectable DMA (sDMA)**: Apply automatic method switching after calculation

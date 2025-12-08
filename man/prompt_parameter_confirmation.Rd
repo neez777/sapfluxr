@@ -9,7 +9,8 @@ prompt_parameter_confirmation(
   wood_properties,
   params,
   methods,
-  n_pulses
+  n_pulses,
+  k_source = NULL
 )
 }
 \arguments{

@@ -153,7 +153,44 @@ calc_wound_diameter <- function(timestamps, wound_config) {
   initial_diameter_mm <- wound_config$drill_bit_diameter_mm + 2 * wound_addition
 
   # -------------------------------------------------------------------------
-  # Static wound diameter (no temporal tracking)
+  # Mode 1: Segmented (Multiple Reinstallations) - PREFERRED NEW METHOD
+  # -------------------------------------------------------------------------
+
+  if (!is.null(wound_config$reinstall_dates) && !is.null(wound_config$wound_at_reinstall_mm)) {
+
+    reinstall_dates <- as.POSIXct(wound_config$reinstall_dates)
+    wound_diameters_mm <- wound_config$wound_at_reinstall_mm
+
+    # Validate inputs
+    n_reinstalls <- length(reinstall_dates)
+    n_wounds <- length(wound_diameters_mm)
+
+    if (n_wounds != n_reinstalls + 1) {
+      stop("wound_at_reinstall_mm must have length = length(reinstall_dates) + 1\n",
+           "  (one initial wound diameter + one per reinstallation)\n",
+           "  Got: ", n_wounds, " wound diameters for ", n_reinstalls, " reinstallations")
+    }
+
+    # Check dates are sorted
+    if (is.unsorted(reinstall_dates)) {
+      stop("reinstall_dates must be in chronological order")
+    }
+
+    # Assign segments using findInterval
+    # Segments: [start, date1), [date1, date2), ..., [dateN, end]
+    segment_id <- findInterval(timestamps, reinstall_dates) + 1
+
+    # Assign wound diameter based on segment
+    wound_diameter_mm <- wound_diameters_mm[segment_id]
+
+    # Convert to cm
+    wound_diameter_cm <- wound_diameter_mm / 10
+
+    return(wound_diameter_cm)
+  }
+
+  # -------------------------------------------------------------------------
+  # Mode 2: Static wound diameter (no temporal tracking)
   # -------------------------------------------------------------------------
 
   if (is.null(wound_config$initial_date) ||
@@ -167,7 +204,7 @@ calc_wound_diameter <- function(timestamps, wound_config) {
   }
 
   # -------------------------------------------------------------------------
-  # Temporal wound diameter (linear interpolation)
+  # Mode 3: Legacy Temporal (linear interpolation) - DEPRECATED
   # -------------------------------------------------------------------------
 
   # Parse dates
@@ -413,26 +450,63 @@ apply_wound_correction <- function(vh_data,
   }
 
   # -------------------------------------------------------------------------
-  # Determine which velocity column to correct
+  # Determine which velocity column to correct (hybrid workflow)
   # -------------------------------------------------------------------------
 
-  if (use_spacing_corrected && "Vh_cm_hr_sc" %in% names(vh_data)) {
+  # Detect which correction was previously applied
+  has_zf <- "Vh_cm_hr_zf" %in% names(vh_data) &&
+            any(vh_data$zero_flow_offset_applied %||% FALSE, na.rm = TRUE)
+
+  has_sc <- "Vh_cm_hr_sc" %in% names(vh_data) &&
+            any(vh_data$spacing_correction_applied %||% FALSE, na.rm = TRUE)
+
+  # Determine source and target columns
+  if (has_sc && use_spacing_corrected) {
     input_col <- "Vh_cm_hr_sc"
+    output_col <- "Vh_cm_hr_sc_wc"
+    correction_base <- "spacing"
     message("Applying wound correction to spacing-corrected velocities (Vh_cm_hr_sc)")
+  } else if (has_zf) {
+    input_col <- "Vh_cm_hr_zf"
+    output_col <- "Vh_cm_hr_zf_wc"
+    correction_base <- "zero_flow_offset"
+    message("Applying wound correction to zero-flow corrected velocities (Vh_cm_hr_zf)")
+  } else if (has_sc) {
+    # Has spacing but user set use_spacing_corrected = FALSE
+    input_col <- "Vh_cm_hr_raw"
+    output_col <- "Vh_cm_hr_wc"
+    correction_base <- "none"
+    message("Applying wound correction to raw velocities (Vh_cm_hr_raw)")
   } else {
-    input_col <- "Vh_cm_hr"
-    if (use_spacing_corrected && !"Vh_cm_hr_sc" %in% names(vh_data)) {
-      message("Note: No spacing-corrected column found, using raw Vh_cm_hr")
-    }
+    # No prior corrections
+    input_col <- "Vh_cm_hr_raw"
+    output_col <- "Vh_cm_hr_wc"
+    correction_base <- "none"
+    message("Applying wound correction to raw velocities (Vh_cm_hr_raw)")
   }
 
   # -------------------------------------------------------------------------
   # Apply correction
   # -------------------------------------------------------------------------
 
-  vh_data$Vc_cm_hr <- vh_data[[input_col]] * B_vector
+  vh_data[[output_col]] <- vh_data[[input_col]] * B_vector
+  vh_data$Vh_cm_hr <- vh_data[[output_col]]  # Update "current" pointer
+  vh_data$wound_correction_applied <- TRUE
   vh_data$wound_correction_factor <- B_vector
   vh_data$wound_diameter_cm <- wound_diameter_vector
+
+  # Also keep legacy Vc_cm_hr for backward compatibility
+  vh_data$Vc_cm_hr <- vh_data[[output_col]]
+
+  # -------------------------------------------------------------------------
+  # Update metadata attributes
+  # -------------------------------------------------------------------------
+
+  attr(vh_data, "current_vh_column") <- output_col
+  attr(vh_data, "corrections_applied") <- c(
+    attr(vh_data, "corrections_applied"),
+    "wound"
+  )
 
   # -------------------------------------------------------------------------
   # Print summary

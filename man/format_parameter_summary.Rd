@@ -9,7 +9,8 @@ format_parameter_summary(
   wood_properties,
   params,
   methods,
-  n_pulses
+  n_pulses,
+  k_source = NULL
 )
 }
 \arguments{

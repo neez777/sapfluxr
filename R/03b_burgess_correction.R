@@ -548,7 +548,81 @@ apply_spacing_correction <- function(vh_data,
 #' # Check zero offset quality
 #' print(correction_result$zero_offset_results$outer$overall_cv)
 #' }
+
+
+#' Validate Zero-Flow Offset for Burgess Correction
 #'
+#' Validates that a detected zero-flow offset is within the physically possible
+#' range for Burgess spacing correction. Offsets that are too large would require
+#' temperature probes to be touching or overlapping the heater probe, which is
+#' physically impossible.
+#'
+#' @param offset Detected zero-flow offset (cm/hr)
+#' @param probe_spacing Nominal probe spacing (cm). Default: 0.5
+#' @param measurement_time Measurement time (sec). Default: 80 (HRM window average)
+#'
+#' @return A list with:
+#'   \item{is_valid}{Logical, TRUE if offset is within valid range}
+#'   \item{offset}{The tested offset value}
+#'   \item{max_offset}{Maximum physically possible offset}
+#'   \item{probe_spacing}{Probe spacing used}
+#'   \item{measurement_time}{Measurement time used}
+#'
+#' @details
+#' **Physical Constraint:**
+#'
+#' The Burgess correction solves for probe misalignment using:
+#'
+#' \code{x_corrected = sqrt(x² - ln(ratio) * 4 * k * t)}
+#'
+#' For this to be physically valid, the discriminant must be positive:
+#'
+#' \code{x² - (offset * x * 4 * t) / 3600 > 0}
+#'
+#' Solving for maximum offset:
+#'
+#' \code{|offset_max| = (x * 3600) / (4 * t)}
+#'
+#' **Note:** Maximum offset is independent of thermal diffusivity (k).
+#' It only depends on probe geometry and measurement timing.
+#'
+#' **Typical Values:**
+#'
+#' For ICT SFM1x standard configuration (x = 0.5 cm, t = 80 sec):
+#' \itemize{
+#'   \item Maximum offset: ±5.625 cm/hr
+#'   \item Validated range: ±5 cm/hr (Burgess et al. 2001)
+#' }
+#'
+#' @references
+#' Burgess, S.S.O., Adams, M.A., Turner, N.C., Beverly, C.R., Ong, C.K.,
+#'   Khan, A.A.H., & Bleby, T.M. (2001). An improved heat pulse method to
+#'   measure low and reverse rates of sap flow in woody plants.
+#'   *Tree Physiology*, 21(9), 589-598.
+#'
+#' @family spacing correction functions
+#' @export
+validate_zero_offset <- function(offset,
+                                  probe_spacing = 0.5,
+                                  measurement_time = 80) {
+
+  # Calculate maximum physically possible offset
+  # Formula: |offset_max| = (x * 3600) / (4 * t)
+  # Derived from requirement that x² > (offset * x * 4 * t) / 3600
+  max_offset <- (probe_spacing * 3600) / (4 * measurement_time)
+
+  is_valid <- abs(offset) <= max_offset
+
+  return(list(
+    is_valid = is_valid,
+    offset = offset,
+    max_offset = max_offset,
+    probe_spacing = probe_spacing,
+    measurement_time = measurement_time
+  ))
+}
+
+
 #' @references
 #' Burgess, S.S.O., Adams, M.A., Turner, N.C., Beverly, C.R., Ong, C.K.,
 #'   Khan, A.A.H., & Bleby, T.M. (2001). An improved heat pulse method to
@@ -632,6 +706,51 @@ apply_spacing_correction_workflow <- function(vh_data,
             cat("  Quality: ⚠ HIGH VARIABILITY (CV > 0.5)\n")
           }
         }
+      }
+
+      # VALIDATE OFFSET IS WITHIN PHYSICAL LIMITS
+      validation <- validate_zero_offset(
+        offset = zero_result$zero_vh,
+        probe_spacing = probe_spacing,
+        measurement_time = measurement_time
+      )
+
+      if (!validation$is_valid) {
+        warning(
+          "\n", strrep("!", 70), "\n",
+          "SPACING CORRECTION VALIDATION FAILED - ", toupper(sensor), " SENSOR\n",
+          strrep("!", 70), "\n",
+          "Detected zero-flow offset: ", round(validation$offset, 2), " cm/hr\n",
+          "Maximum valid offset: ±", round(validation$max_offset, 2), " cm/hr\n",
+          "\n",
+          "PHYSICAL IMPOSSIBILITY: The detected offset would require\n",
+          "temperature probes to be touching or overlapping the heater probe.\n",
+          "\n",
+          "Possible causes:\n",
+          "  1. Zero-flow periods incorrectly identified\n",
+          "  2. Actual flow during 'zero-flow' periods\n",
+          "  3. Probe installation issues\n",
+          "  4. Incorrect probe spacing or measurement time\n",
+          "\n",
+          "Recommended actions:\n",
+          "  1. Verify zero-flow period identification\n",
+          "  2. Use apply_zero_flow_offset() for linear correction instead\n",
+          "  3. Check probe_spacing and measurement_time parameters\n",
+          "\n",
+          "Spacing correction NOT applied for ", sensor, " sensor.\n",
+          strrep("!", 70), "\n"
+        )
+
+        # Skip this sensor
+        if (verbose) {
+          cat("  ✗ SKIPPED: Offset validation failed\n")
+        }
+        next
+      }
+
+      if (verbose) {
+        cat("  Validation: ✓ PASSED (max offset: ±",
+            round(validation$max_offset, 2), " cm/hr)\n")
       }
 
       # Step 2: Get correction coefficients

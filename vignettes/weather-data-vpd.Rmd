@@ -1,0 +1,481 @@
+---
+title: "Working with Weather Data and VPD"
+author: "Grant Joyce"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Working with Weather Data and VPD}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 5
+)
+```
+
+# Introduction
+
+Environmental conditions, particularly atmospheric demand for water, are critical for interpreting sap flow data. This vignette demonstrates how to import weather data, calculate vapor pressure deficit (VPD), and integrate environmental context into your sap flow analysis.
+
+## Why Weather Data Matters
+
+1. **Interpret sap flow patterns** - Distinguish between environmental drivers and tree physiological responses
+2. **Quality control** - Identify sensor issues by comparing with environmental expectations
+3. **Spacing correction** - Select periods with stable environmental conditions
+4. **Analysis context** - Understand when high/low flows are driven by atmospheric demand
+
+```{r}
+library(sapfluxr)
+library(ggplot2)
+library(dplyr)
+```
+
+# Importing Weather Data
+
+## Basic Import with Auto-Detection
+
+The `read_weather_data()` function intelligently detects column types based on names and data ranges:
+
+```{r eval=FALSE}
+# Auto-detect all columns
+weather <- read_weather_data("weather_station.csv")
+```
+
+### What Gets Detected Automatically?
+
+The function searches for:
+
+- **Datetime**: Column names like "datetime", "date_time", "timestamp", or parseable dates
+- **Temperature**: Names with "temp", "air", "ta", or values in typical range (-40 to 50°C)
+- **Relative Humidity**: Names with "rh", "humidity", or values in 0-100% range
+- **Atmospheric Pressure**: Names with "pressure", "kpa", or values around 80-110 kPa
+
+## Manual Column Specification
+
+If auto-detection fails or you want to be explicit:
+
+```{r eval=FALSE}
+weather <- read_weather_data(
+  "weather_station.csv",
+  datetime_col = "timestamp",
+  temp_col = "AirTemp",
+  rh_col = "RH",
+  pressure_col = "AtmPress"
+)
+```
+
+## Example with Realistic Data
+
+```{r include=FALSE}
+# Create example weather data for this vignette
+set.seed(123)
+n_obs <- 100
+
+# Simulate one day of weather data (10-minute intervals)
+example_weather <- data.frame(
+  datetime = seq(
+    as.POSIXct("2024-08-02 00:00:00"),
+    by = "10 min",
+    length.out = n_obs
+  )
+)
+
+# Simulate realistic diurnal temperature pattern
+hour_of_day <- as.numeric(format(example_weather$datetime, "%H")) +
+               as.numeric(format(example_weather$datetime, "%M")) / 60
+
+example_weather$air_temp_c <- 12 + 8 * sin((hour_of_day - 6) * pi / 12) +
+                               rnorm(n_obs, 0, 0.5)
+
+# RH inversely related to temperature (simplified)
+example_weather$relative_humidity <- 95 - 30 * sin((hour_of_day - 6) * pi / 12) +
+                                      rnorm(n_obs, 0, 3)
+example_weather$relative_humidity <- pmax(30, pmin(100, example_weather$relative_humidity))
+
+# Atmospheric pressure (slowly varying)
+example_weather$pressure_kpa <- 101.3 + rnorm(n_obs, 0, 0.2)
+
+# Add weather_data class
+class(example_weather) <- c("weather_data", "tbl_df", "tbl", "data.frame")
+attr(example_weather, "source_file") <- "example_weather.csv"
+attr(example_weather, "import_time") <- Sys.time()
+```
+
+```{r}
+# View imported weather data
+head(example_weather)
+
+# Check data structure
+str(example_weather)
+```
+
+### Validation Checks
+
+The import function automatically validates:
+
+- Temperature range (-40 to 50°C expected)
+- Relative humidity range (0-100% required)
+- Missing values
+- Duplicate timestamps
+- Temporal ordering
+
+Any issues generate warnings:
+
+```{r eval=FALSE}
+# Example with problematic data
+# Warning: Temperature outside expected range: -5.2 to 55.3°C
+# Warning: 3 missing temperature values
+# Warning: Relative humidity outside valid range: -2.1 to 102.4%
+```
+
+# Calculating Vapor Pressure Deficit (VPD)
+
+## What is VPD?
+
+**Vapor Pressure Deficit (VPD)** is the difference between the amount of moisture in the air and how much moisture the air can hold when saturated. It represents the atmospheric "pull" for water from plants.
+
+- **Low VPD** (< 0.5 kPa): High humidity, low atmospheric demand
+- **Moderate VPD** (0.5-2.0 kPa): Typical conditions
+- **High VPD** (> 2.0 kPa): Low humidity, high atmospheric demand
+
+## Basic VPD Calculation
+
+```{r}
+# Calculate VPD using Magnus equation (default)
+weather_vpd <- calc_vpd(example_weather)
+
+# View results
+head(weather_vpd)
+
+# Summary statistics
+summary(weather_vpd$vpd_kpa)
+```
+
+## Understanding the Calculation
+
+The Magnus equation calculates saturated vapor pressure (SVP):
+
+$$SVP = 0.61078 \times \exp\left(\frac{17.27 \times T}{237.7 + T}\right)$$
+
+Where T is temperature in °C, and SVP is in kPa.
+
+Actual vapor pressure (AVP):
+
+$$AVP = \frac{RH}{100} \times SVP$$
+
+Vapor pressure deficit:
+
+$$VPD = SVP - AVP$$
+
+## Return All Components
+
+For detailed analysis or debugging:
+
+```{r}
+# Get SVP and AVP in addition to VPD
+weather_full <- calc_vpd(example_weather, return_components = TRUE)
+
+head(weather_full)
+```
+
+Verify the relationship: VPD = SVP - AVP
+
+```{r}
+# Check calculation
+all.equal(
+  weather_full$vpd_kpa,
+  weather_full$svp_kpa - weather_full$avp_kpa
+)
+```
+
+## Custom Magnus Parameters
+
+Default parameters (α=17.27, β=237.7°C) are optimal for 0-60°C. For special cases:
+
+```{r eval=FALSE}
+# Custom parameters (e.g., for sub-zero temperatures)
+weather_vpd_custom <- calc_vpd(
+  example_weather,
+  magnus_coef = 17.5,
+  magnus_base_temp = 240.0
+)
+```
+
+## Working with Custom Data Frames
+
+You don't need a `weather_data` object - any data frame works:
+
+```{r}
+# Create simple data frame
+my_data <- data.frame(
+  temp = c(15, 20, 25, 30),
+  rh = c(80, 70, 60, 50)
+)
+
+# Calculate VPD with custom column names
+my_data_vpd <- calc_vpd(
+  my_data,
+  temp_col = "temp",
+  rh_col = "rh"
+)
+
+my_data_vpd
+```
+
+# Visualising Weather and VPD
+
+## Time Series Plots
+
+```{r fig.width=7, fig.height=6}
+library(tidyr)
+
+# Prepare data for plotting
+weather_plot <- weather_vpd %>%
+  select(datetime, air_temp_c, relative_humidity, vpd_kpa) %>%
+  pivot_longer(
+    cols = -datetime,
+    names_to = "variable",
+    values_to = "value"
+  )
+
+# Create faceted plot
+ggplot(weather_plot, aes(x = datetime, y = value)) +
+  geom_line(color = "steelblue") +
+  facet_wrap(~variable, ncol = 1, scales = "free_y",
+             labeller = labeller(variable = c(
+               air_temp_c = "Air Temperature (°C)",
+               relative_humidity = "Relative Humidity (%)",
+               vpd_kpa = "VPD (kPa)"
+             ))) +
+  theme_minimal() +
+  labs(
+    title = "Weather Variables Over Time",
+    x = "Datetime",
+    y = "Value"
+  ) +
+  theme(strip.text = element_text(face = "bold"))
+```
+
+## VPD vs Temperature
+
+```{r}
+ggplot(weather_vpd, aes(x = air_temp_c, y = vpd_kpa)) +
+  geom_point(aes(color = relative_humidity), size = 2, alpha = 0.7) +
+  scale_color_gradient(
+    low = "blue",
+    high = "red",
+    name = "RH (%)"
+  ) +
+  geom_smooth(method = "loess", se = TRUE, color = "black", linetype = "dashed") +
+  theme_minimal() +
+  labs(
+    title = "VPD Increases with Temperature and Decreases with Humidity",
+    x = "Air Temperature (°C)",
+    y = "VPD (kPa)"
+  )
+```
+
+## Diurnal Patterns
+
+```{r}
+# Add hour of day
+weather_vpd$hour <- as.numeric(format(weather_vpd$datetime, "%H")) +
+                    as.numeric(format(weather_vpd$datetime, "%M")) / 60
+
+ggplot(weather_vpd, aes(x = hour, y = vpd_kpa)) +
+  geom_line(color = "darkgreen", linewidth = 1) +
+  geom_point(color = "darkgreen", size = 2, alpha = 0.5) +
+  scale_x_continuous(breaks = seq(0, 24, 4)) +
+  theme_minimal() +
+  labs(
+    title = "Diurnal VPD Pattern",
+    x = "Hour of Day",
+    y = "VPD (kPa)"
+  ) +
+  theme(panel.grid.minor = element_blank())
+```
+
+# Integrating Weather Data with Sap Flow Analysis
+
+## Aligning Time Series
+
+```{r eval=FALSE}
+# Import sap flow data
+heat_pulse_data <- read_heat_pulse_data("sap_flow_data.txt")
+
+# Calculate Vh
+vh_results <- calc_heat_pulse_velocity(heat_pulse_data, methods = "HRM")
+
+# Import and process weather data
+weather <- read_weather_data("weather_station.csv")
+weather_vpd <- calc_vpd(weather)
+
+# Merge by datetime (assuming matching timestamps)
+combined_data <- left_join(
+  vh_results,
+  weather_vpd,
+  by = "datetime"
+)
+```
+
+## Using VPD for Spacing Correction
+
+Spacing correction works best under stable environmental conditions. Use VPD to identify suitable periods:
+
+```{r eval=FALSE}
+# Filter for low-variability VPD periods
+stable_periods <- weather_vpd %>%
+  mutate(hour = hour(datetime)) %>%
+  group_by(date = as.Date(datetime)) %>%
+  summarise(
+    vpd_mean = mean(vpd_kpa, na.rm = TRUE),
+    vpd_sd = sd(vpd_kpa, na.rm = TRUE),
+    suitable = vpd_sd < 0.2  # Low variability threshold
+  ) %>%
+  filter(suitable == TRUE)
+
+# Use these dates for spacing correction
+# (Integration with spacing correction functions - future development)
+```
+
+## Interpreting Sap Flow in Context of VPD
+
+```{r eval=FALSE}
+# Plot sap flow alongside VPD
+combined_data %>%
+  filter(method == "HRM") %>%
+  ggplot(aes(x = datetime)) +
+  geom_line(aes(y = Vh_cm_hr), color = "blue") +
+  geom_line(aes(y = vpd_kpa * 10), color = "red", linetype = "dashed") +
+  scale_y_continuous(
+    name = "Sap Velocity (cm/hr)",
+    sec.axis = sec_axis(~./10, name = "VPD (kPa)")
+  ) +
+  theme_minimal() +
+  labs(
+    title = "Sap Flow and VPD",
+    x = "Datetime"
+  )
+```
+
+# Practical Considerations
+
+## Data Frequency
+
+- **High-frequency weather data** (1-10 min): Best for detailed alignment with sap flow
+- **Hourly data**: Adequate for daily patterns and general trends
+- **Daily summaries**: Useful for long-term analyses but loses diurnal patterns
+
+## Missing Data
+
+```{r}
+# Check for missing values
+sum(is.na(weather_vpd$vpd_kpa))
+
+# Identify gaps
+weather_vpd %>%
+  mutate(
+    time_diff = as.numeric(difftime(datetime, lag(datetime), units = "mins"))
+  ) %>%
+  filter(time_diff > 10) %>%  # Expected interval: 10 min
+  select(datetime, time_diff)
+```
+
+## Data Quality Flags
+
+VPD calculation inherits quality issues from input data:
+
+- If RH > 100%: VPD becomes negative (biologically impossible) → warning issued
+- If RH < 0%: VPD becomes inflated → warning issued
+- Missing temperature or RH: VPD = NA
+
+```{r}
+# Identify problematic VPD values
+weather_vpd %>%
+  filter(vpd_kpa < 0 | vpd_kpa > 5 | is.na(vpd_kpa)) %>%
+  select(datetime, air_temp_c, relative_humidity, vpd_kpa)
+```
+
+# Advanced Topics
+
+## Converting Units
+
+VPD is returned in kPa by default. For other units:
+
+```{r}
+# Convert to Pa (Pascals)
+weather_vpd$vpd_pa <- weather_vpd$vpd_kpa * 1000
+
+# Convert to mmHg
+weather_vpd$vpd_mmhg <- weather_vpd$vpd_kpa * 7.50062
+
+# Convert to mbar (millibars, same as hPa)
+weather_vpd$vpd_mbar <- weather_vpd$vpd_kpa * 10
+```
+
+## Saturation Deficit vs. Mole Fraction Deficit
+
+VPD is the pressure-based saturation deficit. For mole fraction deficit (used in some models):
+
+```{r eval=FALSE}
+# Requires atmospheric pressure
+# Mole fraction deficit ≈ VPD / atmospheric_pressure
+weather_vpd$mole_fraction_deficit <- weather_vpd$vpd_kpa / weather_vpd$pressure_kpa
+```
+
+## Sub-Zero Temperatures
+
+The default Magnus equation is less accurate below 0°C. For sub-zero data:
+
+1. Use alternative parameters (e.g., `magnus_coef = 17.5, magnus_base_temp = 240.0`)
+2. Consider Buck equation (more complex, not implemented yet)
+3. Check your application - is high precision needed at low temperatures?
+
+# Summary
+
+## Key Functions
+
+| Function | Purpose |
+|----------|---------|
+| `read_weather_data()` | Import CSV weather data with intelligent column detection |
+| `calc_vpd()` | Calculate vapor pressure deficit using Magnus equation |
+
+## Workflow
+
+1. **Import** weather data → `read_weather_data()`
+2. **Calculate** VPD → `calc_vpd()`
+3. **Validate** data ranges and quality
+4. **Visualise** patterns and relationships
+5. **Integrate** with sap flow analysis for contextual interpretation
+
+## Best Practices
+
+- Always inspect imported data for validation warnings
+- Check for missing values and temporal gaps
+- Visualise VPD alongside temperature and humidity to verify calculations
+- Use VPD to interpret sap flow patterns in context of atmospheric demand
+- Consider environmental stability when selecting periods for spacing correction
+
+# Further Reading
+
+**Scientific Background:**
+
+- Alduchov & Eskridge (1996) - Magnus equation derivation
+- Jones (1992) - *Plants and Microclimate* - VPD and plant water relations
+- Monteith & Unsworth (2013) - *Principles of Environmental Physics*
+
+**Related Vignettes:**
+
+- `vignette("quickstart")` - Basic sapfluxr workflow
+- `vignette("spacing-correction-calibration")` - Using stable conditions for calibration
+- `vignette("data-quality-simplified")` - Quality control approaches
+
+**Function Documentation:**
+
+- `?read_weather_data` - Detailed parameter descriptions
+- `?calc_vpd` - VPD calculation details and examples

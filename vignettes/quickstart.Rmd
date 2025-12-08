@@ -292,26 +292,75 @@ Gaps larger than `max_gap_to_fill_hours` are reported in `gap_report` but NOT fi
 
 See `?flag_vh_quality` for full details.
 
-## 2b. Zero-Flow Correction (Spacing Adjustment)
+## 2b. Zero-Flow Correction
 
 ### Why Zero-Flow Correction?
 
-Heat pulse velocity sensors can experience **probe spacing errors** due to:
+Heat pulse velocity sensors can experience **probe spacing errors** or **systematic offsets** due to:
 - Slight misalignment during installation
 - Tree swelling/shrinking with moisture changes
 - Bark expansion after rain events
 - Seasonal wood movement
+- Electronic/thermal baseline drift
 
-These spacing errors cause **systematic bias** in velocity estimates. During periods of true zero flow (no transpiration), misaligned probes will still report non-zero velocities.
+These errors cause **systematic bias** in velocity estimates. During periods of true zero flow (no transpiration), imperfect probes will still report non-zero velocities.
 
-**The Burgess et al. (2001) correction** uses zero-flow calibration to:
-1. Calculate the apparent velocity when true flow is zero (the "zero offset")
-2. Derive correction coefficients that account for probe misalignment
-3. Apply a linear correction to all velocity measurements
+sapfluxr provides **two alternative approaches** for zero-flow correction:
 
-### Three Correction Methods
+### Approach 1: Simple Linear Offset Correction (Universal)
 
-sapfluxr provides three methods for zero-flow correction, listed in order of preference:
+A **simple empirical correction** that subtracts the mean velocity observed during zero-flow periods:
+
+```
+Vh_corrected = Vh_raw - offset
+```
+
+**Use this when:**
+- You have identified genuine zero-flow periods (nighttime, dormant season, etc.)
+- You're using non-HRM methods (MHR, Tmax)
+- Offset is large (>5 cm/hr) and Burgess validation fails
+- You want a simple, method-agnostic correction
+
+**Apply zero-flow offset:**
+
+```{r eval=FALSE}
+# Define zero-flow periods (e.g., nighttime with known zero flow)
+zero_periods <- list(
+  list(start = "2024-01-15 22:00:00", end = "2024-01-16 06:00:00"),
+  list(start = "2024-01-16 22:00:00", end = "2024-01-17 06:00:00")
+)
+
+# Apply linear offset correction to all methods
+vh_corrected <- apply_zero_flow_offset(
+  vh_results,
+  zero_periods = zero_periods,
+  sensors = c("outer", "inner"),
+  methods = NULL  # NULL applies to all methods
+)
+
+# Check results
+attr(vh_corrected, "zero_flow_offset_results")
+```
+
+**Important:** This is purely empirical - it doesn't account for the physics of probe misalignment. For HRM/HRMX methods, consider Approach 2 (Burgess correction) below.
+
+---
+
+### Approach 2: Burgess Spacing Correction (HRM/HRMX Only)
+
+**The Burgess et al. (2001) correction** is a physics-based approach that:
+1. Calculates the apparent velocity when true flow is zero (the "zero offset")
+2. Derives correction coefficients accounting for probe spacing errors
+3. Applies a nonlinear correction validated for HRM
+
+**Use this when:**
+- You're using HRM, HRMXa, or HRMXb methods
+- Offset is within validation range (≤ ±5 cm/hr)
+- You want physically-grounded correction
+
+**Only works for HRM/HRMX methods.** For other methods, use Approach 1 (linear offset).
+
+sapfluxr provides three methods for Burgess correction, listed in order of preference:
 
 | Method | When to Use | Advantages |
 |--------|-------------|------------|
@@ -661,12 +710,13 @@ Common wound diameters and their correction factors (5mm probe spacing):
 | 2.5 mm | 0.25 | ~2.25 | +125% |
 | 3.0 mm | 0.30 | 2.64 | +164% |
 
-### Workflow Position
+### Workflow Position and Column Structure
 
-Wound correction should be applied **after** spacing correction but **before** method calibration:
+Wound correction should be applied **after** zero-flow correction (either linear offset OR Burgess spacing):
 
 ```{r eval=FALSE}
-# Complete correction workflow:
+# OPTION A: Zero-flow offset → Wound correction
+# ===============================================
 # 1. Calculate velocities
 vh_results <- calc_heat_pulse_velocity(heat_pulse_data)
 
@@ -674,19 +724,56 @@ vh_results <- calc_heat_pulse_velocity(heat_pulse_data)
 qc_results <- flag_vh_quality(vh_results)
 vh_flagged <- qc_results$vh_flagged
 
-# 3. Spacing correction
-correction <- apply_spacing_correction_both_sensors(vh_flagged, ...)
-vh_spacing_corrected <- correction$vh_corrected
+# 3. Zero-flow offset correction (universal, all methods)
+vh_zf_corrected <- apply_zero_flow_offset(
+  vh_flagged,
+  zero_periods = my_zero_periods
+)
+# Creates: Vh_cm_hr_zf
 
-# 4. Wound correction (THIS STEP)
-vh_wound_corrected <- apply_wound_correction(
+# 4. Wound correction (applies to Vh_cm_hr_zf)
+vh_final <- apply_wound_correction(
+  vh_data = vh_zf_corrected,
+  wound_diameter = 0.20
+)
+# Creates: Vh_cm_hr_zf_wc
+# Updates: Vh_cm_hr -> points to Vh_cm_hr_zf_wc
+```
+
+```{r eval=FALSE}
+# OPTION B: Burgess spacing correction → Wound correction
+# ========================================================
+# 1-2. Calculate velocities and quality control (same as above)
+
+# 3. Burgess spacing correction (HRM only)
+daily_min <- calculate_daily_minima(vh_flagged, method = "HRM")
+cpt_result <- detect_changepoints(daily_min)
+correction <- apply_spacing_correction_both_sensors(
+  vh_flagged,
+  changepoints = cpt_result$changepoints,
+  method = "HRM"
+)
+vh_spacing_corrected <- correction$vh_corrected
+# Creates: Vh_cm_hr_sc (HRM only)
+
+# 4. Wound correction (applies to Vh_cm_hr_sc for HRM)
+vh_final <- apply_wound_correction(
   vh_data = vh_spacing_corrected,
   wound_diameter = 0.20
 )
-
-# 5. Method calibration (next section)
-# ...
+# Creates: Vh_cm_hr_sc_wc (HRM only)
+# Updates: Vh_cm_hr -> points to Vh_cm_hr_sc_wc
 ```
+
+**Column naming:**
+- `Vh_cm_hr_raw` - Original uncorrected values (always present)
+- `Vh_cm_hr_zf` - Zero-flow offset corrected
+- `Vh_cm_hr_sc` - Burgess spacing corrected (HRM only)
+- `Vh_cm_hr_zf_wc` - Zero-flow + wound corrected
+- `Vh_cm_hr_sc_wc` - Spacing + wound corrected (HRM only)
+- `Vh_cm_hr` - "Current best" pointer (updated at each correction stage)
+
+**Important:** Zero-flow offset and Burgess spacing correction are **mutually exclusive**. Choose one or the other based on your method and offset magnitude.
 
 See `?apply_wound_correction` and `?list_wound_coefficients` for detailed documentation.
 
@@ -1170,10 +1257,25 @@ qc_results <- flag_vh_quality(
 )
 vh_flagged <- qc_results$vh_flagged
 
-# PHASE 2-3: Changepoint Detection and Spacing Correction
-# ========================================================
+# PHASE 2: Zero-Flow Correction (Choose ONE approach)
+# ====================================================
 
-# 2b. Detect changepoints (from outer sensor HRM)
+# OPTION A: Simple linear offset (universal, all methods)
+# --------------------------------------------------------
+zero_periods <- list(
+  list(start = "2024-03-15 22:00:00", end = "2024-03-16 06:00:00"),
+  list(start = "2024-03-16 22:00:00", end = "2024-03-17 06:00:00")
+)
+
+vh_zf_corrected <- apply_zero_flow_offset(
+  vh_flagged,
+  zero_periods = zero_periods
+)
+# Creates: Vh_cm_hr_zf for all methods
+
+# OPTION B: Burgess spacing correction (HRM only)
+# ------------------------------------------------
+# Only if using HRM and offset ≤ ±5 cm/hr
 daily_min <- calculate_daily_minima(
   vh_data = vh_flagged,
   sensor_position = "outer",
@@ -1186,7 +1288,6 @@ cpt_result <- detect_changepoints(
   min_segment_days = 7
 )
 
-# Apply spacing correction to both sensors
 correction <- apply_spacing_correction_both_sensors(
   vh_data = vh_flagged,
   changepoints = cpt_result$changepoints,
@@ -1194,22 +1295,36 @@ correction <- apply_spacing_correction_both_sensors(
   k_assumed = 0.0025
 )
 
-vh_corrected <- correction$vh_corrected
+vh_spacing_corrected <- correction$vh_corrected
+# Creates: Vh_cm_hr_sc for HRM only
 
-# Apply junction smoothing (HRM only)
+# Optional: Junction smoothing (HRM + changepoint methods only)
 vh_smoothed <- smooth_segment_junctions(
-  vh_data = vh_corrected,
+  vh_data = vh_spacing_corrected,
   changepoints = cpt_result$changepoints,
   method = "HRM",
   window_size = 3
 )
 
-# PHASE 5: Method Calibration
-# ============================
+# PHASE 3: Wound Correction
+# ==========================
+
+# Apply wound correction (works with either zero-flow approach)
+vh_wound_corrected <- apply_wound_correction(
+  vh_data = vh_zf_corrected,  # OR vh_spacing_corrected (if using Option B)
+  wound_diameter = 0.20
+)
+# Creates: Vh_cm_hr_zf_wc (if from Option A)
+#      or: Vh_cm_hr_sc_wc (if from Option B)
+# Updates: Vh_cm_hr -> current best
+
+# PHASE 4: Method Calibration (Optional)
+# =======================================
 
 # Calibrate secondary methods to corrected HRM
+# Only if you have multiple methods and want consistency
 calibrations <- calibrate_multiple_methods(
-  vh_corrected = vh_smoothed,
+  vh_corrected = vh_wound_corrected,
   primary_method = "HRM",
   secondary_methods = c("MHR", "HRMXa", "Tmax_Klu"),
   sensor_position = "outer"
@@ -1217,7 +1332,7 @@ calibrations <- calibrate_multiple_methods(
 
 # Apply calibrations
 vh_final <- transform_multiple_methods(
-  vh_original = vh_smoothed,
+  vh_original = vh_wound_corrected,
   calibrations = calibrations
 )
 
