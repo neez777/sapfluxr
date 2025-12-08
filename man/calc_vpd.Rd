@@ -8,8 +8,8 @@ calc_vpd(
   weather_data,
   temp_col = "air_temp_c",
   rh_col = "relative_humidity",
-  a = 17.27,
-  b = 237.7,
+  magnus_coef = 17.27,
+  magnus_base_temp = 237.7,
   return_components = FALSE
 )
 }
@@ -23,9 +23,11 @@ weather_data object. Default is "air_temp_c".}
 \item{rh_col}{Character string. Name of relative humidity column if not using
 weather_data object. Default is "relative_humidity".}
 
-\item{a}{Numeric. Magnus equation parameter 'a'. Default is 17.27.}
+\item{magnus_coef}{Numeric. Magnus equation coefficient (dimensionless).
+Default is 17.27 (Alduchov & Eskridge 1996).}
 
-\item{b}{Numeric. Magnus equation parameter 'b' (°C). Default is 237.7.}
+\item{magnus_base_temp}{Numeric. Magnus equation base temperature (°C).
+Default is 237.7°C (Alduchov & Eskridge 1996).}
 
 \item{return_components}{Logical. If TRUE, returns saturated vapor pressure
 and actual vapor pressure in addition to VPD. Default is FALSE.}
@@ -42,10 +44,16 @@ using the Magnus equation. VPD is the difference between the amount of moisture
 in the air and how much moisture the air can hold when saturated.
 }
 \details{
-The Magnus equation calculates saturated vapor pressure (SVP) as:
-\deqn{SVP = 0.61078 \times \exp\left(\frac{a \times T}{b + T}\right)}
+The Magnus-Tetens equation calculates saturated vapor pressure (SVP) as:
+\deqn{SVP = e_0 \times \exp\left(\frac{\alpha \times T}{\beta + T}\right)}
 
-Where T is temperature in °C, a = 17.27, and b = 237.7°C.
+Where:
+\itemize{
+\item \eqn{e_0} = 0.61078 kPa (reference saturation vapor pressure at 0°C)
+\item \eqn{T} = air temperature (°C)
+\item \eqn{\alpha} = 17.27 (dimensionless coefficient, \code{magnus_coef})
+\item \eqn{\beta} = 237.7°C (base temperature, \code{magnus_base_temp})
+}
 
 Actual vapor pressure (AVP) is calculated from relative humidity:
 \deqn{AVP = \frac{RH}{100} \times SVP}
@@ -53,7 +61,7 @@ Actual vapor pressure (AVP) is calculated from relative humidity:
 Vapor pressure deficit is then:
 \deqn{VPD = SVP - AVP}
 
-Default parameters (a=17.27, b=237.7) are appropriate for temperatures
+Default parameters (α=17.27, β=237.7) are appropriate for temperatures
 between 0-60°C. For sub-zero temperatures, consider adjusting parameters.
 }
 \examples{
@@ -72,8 +80,8 @@ my_data_vpd <- calc_vpd(my_data, temp_col = "temp", rh_col = "rh")
 # Return all components
 weather_full <- calc_vpd(weather, return_components = TRUE)
 
-# Custom Magnus parameters
-weather_vpd <- calc_vpd(weather, a = 17.27, b = 237.7)
+# Custom Magnus parameters (for sub-zero temperatures)
+weather_vpd <- calc_vpd(weather, magnus_coef = 17.5, magnus_base_temp = 240.0)
 }
 
 }
