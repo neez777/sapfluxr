@@ -1,0 +1,66 @@
+graph TB
+    Start([Raw Velocity Data<br/>Vh_cm_hr_raw + Vh_cm_hr]) --> Choice{Choose<br/>Correction Approach}
+
+    Choice -->|Path A: Universal Linear Offset| PathA[Zero-Flow Offset Correction]
+    Choice -->|Path B: Physics-Based HRM| PathB[Spacing Correction Workflow]
+
+    %% ===== PATH A: ZERO-FLOW OFFSET =====
+    PathA --> A1[Define Zero-Flow Periods<br/>User specifies datetime ranges<br/>nighttime, dormant season, etc.]
+    A1 --> A2[Extract Velocity During<br/>Zero-Flow Periods<br/>For each method/sensor combo]
+    A2 --> A3[Calculate Mean Offset<br/>offset = mean Vh in zero periods<br/>Should be ~0, but isn't due to misalignment]
+    A3 --> A4[Apply Linear Correction<br/>Vh_corrected = Vh_raw - offset<br/>For all timestamps]
+    A4 --> A5[Create Column: Vh_cm_hr_zf<br/>Update pointer: Vh_cm_hr → Vh_cm_hr_zf<br/>Store metadata: offset values, SD, n_obs]
+    A5 --> A6{Apply Wound<br/>Correction?}
+    A6 -->|Yes| A7[Wound Correction<br/>Input: Vh_cm_hr_zf<br/>Calculate B coefficient<br/>Vh_wc = Vh_zf × B]
+    A6 -->|No| OutputA
+    A7 --> A8[Create Column: Vh_cm_hr_zf_wc<br/>Update pointer: Vh_cm_hr → Vh_cm_hr_zf_wc<br/>Store metadata: wound params]
+    A8 --> OutputA[Output Path A<br/>Columns: Vh_cm_hr_raw, Vh_cm_hr_zf,<br/>Vh_cm_hr_zf_wc, Vh_cm_hr]
+
+    %% ===== PATH B: SPACING CORRECTION =====
+    PathB --> B1[Define Zero-Flow Periods<br/>Same as Path A<br/>Used for offset detection]
+    B1 --> B2[Calculate Zero-Flow Offset<br/>Same method as Path A<br/>offset = mean Vh during zero periods]
+    B2 --> B3{Validate Offset<br/>Physical Constraint Check}
+    B3 -->|Invalid: offset > max| B4[Offset exceeds physical limit<br/>Probes would need to overlap<br/>max_offset = x×3600 / 4×t]
+    B4 --> B5[Fallback to Linear Offset<br/>Apply Path A correction instead<br/>Create Vh_cm_hr_zf]
+    B5 --> B6{Apply Wound<br/>Correction?}
+    B6 -->|Yes| B7[Wound Correction<br/>Input: Vh_cm_hr_zf]
+    B6 -->|No| OutputB
+    B7 --> B8[Create: Vh_cm_hr_zf_wc]
+    B8 --> OutputB
+
+    B3 -->|Valid: offset ≤ max| B9[Apply Burgess Correction<br/>Lookup coefficients B, C<br/>from Burgess tables]
+    B9 --> B10[Calculate Implied Spacing Error<br/>Δx from observed offset<br/>using HRM physics]
+    B10 --> B11[Apply Polynomial Correction<br/>Vh_sc = B × Vh_raw + C<br/>Accounts for probe misalignment]
+    B11 --> B12[Create Column: Vh_cm_hr_sc<br/>Update pointer: Vh_cm_hr → Vh_cm_hr_sc<br/>Store metadata: B, C, Δx, severity]
+    B12 --> B13{Apply Wound<br/>Correction?}
+    B13 -->|Yes| B14[Wound Correction<br/>Input: Vh_cm_hr_sc<br/>Calculate B coefficient<br/>Vh_wc = Vh_sc × B_wound]
+    B13 -->|No| OutputB
+    B14 --> B15[Create Column: Vh_cm_hr_sc_wc<br/>Update pointer: Vh_cm_hr → Vh_cm_hr_sc_wc<br/>Store metadata: wound params]
+    B15 --> OutputB[Output Path B<br/>Columns: Vh_cm_hr_raw, Vh_cm_hr_sc,<br/>Vh_cm_hr_sc_wc, Vh_cm_hr<br/>OR Vh_cm_hr_zf if fallback]
+
+    %% ===== FINAL OUTPUT =====
+    OutputA --> Final
+    OutputB --> Final
+    Final[Final Data Structure<br/>━━━━━━━━━━━━━━━━━━━━━━<br/>Always present: Vh_cm_hr_raw preserved<br/>Path A: Vh_cm_hr_zf, Vh_cm_hr_zf_wc<br/>Path B: Vh_cm_hr_sc, Vh_cm_hr_sc_wc<br/>OR Vh_cm_hr_zf, Vh_cm_hr_zf_wc fallback<br/>Current best: Vh_cm_hr points to latest<br/>━━━━━━━━━━━━━━━━━━━━━━<br/>Metadata attributes:<br/>• current_vh_column<br/>• corrections_applied<br/>• correction-specific results]
+
+    Final --> Downstream[Downstream Processing<br/>━━━━━━━━━━━━━━━━━━━━━━<br/>Flux scaling: Uses Vh_cm_hr<br/>Tree water use: Uses Vh_cm_hr<br/>Plotting: Can compare all stages<br/>Export: All columns preserved]
+
+    %% ===== LEGEND =====
+    Legend[Legend:<br/>━━━━━━━━━━━━━━━━━━━━━━<br/>Path A: Universal, works for all methods<br/>Path B: HRM-specific, more accurate when valid<br/>Vh_cm_hr_raw: Always preserved<br/>Vh_cm_hr: Current pointer always points to latest<br/>_zf suffix: Zero-flow offset corrected<br/>_sc suffix: Spacing Burgess corrected<br/>_wc suffix: Wound corrected<br/>Combined: _zf_wc or _sc_wc]
+
+    %% ===== STYLING =====
+    style Start fill:#e1f5ff
+    style Choice fill:#fff4e1
+    style PathA fill:#e1ffe1
+    style PathB fill:#ffe1e1
+    style B3 fill:#fff4e1
+    style A6 fill:#e1ffe1
+    style B6 fill:#e1ffe1
+    style B13 fill:#e1ffe1
+    style Final fill:#ffe1ff
+    style Downstream fill:#e1f5ff
+    style OutputA fill:#d4edda
+    style OutputB fill:#f8d7da
+    style Legend fill:#fff3cd
+    style B4 fill:#f8d7da
+    style B5 fill:#fff3cd
