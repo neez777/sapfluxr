@@ -25,6 +25,9 @@ NULL
 #' @param k_assumed Assumed thermal diffusivity (cm²/s) (default: 0.0025)
 #' @param probe_spacing Probe spacing (cm) (default: 0.5)
 #' @param measurement_time Measurement time (sec) (default: 80)
+#' @param create_new_col Logical, whether to create new corrected column (Vh_cm_hr_sc)
+#'   or overwrite existing column (Vh_cm_hr). Default: FALSE (overwrite in-place).
+#'   Set to TRUE to preserve original values.
 #' @param verbose Logical, whether to print progress (default: TRUE)
 #'
 #' @return A list containing:
@@ -93,6 +96,7 @@ apply_spacing_correction_both_sensors <- function(vh_data,
                                                    k_assumed = 0.0025,
                                                    probe_spacing = 0.5,
                                                    measurement_time = 80,
+                                                   create_new_col = FALSE,
                                                    verbose = TRUE) {
 
   if (verbose) {
@@ -135,6 +139,7 @@ apply_spacing_correction_both_sensors <- function(vh_data,
     measurement_time = measurement_time,
     lookup_table = lookup_table,
     baseline_overrides = baseline_overrides_outer,
+    create_new_col = create_new_col,
     verbose = verbose
   )
 
@@ -156,6 +161,7 @@ apply_spacing_correction_both_sensors <- function(vh_data,
     measurement_time = measurement_time,
     lookup_table = lookup_table,
     baseline_overrides = baseline_overrides_inner,
+    create_new_col = create_new_col,
     verbose = verbose
   )
 
