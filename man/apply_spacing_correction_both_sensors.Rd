@@ -13,6 +13,7 @@ apply_spacing_correction_both_sensors(
   k_assumed = 0.0025,
   probe_spacing = 0.5,
   measurement_time = 80,
+  create_new_col = FALSE,
   verbose = TRUE
 )
 }
@@ -32,6 +33,10 @@ apply_spacing_correction_both_sensors(
 \item{probe_spacing}{Probe spacing (cm) (default: 0.5)}
 
 \item{measurement_time}{Measurement time (sec) (default: 80)}
+
+\item{create_new_col}{Logical, whether to create new corrected column (Vh_cm_hr_sc)
+or overwrite existing column (Vh_cm_hr). Default: FALSE (overwrite in-place).
+Set to TRUE to preserve original values.}
 
 \item{verbose}{Logical, whether to print progress (default: TRUE)}
 }
