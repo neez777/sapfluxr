@@ -238,16 +238,16 @@ detect_humidity_column <- function(data) {
     }
   }
 
-  # Check candidates for typical RH range (0-100)
+  # Check candidates for typical RH range (0-100, allow slight overshoot to ~105%)
   if (length(candidates) > 0) {
     for (idx in unique(candidates)) {
       col_data <- as.numeric(data[[idx]])
       col_data <- col_data[!is.na(col_data)]
 
-      # RH heuristic: 0-100%
+      # RH heuristic: 0-105% (allow for measurement overshoot during fog/condensation)
       if (length(col_data) > 0 &&
           min(col_data, na.rm = TRUE) >= 0 &&
-          max(col_data, na.rm = TRUE) <= 100) {
+          max(col_data, na.rm = TRUE) <= 105) {
         return(names(data)[idx])
       }
     }
@@ -376,11 +376,14 @@ validate_weather_data <- function(data) {
                                temp_range[1], temp_range[2]))
   }
 
-  # Check RH range
+  # Check RH range (allow slight overshoot to 105% for fog/condensation conditions)
   rh_range <- range(data$relative_humidity, na.rm = TRUE)
-  if (rh_range[1] < 0 || rh_range[2] > 100) {
+  if (rh_range[1] < 0 || rh_range[2] > 105) {
     issues <- c(issues, sprintf("Relative humidity outside valid range: %.1f to %.1f%%",
                                rh_range[1], rh_range[2]))
+  } else if (rh_range[2] > 100 && rh_range[2] <= 105) {
+    issues <- c(issues, sprintf("Relative humidity slightly exceeds 100%% (max: %.1f%%). This can occur during fog or condensation.",
+                               rh_range[2]))
   }
 
   # Check for duplicate timestamps
@@ -388,9 +391,11 @@ validate_weather_data <- function(data) {
     issues <- c(issues, "Duplicate timestamps detected")
   }
 
-  # Check temporal ordering
-  if (is.unsorted(data$datetime)) {
+  # Check temporal ordering (only if no NAs)
+  if (!any(is.na(data$datetime)) && is.unsorted(data$datetime)) {
     issues <- c(issues, "Data is not in chronological order")
+  } else if (any(is.na(data$datetime))) {
+    issues <- c(issues, sprintf("%d datetime values could not be parsed", sum(is.na(data$datetime))))
   }
 
   if (length(issues) > 0) {

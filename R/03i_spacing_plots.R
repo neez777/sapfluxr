@@ -884,7 +884,9 @@ plot_changepoints_interactive <- function(daily_min,
                                            vh_data = NULL,
                                            title = "Daily Minimum Velocities with Changepoints",
                                            show_baseline_values = TRUE,
-                                           show_original_data = FALSE) {
+                                           show_original_data = FALSE,
+                                           vpd_data = NULL,
+                                           show_vpd = FALSE) {
 
   # Check for plotly
   if (!requireNamespace("plotly", quietly = TRUE)) {
@@ -975,6 +977,7 @@ plot_changepoints_interactive <- function(daily_min,
       type = "scatter",
       mode = "lines+markers",
       name = "Daily Minimum Vh",
+      yaxis = "y",
       line = list(color = "steelblue", width = 2),
       marker = list(size = 4, color = "steelblue"),
       hovertemplate = paste(
@@ -1063,28 +1066,109 @@ plot_changepoints_interactive <- function(daily_min,
     }
   }
 
-  # Configure layout
-  fig <- fig %>%
-    plotly::layout(
-      title = list(text = title, font = list(size = 16, weight = "bold")),
-      xaxis = list(
-        title = "Date",
-        showgrid = TRUE,
-        gridcolor = "lightgray"
-      ),
-      yaxis = list(
-        title = "Velocity (cm/hr)",
-        showgrid = TRUE,
-        gridcolor = "lightgray"
-      ),
-      hovermode = "closest",
-      dragmode = "zoom",
-      legend = list(
-        x = 0.02,
-        y = 0.98,
-        bgcolor = "rgba(255,255,255,0.8)"
+  # Check if we should use VPD axis
+  use_vpd_axis <- FALSE
+  vpd_matched <- NULL
+
+  if (show_vpd && !is.null(vpd_data)) {
+    # Ensure vpd_data has required columns
+    if (all(c("date", "min_vpd") %in% names(vpd_data))) {
+      # Match VPD data to daily_min dates and sort by date
+      vpd_matched <- vpd_data[vpd_data$date %in% daily_min$date, ]
+      vpd_matched <- vpd_matched[order(vpd_matched$date), ]
+
+      if (nrow(vpd_matched) > 0) {
+        use_vpd_axis <- TRUE
+      }
+    }
+  }
+
+  # Add VPD overlay if available
+  if (use_vpd_axis && !is.null(vpd_matched)) {
+    message(sprintf("Adding VPD overlay: %d points, color=green, solid line", nrow(vpd_matched)))
+
+    fig <- fig %>%
+      plotly::add_trace(
+        data = vpd_matched,
+        x = ~date,
+        y = ~min_vpd,
+        type = "scatter",
+        mode = "lines",
+        name = "VPD",
+        yaxis = "y2",
+        line = list(color = "green", width = 2),
+        hovertemplate = paste(
+          "<b>VPD</b><br>",
+          "Date: %{x|%Y-%m-%d}<br>",
+          "Min VPD: %{y:.3f} kPa<br>",
+          "<extra></extra>"
+        )
       )
-    ) %>%
+  }
+
+  # Configure layout - CONDITIONAL based on whether VPD is shown
+  if (use_vpd_axis) {
+    # Layout with secondary y-axis for VPD
+    fig <- fig %>%
+      plotly::layout(
+        title = list(text = title, font = list(size = 16, weight = "bold")),
+        xaxis = list(
+          title = "Date",
+          showgrid = TRUE,
+          gridcolor = "lightgray"
+        ),
+        yaxis = list(
+          title = "Velocity (cm/hr)",
+          showgrid = TRUE,
+          gridcolor = "lightgray"
+        ),
+        yaxis2 = list(
+          title = "VPD (kPa)",
+          overlaying = "y",
+          side = "right",
+          showgrid = FALSE,
+          zeroline = FALSE
+        ),
+        hovermode = "closest",
+        dragmode = "zoom",
+        legend = list(
+          orientation = "h",
+          x = 0,
+          y = -0.25,
+          xanchor = "left",
+          yanchor = "top"
+        ),
+        margin = list(b = 150, l = 60, r = 80, t = 80)
+      )
+  } else {
+    # Standard single-axis layout
+    fig <- fig %>%
+      plotly::layout(
+        title = list(text = title, font = list(size = 16, weight = "bold")),
+        xaxis = list(
+          title = "Date",
+          showgrid = TRUE,
+          gridcolor = "lightgray"
+        ),
+        yaxis = list(
+          title = "Velocity (cm/hr)",
+          showgrid = TRUE,
+          gridcolor = "lightgray"
+        ),
+        hovermode = "closest",
+        dragmode = "zoom",
+        legend = list(
+          orientation = "h",
+          x = 0,
+          y = -0.25,
+          xanchor = "left",
+          yanchor = "top"
+        ),
+        margin = list(b = 150, l = 60, r = 60, t = 80)
+      )
+  }
+
+  fig <- fig %>%
     plotly::config(
       modeBarButtonsToRemove = c("select2d", "lasso2d", "autoScale2d"),
       displaylogo = FALSE

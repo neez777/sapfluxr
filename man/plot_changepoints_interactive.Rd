@@ -12,7 +12,9 @@ plot_changepoints_interactive(
   vh_data = NULL,
   title = "Daily Minimum Velocities with Changepoints",
   show_baseline_values = TRUE,
-  show_original_data = FALSE
+  show_original_data = FALSE,
+  vpd_data = NULL,
+  show_vpd = FALSE
 )
 }
 \arguments{
