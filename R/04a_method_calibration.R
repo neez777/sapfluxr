@@ -55,16 +55,19 @@ NULL
 #'
 #' 1. Tests thresholds from \code{threshold_start} to \code{threshold_max} by
 #'    \code{threshold_step} (e.g., 0, 0.5, 1.0, 1.5, ..., 20 cm/hr)
-#' 2. At each threshold, filters data to points where primary method > threshold
-#' 3. Fits relationship between primary and secondary methods
+#' 2. At each threshold, filters data to points where primary method <= threshold
+#' 3. Fits relationship between primary and secondary methods on this valid region
 #' 4. Records R², RMSE, and number of points
-#' 5. Identifies threshold with maximum R²
+#' 5. Identifies the maximum threshold that maintains high R² (where methods still agree)
 #'
 #' **Interpretation:**
 #'
-#' The optimal threshold represents the velocity above which both methods are
-#' valid and show the strongest correlation. Below this threshold, one method
-#' may be less reliable (e.g., MHR at very low flows).
+#' The optimal threshold represents the maximum velocity up to which both methods
+#' are valid and show strong correlation. This is the "divergence point" where
+#' the primary method (typically HRM) begins to fail. Data below the threshold
+#' is used for calibration (where both methods are reliable). The resulting
+#' calibration coefficients are then applied to transform the secondary method
+#' values above the threshold (where the primary fails but secondary continues).
 #'
 #' **Diagnostic Plots:**
 #'
@@ -281,8 +284,8 @@ find_optimal_calibration_threshold <- function(vh_corrected,
   for (i in seq_along(thresholds)) {
     threshold <- thresholds[i]
 
-    # Filter to threshold region
-    calib_data <- merged_data[merged_data$Vh_cm_hr_primary > threshold, ]
+    # Filter to VALID calibration range (data BELOW threshold where both methods agree)
+    calib_data <- merged_data[merged_data$Vh_cm_hr_primary <= threshold, ]
 
     # Check minimum points
     if (nrow(calib_data) < min_points) {
@@ -480,9 +483,11 @@ find_optimal_calibration_threshold <- function(vh_corrected,
 #' **Calibration Process:**
 #'
 #' 1. Merges primary and secondary method data by pulse_id
-#' 2. Filters to points where primary method > threshold_velocity
+#' 2. Filters to points where primary method <= threshold_velocity (valid region)
 #' 3. Fits regression: primary ~ secondary (or primary ~ secondary + secondary²)
 #' 4. Creates transformation function to convert secondary values to primary scale
+#' 5. This transformation is then applied to ALL secondary data, especially above
+#'    the threshold where the primary method becomes unreliable
 #'
 #' **Fit Type Selection:**
 #'
@@ -559,8 +564,8 @@ calibrate_method_to_primary <- function(vh_corrected,
     suffixes = c("_primary", "_secondary")
   )
 
-  # Filter to threshold region
-  calib_data <- calib_data[calib_data$Vh_cm_hr_primary > threshold_velocity, ]
+  # Filter to VALID calibration range (data BELOW threshold where both methods agree)
+  calib_data <- calib_data[calib_data$Vh_cm_hr_primary <= threshold_velocity, ]
 
   if (nrow(calib_data) < min_points) {
     stop(sprintf(

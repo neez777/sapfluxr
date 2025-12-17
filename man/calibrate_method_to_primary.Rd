@@ -56,9 +56,11 @@ to the primary method scale.
 \strong{Calibration Process:}
 \enumerate{
 \item Merges primary and secondary method data by pulse_id
-\item Filters to points where primary method > threshold_velocity
+\item Filters to points where primary method <= threshold_velocity (valid region)
 \item Fits regression: primary ~ secondary (or primary ~ secondary + secondary²)
 \item Creates transformation function to convert secondary values to primary scale
+\item This transformation is then applied to ALL secondary data, especially above
+the threshold where the primary method becomes unreliable
 }
 
 \strong{Fit Type Selection:}

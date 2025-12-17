@@ -78,12 +78,36 @@ wound_correction:
                                     # Initial wound = drill_bit + 2×wound_addition
                                     # Example: 2.0mm drill + 2×0.3mm = 2.6mm initial wound
 
-  # Temporal wound expansion (optional - for wound tracking over time)
-  # If not tracking wound expansion, only initial wound diameter is used
+  # Temporal wound expansion (optional - choose ONE approach below)
+  # If not tracking wound expansion, only initial wound diameter is used (static)
+
+  # --------------------------------------------------------------------------
+  # MODEL A: Constant Healing Rate (Linear Growth with Sawtooth)
+  # --------------------------------------------------------------------------
+  # Use when you have initial and final measurements, want linear interpolation
+  # Wound grows linearly from initial_date to final_date
+  # If reinstallations occur, wound resets to initial size then grows at same rate
+  # Creates "sawtooth" pattern: reset → grow → reset → grow
   initial_date: null                # Date of sensor installation (YYYY-MM-DD)
   final_date: null                  # Date of final wound measurement (YYYY-MM-DD)
   final_diameter_mm: null           # Measured wound diameter at final_date (mm)
-                                    # Wound diameter will be interpolated linearly between dates
+
+  # Example Model A (commented): initial_date: "2024-01-01", final_date: "2024-12-31", 
+  # final_diameter_mm: 3.2, reinstall_dates: ["2024-06-15"]
+
+  # --------------------------------------------------------------------------
+  # MODEL B: Measured Wound Sizes Per Period (Step Function)
+  # --------------------------------------------------------------------------
+  # Use when you have actual measured wound diameters at each reinstallation
+  # Each period has constant measured wound diameter - no interpolation
+  # reinstall_dates: null           # Dates when probe was removed/reinstalled
+  # wound_at_reinstall_mm: null     # Array of measured wound diameters (mm)
+                                    # Length must be: num_reinstalls + 1
+
+  # Example Model B (commented): reinstall_dates: ["2024-04-01", "2024-08-01"]
+  # wound_at_reinstall_mm: [2.6, 2.8, 2.4] creates 3 periods with fixed diameters
+
+  # IMPORTANT: Do NOT use both models simultaneously - choose one approach
 
 # ============================================================================
 # QUALITY THRESHOLDS - Species-specific defaults (can override in R)

@@ -150,6 +150,7 @@ vpd_cpts_limited <- detect_vpd_changepoints(
 \code{\link{calculate_daily_vpd_minima}} for preparing daily VPD data
 
 Other VPD changepoint functions: 
-\code{\link{calculate_daily_vpd_minima}()}
+\code{\link{calculate_daily_vpd_minima}()},
+\code{\link{detect_stable_vpd_periods}()}
 }
 \concept{VPD changepoint functions}

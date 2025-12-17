@@ -24,6 +24,8 @@ NULL
 #'     \item{d}{Polynomial coefficient d}
 #'     \item{B_linear}{Linear correction coefficient (recommended)}
 #'     \item{r_squared}{R² for linear approximation}
+#'     \item{reinstall_dates}{POSIXct vector of reinstallation dates, optional}
+#'     \item{reinstall_measured_diameters}{Numeric vector of measured wound diameters at each reinstallation (mm), optional. Enables Segmented Sawtooth Model with period-specific growth rates.}
 #'   }
 #'
 #' @details
@@ -149,94 +151,252 @@ calc_wound_diameter <- function(timestamps, wound_config) {
   # Set defaults
   wound_addition <- if (is.null(wound_config$wound_addition_mm)) 0.3 else wound_config$wound_addition_mm
 
-  # Calculate initial wound diameter (mm)
-  initial_diameter_mm <- wound_config$drill_bit_diameter_mm + 2 * wound_addition
-
   # -------------------------------------------------------------------------
-  # Mode 1: Segmented (Multiple Reinstallations) - PREFERRED NEW METHOD
+  # STEP 1: Determine wound tracking model and validate parameters
   # -------------------------------------------------------------------------
 
-  if (!is.null(wound_config$reinstall_dates) && !is.null(wound_config$wound_at_reinstall_mm)) {
+  # Base diameter = drill bit + wound tissue addition on both sides
+  base_diameter_mm <- wound_config$drill_bit_diameter_mm + 2 * wound_addition
 
-    reinstall_dates <- as.POSIXct(wound_config$reinstall_dates)
-    wound_diameters_mm <- wound_config$wound_at_reinstall_mm
+  # Detect which model to use based on parameters provided
+  has_model_a_params <- !is.null(wound_config$initial_date) &&
+                        !is.null(wound_config$final_date) &&
+                        !is.null(wound_config$final_diameter_mm)
 
-    # Validate inputs
-    n_reinstalls <- length(reinstall_dates)
-    n_wounds <- length(wound_diameters_mm)
+  has_model_b_params <- !is.null(wound_config$wound_at_reinstall_mm)
 
-    if (n_wounds != n_reinstalls + 1) {
-      stop("wound_at_reinstall_mm must have length = length(reinstall_dates) + 1\n",
-           "  (one initial wound diameter + one per reinstallation)\n",
-           "  Got: ", n_wounds, " wound diameters for ", n_reinstalls, " reinstallations")
+  # Validate: cannot use both models simultaneously
+  if (has_model_a_params && has_model_b_params) {
+    stop("Cannot specify both Model A (initial_date/final_date/final_diameter_mm) and Model B (wound_at_reinstall_mm) parameters simultaneously. Choose one approach.")
+  }
+
+  # Initialize model flag and growth rate
+  use_model_b <- has_model_b_params
+  growth_rate_mm_per_day <- 0  # Default for Model A with no temporal tracking
+
+  # -------------------------------------------------------------------------
+  # -------------------------------------------------------------------------
+  # MODEL A: Healing Rate Calculation
+  # -------------------------------------------------------------------------
+  # Two sub-models:
+  #   - Global Rate: Single growth rate from initial to final (original)
+  #   - Segmented Rate: Period-specific rates using intermediate measurements
+
+  period_growth_rates <- NULL  # Will hold period-specific rates if segmented model
+  use_segmented_rates <- FALSE
+
+  if (has_model_a_params) {
+    initial_date <- as.POSIXct(wound_config$initial_date)
+    final_date <- as.POSIXct(wound_config$final_date)
+    final_diameter_mm <- wound_config$final_diameter_mm
+
+    # Validate dates
+    if (final_date <= initial_date) {
+      stop("final_date must be after initial_date")
     }
 
-    # Check dates are sorted
+    # Check if segmented model requested via reinstall_measured_diameters
+    if (!is.null(wound_config$reinstall_measured_diameters)) {
+      # ===================================================================
+      # SEGMENTED SAWTOOTH MODEL: Period-specific growth rates
+      # ===================================================================
+
+      if (is.null(wound_config$reinstall_dates)) {
+        stop("reinstall_measured_diameters requires reinstall_dates to be specified")
+      }
+
+      reinstall_dates <- as.POSIXct(wound_config$reinstall_dates)
+      reinstall_measured_diameters <- wound_config$reinstall_measured_diameters
+
+      # Validate: must have same length
+      if (length(reinstall_measured_diameters) != length(reinstall_dates)) {
+        stop(sprintf("reinstall_measured_diameters must have same length as reinstall_dates. Expected %d, got %d.",
+                    length(reinstall_dates), length(reinstall_measured_diameters)))
+      }
+
+      # Validate chronological order
+      if (is.unsorted(reinstall_dates)) {
+        stop("reinstall_dates must be in chronological order")
+      }
+
+      # Calculate period-specific growth rates
+      # Period 1: (Measured[1] - Base) / (ReinstallDate[1] - InitialDate)
+      # Period i: (Measured[i] - Base) / (ReinstallDate[i] - ReinstallDate[i-1])
+      # Final Period: (FinalDiam - Base) / (FinalDate - ReinstallDate[Last])
+
+      n_periods <- length(reinstall_dates) + 1  # Initial period + periods after each reinstall
+      period_growth_rates <- numeric(n_periods)
+
+      # Period 1: Initial to first reinstall
+      days_period1 <- as.numeric(difftime(reinstall_dates[1], initial_date, units = "days"))
+      diameter_increase_period1 <- reinstall_measured_diameters[1] - base_diameter_mm
+      period_growth_rates[1] <- diameter_increase_period1 / days_period1
+
+      # Periods 2 to n-1: Between reinstalls
+      if (length(reinstall_dates) > 1) {
+        for (j in 2:length(reinstall_dates)) {
+          days_period <- as.numeric(difftime(reinstall_dates[j], reinstall_dates[j-1], units = "days"))
+          diameter_increase <- reinstall_measured_diameters[j] - base_diameter_mm
+          period_growth_rates[j] <- diameter_increase / days_period
+        }
+      }
+
+      # Final period: Last reinstall to final date
+      days_final <- as.numeric(difftime(final_date, reinstall_dates[length(reinstall_dates)], units = "days"))
+      diameter_increase_final <- final_diameter_mm - base_diameter_mm
+      period_growth_rates[n_periods] <- diameter_increase_final / days_final
+
+      use_segmented_rates <- TRUE
+
+      message("Using Segmented Sawtooth Model with ", n_periods, " period-specific growth rates")
+
+    } else {
+      # ===================================================================
+      # GLOBAL SAWTOOTH MODEL: Single growth rate (original)
+      # ===================================================================
+
+      # Calculate single global growth rate from initial to final
+      days_between <- as.numeric(difftime(final_date, initial_date, units = "days"))
+      diameter_increase <- final_diameter_mm - base_diameter_mm
+      growth_rate_mm_per_day <- diameter_increase / days_between
+    }
+  }
+
+  # STEP 2: Identify installation periods and wound diameters
+  # -------------------------------------------------------------------------
+
+  # =========================================================================
+  # MODEL B: Measured Wound Sizes Per Period (Step Function)
+  # =========================================================================
+  if (use_model_b) {
+    wound_at_reinstall_mm <- wound_config$wound_at_reinstall_mm
+
+    if (!is.null(wound_config$reinstall_dates)) {
+      reinstall_dates <- as.POSIXct(wound_config$reinstall_dates)
+
+      # Validate: must have one more wound diameter than reinstall dates
+      # (initial period + one for each period after reinstallation)
+      expected_length <- length(reinstall_dates) + 1
+      if (length(wound_at_reinstall_mm) != expected_length) {
+        stop(sprintf("wound_at_reinstall_mm must have length = length(reinstall_dates) + 1. Expected %d, got %d.",
+                    expected_length, length(wound_at_reinstall_mm)))
+      }
+
+      # Validate chronological order
+      if (is.unsorted(reinstall_dates)) {
+        stop("reinstall_dates must be in chronological order")
+      }
+
+      # Create period boundaries
+      # Periods: (-Inf, reinstall1], (reinstall1, reinstall2], ..., (reinstallN, Inf)
+      period_starts <- c(-Inf, reinstall_dates)
+      period_diameters_mm <- wound_at_reinstall_mm
+
+    } else {
+      # No reinstallations - single period with single diameter
+      if (length(wound_at_reinstall_mm) != 1) {
+        stop("wound_at_reinstall_mm must have length 1 when no reinstall_dates provided")
+      }
+      period_starts <- c(-Inf)
+      period_diameters_mm <- wound_at_reinstall_mm
+    }
+
+    # Assign wound diameters based on which period each timestamp falls into
+    wound_diameter_mm <- numeric(length(timestamps))
+
+    for (i in seq_along(timestamps)) {
+      # Find which period this timestamp belongs to
+      # Period j if: period_starts[j] < timestamp <= period_starts[j+1]
+      # (or timestamp > period_starts[j] for last period)
+      period_idx <- sum(timestamps[i] >= period_starts)
+      wound_diameter_mm[i] <- period_diameters_mm[period_idx]
+    }
+
+    # Convert to cm and return
+    wound_diameter_cm <- wound_diameter_mm / 10
+    return(wound_diameter_cm)
+  }
+
+  # =========================================================================
+  # MODEL A: Constant Healing Rate (Sawtooth Pattern)
+  # =========================================================================
+
+  # Create vector of all installation start dates
+  # This includes initial installation + all reinstallations
+  # Each reinstallation RESETS the wound diameter to base_diameter_mm
+  if (!is.null(wound_config$reinstall_dates)) {
+    # Ensure reinstall_dates are POSIXct
+    reinstall_dates <- as.POSIXct(wound_config$reinstall_dates)
+
+    # Validate chronological order
     if (is.unsorted(reinstall_dates)) {
       stop("reinstall_dates must be in chronological order")
     }
 
-    # Assign segments using findInterval
-    # Segments: [start, date1), [date1, date2), ..., [dateN, end]
-    segment_id <- findInterval(timestamps, reinstall_dates) + 1
-
-    # Assign wound diameter based on segment
-    wound_diameter_mm <- wound_diameters_mm[segment_id]
-
-    # Convert to cm
-    wound_diameter_cm <- wound_diameter_mm / 10
-
-    return(wound_diameter_cm)
+    # Combine initial date with reinstall dates if initial_date exists
+    if (!is.null(wound_config$initial_date)) {
+      initial_date <- as.POSIXct(wound_config$initial_date)
+      installation_starts <- c(initial_date, reinstall_dates)
+    } else {
+      # No initial_date specified - use first reinstall as initial
+      installation_starts <- reinstall_dates
+    }
+  } else {
+    # No reinstallations - single installation period
+    if (!is.null(wound_config$initial_date)) {
+      installation_starts <- as.POSIXct(wound_config$initial_date)
+    } else {
+      # No dates at all - use static diameter for all timestamps
+      return(rep(base_diameter_mm / 10, length(timestamps)))
+    }
   }
 
   # -------------------------------------------------------------------------
-  # Mode 2: Static wound diameter (no temporal tracking)
+  # -------------------------------------------------------------------------
+  # STEP 3: Vectorised calculation with "sawtooth" pattern
   # -------------------------------------------------------------------------
 
-  if (is.null(wound_config$initial_date) ||
-      is.null(wound_config$final_date) ||
-      is.null(wound_config$final_diameter_mm)) {
+  # For each timestamp, find which installation period it belongs to
+  # Then calculate wound diameter as: base + (days_since_install × growth_rate)
+  # This creates a sawtooth pattern:
+  #   - Linear growth from base_diameter after each installation
+  #   - Reset to base_diameter at each reinstallation
+  #   - Growth rate can be either constant (global) or period-specific (segmented)
 
-    # No temporal tracking - use static initial diameter
-    wound_diameter_cm <- rep(initial_diameter_mm / 10, length(timestamps))  # Convert mm to cm
+  wound_diameter_mm <- numeric(length(timestamps))
 
-    return(wound_diameter_cm)
+  for (i in seq_along(timestamps)) {
+    # Find the most recent installation start date before or equal to this timestamp
+    current_installation_start <- max(installation_starts[installation_starts <= timestamps[i]])
+
+    # Calculate days since this installation
+    days_since_install <- as.numeric(difftime(timestamps[i], current_installation_start, units = "days"))
+
+    # Determine which period this timestamp belongs to (for segmented model)
+    if (use_segmented_rates) {
+      # Find period index based on which installation start this is
+      period_idx <- which(installation_starts == current_installation_start)
+
+      # Use period-specific growth rate
+      current_growth_rate <- period_growth_rates[period_idx]
+    } else {
+      # Use global growth rate
+      current_growth_rate <- growth_rate_mm_per_day
+    }
+
+    # Calculate current diameter: base diameter + linear growth
+    # Each reinstallation resets to base_diameter, then grows linearly
+    wound_diameter_mm[i] <- base_diameter_mm + (days_since_install * current_growth_rate)
   }
 
+  # STEP 4: Convert to cm and return
   # -------------------------------------------------------------------------
-  # Mode 3: Legacy Temporal (linear interpolation) - DEPRECATED
-  # -------------------------------------------------------------------------
 
-  # Parse dates
-  initial_date <- as.POSIXct(wound_config$initial_date)
-  final_date <- as.POSIXct(wound_config$final_date)
-  final_diameter_mm <- wound_config$final_diameter_mm
-
-  # Validate dates
-  if (final_date <= initial_date) {
-    stop("final_date must be after initial_date")
-  }
-
-  # Calculate wound expansion rate
-  wound_period_days <- as.numeric(difftime(final_date, initial_date, units = "days"))
-  wound_increment_mm <- final_diameter_mm - initial_diameter_mm
-  daily_wound_rate_mm <- wound_increment_mm / wound_period_days
-
-  # Calculate days since installation for each timestamp
-  days_since_install <- as.numeric(difftime(timestamps, initial_date, units = "days"))
-
-  # Calculate wound diameter (mm) with linear interpolation
-  wound_diameter_mm <- initial_diameter_mm + (days_since_install * daily_wound_rate_mm)
-
-  # Apply bounds
-  wound_diameter_mm[days_since_install < 0] <- initial_diameter_mm
-  wound_diameter_mm[days_since_install > wound_period_days] <- final_diameter_mm
-
-  # Convert to cm
   wound_diameter_cm <- wound_diameter_mm / 10
 
   return(wound_diameter_cm)
 }
+
 
 
 # =============================================================================

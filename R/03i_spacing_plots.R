@@ -1127,7 +1127,7 @@ plot_changepoints_interactive <- function(daily_min,
           overlaying = "y",
           side = "right",
           showgrid = FALSE,
-          zeroline = FALSE
+          rangemode = "tozero"
         ),
         hovermode = "closest",
         dragmode = "zoom",

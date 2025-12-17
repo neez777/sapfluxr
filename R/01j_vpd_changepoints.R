@@ -597,3 +597,517 @@ print.vpd_changepoints <- function(x, ...) {
 
   invisible(x)
 }
+
+
+# Stable VPD Period Detection (Full-Resolution Analysis) ----------------------
+
+#' Detect Stable Low VPD Periods for Zero-Flow Calibration
+#'
+#' Identifies dates when VPD during pre-dawn hours is both consistently low
+#' AND stable, indicating suitable conditions for zero-flow calibration.
+#' Unlike \code{\link{detect_vpd_changepoints}} which uses daily minimum values,
+#' this function analyses full-resolution weather data during specific hours
+#' to assess both magnitude and stability.
+#'
+#' @param weather_data Data frame containing weather data with columns:
+#'   \code{datetime} (POSIXct) and \code{vpd_kpa} (numeric)
+#' @param predawn_window Integer vector of hours (0-23) to analyse (default: \code{c(2, 3, 4, 5)}).
+#'   These hours are typically pre-dawn when VPD is lowest and most stable.
+#' @param vpd_threshold Maximum acceptable mean VPD during pre-dawn window (kPa, default: 0.5).
+#'   Days with mean pre-dawn VPD above this value are rejected.
+#' @param stability_threshold Maximum acceptable standard deviation of VPD during
+#'   pre-dawn window (kPa, default: 0.1). Higher values indicate unstable conditions.
+#' @param min_n_points Minimum number of data points required in the pre-dawn window
+#'   for a day to be valid (default: 3). Days with fewer points are skipped.
+#' @param min_segment_days Minimum number of days between selected dates (default: 7).
+#'   If valid dates are closer than this, only the most stable day in that period
+#'   is retained.
+#' @param max_changepoints Maximum number of dates to return (default: NULL, no limit).
+#'   If more days meet criteria, those with lowest mean VPD are selected.
+#' @param vpd_col Name of VPD column (default: "vpd_kpa")
+#'
+#' @return A list (S3 class "stable_vpd_periods") containing:
+#'   \item{valid_dates}{Vector of Date objects that passed both magnitude and stability checks}
+#'   \item{daily_stats}{Data frame with statistics for every day:
+#'     \itemize{
+#'       \item \code{date} - Date
+#'       \item \code{n_points} - Number of observations in pre-dawn window
+#'       \item \code{mean_predawn_vpd} - Mean VPD during pre-dawn hours (kPa)
+#'       \item \code{sd_predawn_vpd} - Standard deviation of VPD (kPa)
+#'       \item \code{min_predawn_vpd} - Minimum VPD in window (kPa)
+#'       \item \code{max_predawn_vpd} - Maximum VPD in window (kPa)
+#'       \item \code{passed_magnitude} - Did mean VPD meet threshold?
+#'       \item \code{passed_stability} - Did SD meet threshold?
+#'       \item \code{passed_both} - Passed both checks?
+#'     }
+#'   }
+#'   \item{segments}{Data frame describing periods between selected dates}
+#'   \item{parameters}{List of detection parameters used}
+#'   \item{n_days_analysed}{Total number of days with sufficient data}
+#'   \item{n_days_passed_both}{Number of days passing both checks}
+#'   \item{n_dates_selected}{Number of dates selected after spacing filter}
+#'
+#' @details
+#' **Methodology:**
+#'
+#' This function implements a "stability-based" approach inspired by legacy
+#' zero-flow detection methods. For each date:
+#'
+#' 1. **Extract pre-dawn data**: Filter to specified hours (e.g., 02:00-06:00)
+#' 2. **Check magnitude**: Is mean VPD consistently low? (mean ≤ threshold)
+#' 3. **Check stability**: Is VPD stable? (SD ≤ stability_threshold)
+#' 4. **Validate**: Sufficient data points? (n ≥ min_n_points)
+#'
+#' Only dates passing ALL criteria are considered valid.
+#'
+#' **Differences from detect_vpd_changepoints():**
+#'
+#' \itemize{
+#'   \item \strong{Daily minima} (changepoints): Uses single minimum value per day
+#'   \item \strong{Stability periods} (this function): Analyses full-resolution data during specific hours
+#' }
+#'
+#' The stability approach is more conservative - it rejects days where VPD briefly
+#' drops to a low value but is otherwise unstable or elevated.
+#'
+#' **Pre-dawn Window Selection:**
+#'
+#' Default hours (02:00-06:00) are typically pre-dawn when:
+#' \itemize{
+#'   \item VPD is at daily minimum (high humidity, low temperature)
+#'   \item Atmospheric conditions are most stable
+#'   \item Sap flow is minimal or zero
+#'   \item Environmental noise is minimal
+#' }
+#'
+#' Adjust \code{predawn_window} based on your site's sunrise time and climate.
+#'
+#' **Threshold Selection:**
+#'
+#' \itemize{
+#'   \item \strong{vpd_threshold}: 0.3 kPa (strict), 0.5 kPa (moderate), 0.8 kPa (permissive)
+#'   \item \strong{stability_threshold}: 0.05 kPa (very stable), 0.1 kPa (moderate), 0.15 kPa (permissive)
+#' }
+#'
+#' Stricter thresholds yield fewer but higher-quality calibration dates.
+#'
+#' **Minimum Segment Days:**
+#'
+#' The \code{min_segment_days} parameter ensures temporal independence between
+#' selected dates. When multiple valid dates occur within this window, only
+#' the date with lowest mean VPD is retained.
+#'
+#' **Use Cases:**
+#'
+#' \itemize{
+#'   \item Zero-flow calibration (detecting true zero-flow conditions)
+#'   \item Spacing correction (stable environmental baseline)
+#'   \item Method comparison (periods with minimal environmental influence)
+#'   \item Quality control (identifying stable measurement periods)
+#' }
+#'
+#' @examples
+#' \dontrun{
+#' # Import and process weather data
+#' weather <- read_weather_data("weather_station.csv")
+#' weather_vpd <- calc_vpd(weather)
+#'
+#' # Detect stable pre-dawn periods (default settings)
+#' stable_periods <- detect_stable_vpd_periods(weather_vpd)
+#'
+#' # View selected dates and statistics
+#' print(stable_periods)
+#' print(stable_periods$valid_dates)
+#' View(stable_periods$daily_stats)
+#'
+#' # Stricter criteria: lower thresholds, more data required
+#' stable_strict <- detect_stable_vpd_periods(
+#'   weather_vpd,
+#'   vpd_threshold = 0.3,
+#'   stability_threshold = 0.05,
+#'   min_n_points = 6,
+#'   min_segment_days = 14
+#' )
+#'
+#' # Custom pre-dawn window (earlier sunrise site)
+#' stable_custom <- detect_stable_vpd_periods(
+#'   weather_vpd,
+#'   predawn_window = c(1, 2, 3, 4),
+#'   vpd_threshold = 0.5,
+#'   stability_threshold = 0.1
+#' )
+#'
+#' # Compare with daily minima approach
+#' daily_vpd <- calculate_daily_vpd_minima(weather_vpd)
+#' minima_cpts <- detect_vpd_changepoints(daily_vpd, vpd_threshold = 0.5)
+#'
+#' # Compare selected dates
+#' stable_dates <- stable_periods$valid_dates
+#' minima_dates <- minima_cpts$changepoints
+#' both <- intersect(stable_dates, minima_dates)
+#' stability_only <- setdiff(stable_dates, minima_dates)
+#' minima_only <- setdiff(minima_dates, stable_dates)
+#' }
+#'
+#' @family VPD changepoint functions
+#' @seealso
+#'   \code{\link{detect_vpd_changepoints}} for daily minima approach,
+#'   \code{\link{calculate_daily_vpd_minima}} for daily VPD statistics
+#' @export
+detect_stable_vpd_periods <- function(weather_data,
+                                       predawn_window = c(2, 3, 4, 5),
+                                       vpd_threshold = 0.5,
+                                       stability_threshold = 0.1,
+                                       min_n_points = 3,
+                                       min_segment_days = 7,
+                                       max_changepoints = NULL,
+                                       vpd_col = "vpd_kpa") {
+
+  # Input validation
+  if (!is.data.frame(weather_data)) {
+    stop("weather_data must be a data frame")
+  }
+
+  required_cols <- c("datetime", vpd_col)
+  missing_cols <- setdiff(required_cols, names(weather_data))
+  if (length(missing_cols) > 0) {
+    stop("Missing required columns: ", paste(missing_cols, collapse = ", "))
+  }
+
+  if (!inherits(weather_data$datetime, "POSIXct")) {
+    weather_data$datetime <- as.POSIXct(weather_data$datetime)
+  }
+
+  if (!is.numeric(predawn_window) || any(predawn_window < 0) || any(predawn_window > 23)) {
+    stop("predawn_window must contain hours between 0 and 23")
+  }
+
+  if (vpd_threshold <= 0) {
+    stop("vpd_threshold must be positive")
+  }
+
+  if (stability_threshold < 0) {
+    stop("stability_threshold must be non-negative")
+  }
+
+  if (min_n_points < 1) {
+    stop("min_n_points must be at least 1")
+  }
+
+  if (min_segment_days < 1) {
+    stop("min_segment_days must be at least 1")
+  }
+
+  # Load required packages
+  if (!requireNamespace("dplyr", quietly = TRUE)) {
+    stop("Package 'dplyr' is required but not installed")
+  }
+  if (!requireNamespace("lubridate", quietly = TRUE)) {
+    stop("Package 'lubridate' is required but not installed")
+  }
+
+  # Extract date and hour
+  weather_data$date <- as.Date(weather_data$datetime)
+  weather_data$hour <- lubridate::hour(weather_data$datetime)
+
+  # Filter to pre-dawn window
+  predawn_data <- weather_data[weather_data$hour %in% predawn_window, ]
+
+  if (nrow(predawn_data) == 0) {
+    stop("No data found in specified predawn_window hours: ",
+         paste(predawn_window, collapse = ", "))
+  }
+
+  # Calculate daily statistics for pre-dawn window
+  daily_stats <- predawn_data %>%
+    dplyr::group_by(date) %>%
+    dplyr::summarise(
+      n_points = sum(!is.na(.data[[vpd_col]])),
+      mean_predawn_vpd = mean(.data[[vpd_col]], na.rm = TRUE),
+      sd_predawn_vpd = sd(.data[[vpd_col]], na.rm = TRUE),
+      min_predawn_vpd = min(.data[[vpd_col]], na.rm = TRUE),
+      max_predawn_vpd = max(.data[[vpd_col]], na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    as.data.frame()
+
+  # Filter to days with sufficient data
+  daily_stats <- daily_stats[daily_stats$n_points >= min_n_points, ]
+
+  n_days_analysed <- nrow(daily_stats)
+
+  if (n_days_analysed == 0) {
+    warning("No days have sufficient data (min_n_points = ", min_n_points, ") ",
+            "in pre-dawn window. Consider reducing min_n_points or checking data.")
+
+    return(create_empty_stable_vpd_result(
+      vpd_threshold = vpd_threshold,
+      stability_threshold = stability_threshold,
+      predawn_window = predawn_window,
+      min_n_points = min_n_points,
+      min_segment_days = min_segment_days,
+      max_changepoints = max_changepoints
+    ))
+  }
+
+  # Check magnitude criterion (mean VPD ≤ threshold)
+  daily_stats$passed_magnitude <- daily_stats$mean_predawn_vpd <= vpd_threshold &
+    !is.na(daily_stats$mean_predawn_vpd)
+
+  # Check stability criterion (SD ≤ stability_threshold)
+  # Handle case where SD is NA (only 1 point, or all values identical)
+  daily_stats$passed_stability <- (daily_stats$sd_predawn_vpd <= stability_threshold |
+                                      is.na(daily_stats$sd_predawn_vpd)) &
+    !is.na(daily_stats$mean_predawn_vpd)
+
+  # Both criteria must pass
+  daily_stats$passed_both <- daily_stats$passed_magnitude & daily_stats$passed_stability
+
+  # Count days passing both checks
+  n_days_passed_both <- sum(daily_stats$passed_both, na.rm = TRUE)
+
+  if (n_days_passed_both == 0) {
+    warning("No days passed both magnitude and stability checks. ",
+            "Minimum mean VPD: ", sprintf("%.3f", min(daily_stats$mean_predawn_vpd, na.rm = TRUE)), " kPa. ",
+            "Consider increasing vpd_threshold or stability_threshold.")
+
+    result <- create_empty_stable_vpd_result(
+      vpd_threshold = vpd_threshold,
+      stability_threshold = stability_threshold,
+      predawn_window = predawn_window,
+      min_n_points = min_n_points,
+      min_segment_days = min_segment_days,
+      max_changepoints = max_changepoints
+    )
+    result$daily_stats <- daily_stats
+    result$n_days_analysed <- n_days_analysed
+
+    return(result)
+  }
+
+  # Get candidate dates
+  candidate_dates <- daily_stats$date[daily_stats$passed_both]
+  candidate_vpd <- daily_stats$mean_predawn_vpd[daily_stats$passed_both]
+
+  # Apply minimum segment spacing
+  if (length(candidate_dates) > 1 && min_segment_days > 1) {
+    selected_indices <- filter_stable_vpd_by_spacing(
+      dates = candidate_dates,
+      vpd_values = candidate_vpd,
+      min_spacing_days = min_segment_days
+    )
+    candidate_dates <- candidate_dates[selected_indices]
+    candidate_vpd <- candidate_vpd[selected_indices]
+  }
+
+  # Limit to max_changepoints if specified
+  if (!is.null(max_changepoints) && length(candidate_dates) > max_changepoints) {
+    # Select days with lowest mean VPD
+    keep_indices <- order(candidate_vpd)[1:max_changepoints]
+    candidate_dates <- candidate_dates[keep_indices]
+    candidate_vpd <- candidate_vpd[keep_indices]
+
+    # Re-sort by date
+    sort_order <- order(candidate_dates)
+    candidate_dates <- candidate_dates[sort_order]
+    candidate_vpd <- candidate_vpd[sort_order]
+  }
+
+  # Create segments
+  date_range <- range(weather_data$date)
+  segments <- create_vpd_segments(
+    changepoint_dates = candidate_dates,
+    date_range = date_range
+  )
+
+  # Assemble result
+  result <- list(
+    valid_dates = candidate_dates,
+    daily_stats = daily_stats,
+    segments = segments,
+    parameters = list(
+      vpd_threshold = vpd_threshold,
+      stability_threshold = stability_threshold,
+      predawn_window = predawn_window,
+      min_n_points = min_n_points,
+      min_segment_days = min_segment_days,
+      max_changepoints = max_changepoints,
+      vpd_col = vpd_col
+    ),
+    n_days_analysed = n_days_analysed,
+    n_days_passed_both = n_days_passed_both,
+    n_dates_selected = length(candidate_dates)
+  )
+
+  class(result) <- c("stable_vpd_periods", "list")
+
+  return(result)
+}
+
+
+#' Filter Stable VPD Dates by Minimum Spacing
+#'
+#' Ensures minimum spacing between selected dates, keeping those with lowest mean VPD.
+#'
+#' @param dates Vector of candidate dates
+#' @param vpd_values VPD values corresponding to dates
+#' @param min_spacing_days Minimum days between selected dates
+#'
+#' @return Integer vector of indices to keep
+#' @keywords internal
+filter_stable_vpd_by_spacing <- function(dates, vpd_values, min_spacing_days) {
+  if (length(dates) <= 1) {
+    return(seq_along(dates))
+  }
+
+  # Start with all candidates
+  selected_indices <- integer(0)
+  candidates_remaining <- seq_along(dates)
+
+  while (length(candidates_remaining) > 0) {
+    # Select candidate with lowest VPD
+    vpd_remaining <- vpd_values[candidates_remaining]
+    best_local_idx <- which.min(vpd_remaining)[1]
+    best_idx <- candidates_remaining[best_local_idx]
+
+    # Add to selected
+    selected_indices <- c(selected_indices, best_idx)
+
+    # Remove candidates within min_spacing_days
+    best_date <- dates[best_idx]
+    date_diffs <- abs(as.numeric(difftime(dates[candidates_remaining], best_date, units = "days")))
+
+    candidates_remaining <- candidates_remaining[date_diffs >= min_spacing_days]
+  }
+
+  # Sort by date order
+  selected_indices <- sort(selected_indices)
+
+  return(selected_indices)
+}
+
+
+#' Create Empty Stable VPD Result
+#'
+#' Helper function to create empty result structure when no dates found.
+#'
+#' @param vpd_threshold VPD threshold parameter
+#' @param stability_threshold Stability threshold parameter
+#' @param predawn_window Pre-dawn window parameter
+#' @param min_n_points Minimum points parameter
+#' @param min_segment_days Minimum segment days parameter
+#' @param max_changepoints Maximum changepoints parameter
+#'
+#' @return Empty stable_vpd_periods object
+#' @keywords internal
+create_empty_stable_vpd_result <- function(vpd_threshold,
+                                            stability_threshold,
+                                            predawn_window,
+                                            min_n_points,
+                                            min_segment_days,
+                                            max_changepoints) {
+  result <- list(
+    valid_dates = as.Date(character(0)),
+    daily_stats = data.frame(
+      date = as.Date(character(0)),
+      n_points = integer(0),
+      mean_predawn_vpd = numeric(0),
+      sd_predawn_vpd = numeric(0),
+      min_predawn_vpd = numeric(0),
+      max_predawn_vpd = numeric(0),
+      passed_magnitude = logical(0),
+      passed_stability = logical(0),
+      passed_both = logical(0)
+    ),
+    segments = data.frame(
+      segment_id = integer(0),
+      start_date = as.Date(character(0)),
+      end_date = as.Date(character(0)),
+      n_days = integer(0)
+    ),
+    parameters = list(
+      vpd_threshold = vpd_threshold,
+      stability_threshold = stability_threshold,
+      predawn_window = predawn_window,
+      min_n_points = min_n_points,
+      min_segment_days = min_segment_days,
+      max_changepoints = max_changepoints
+    ),
+    n_days_analysed = 0,
+    n_days_passed_both = 0,
+    n_dates_selected = 0
+  )
+
+  class(result) <- c("stable_vpd_periods", "list")
+
+  return(result)
+}
+
+
+#' Print Method for Stable VPD Periods
+#'
+#' @param x A stable_vpd_periods object
+#' @param ... Additional arguments (not used)
+#' @export
+print.stable_vpd_periods <- function(x, ...) {
+  cat("Stable VPD Periods Detection\n")
+  cat("============================\n\n")
+
+  cat("Parameters:\n")
+  cat("  Pre-dawn window:", paste(x$parameters$predawn_window, collapse = ", "), "hours\n")
+  cat("  VPD threshold:", x$parameters$vpd_threshold, "kPa (mean)\n")
+  cat("  Stability threshold:", x$parameters$stability_threshold, "kPa (SD)\n")
+  cat("  Min data points:", x$parameters$min_n_points, "\n")
+  cat("  Min segment days:", x$parameters$min_segment_days, "\n")
+  if (!is.null(x$parameters$max_changepoints)) {
+    cat("  Max dates:", x$parameters$max_changepoints, "\n")
+  }
+  cat("\n")
+
+  cat("Results:\n")
+  cat("  Days analysed:", x$n_days_analysed, "\n")
+  cat("  Days passed both checks:", x$n_days_passed_both, "\n")
+  cat("  Dates selected:", x$n_dates_selected, "\n")
+  cat("  Segments created:", nrow(x$segments), "\n\n")
+
+  if (x$n_dates_selected > 0) {
+    cat("Selected Dates and Pre-dawn VPD:\n")
+    selected_stats <- x$daily_stats[x$daily_stats$passed_both, ]
+    # Further filter to those actually selected (after spacing)
+    selected_stats <- selected_stats[selected_stats$date %in% x$valid_dates, ]
+
+    date_df <- data.frame(
+      Date = format(selected_stats$date),
+      Mean_VPD_kPa = sprintf("%.3f", selected_stats$mean_predawn_vpd),
+      SD_VPD_kPa = sprintf("%.3f", selected_stats$sd_predawn_vpd),
+      N_Points = selected_stats$n_points
+    )
+    print(date_df, row.names = FALSE)
+    cat("\n")
+
+    cat("Summary Statistics:\n")
+    cat("  Days passed magnitude only:",
+        sum(x$daily_stats$passed_magnitude & !x$daily_stats$passed_stability, na.rm = TRUE), "\n")
+    cat("  Days passed stability only:",
+        sum(!x$daily_stats$passed_magnitude & x$daily_stats$passed_stability, na.rm = TRUE), "\n")
+    cat("  Days passed both:",
+        sum(x$daily_stats$passed_both, na.rm = TRUE), "\n")
+    cat("  After spacing filter:",
+        x$n_dates_selected, "\n")
+  } else {
+    cat("No dates met both magnitude and stability criteria.\n")
+    if (x$n_days_analysed > 0) {
+      cat("\nDiagnostic Information:\n")
+      cat("  Days passed magnitude check:",
+          sum(x$daily_stats$passed_magnitude, na.rm = TRUE), "\n")
+      cat("  Days passed stability check:",
+          sum(x$daily_stats$passed_stability, na.rm = TRUE), "\n")
+      cat("  Minimum mean VPD:",
+          sprintf("%.3f", min(x$daily_stats$mean_predawn_vpd, na.rm = TRUE)), "kPa\n")
+      cat("  Minimum SD VPD:",
+          sprintf("%.3f", min(x$daily_stats$sd_predawn_vpd, na.rm = TRUE)), "kPa\n")
+    }
+  }
+
+  invisible(x)
+}

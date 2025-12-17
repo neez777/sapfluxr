@@ -74,17 +74,20 @@ for method calibration:
 \enumerate{
 \item Tests thresholds from \code{threshold_start} to \code{threshold_max} by
 \code{threshold_step} (e.g., 0, 0.5, 1.0, 1.5, ..., 20 cm/hr)
-\item At each threshold, filters data to points where primary method > threshold
-\item Fits relationship between primary and secondary methods
+\item At each threshold, filters data to points where primary method <= threshold
+\item Fits relationship between primary and secondary methods on this valid region
 \item Records R², RMSE, and number of points
-\item Identifies threshold with maximum R²
+\item Identifies the maximum threshold that maintains high R² (where methods still agree)
 }
 
 \strong{Interpretation:}
 
-The optimal threshold represents the velocity above which both methods are
-valid and show the strongest correlation. Below this threshold, one method
-may be less reliable (e.g., MHR at very low flows).
+The optimal threshold represents the maximum velocity up to which both methods
+are valid and show strong correlation. This is the "divergence point" where
+the primary method (typically HRM) begins to fail. Data below the threshold
+is used for calibration (where both methods are reliable). The resulting
+calibration coefficients are then applied to transform the secondary method
+values above the threshold (where the primary fails but secondary continues).
 
 \strong{Diagnostic Plots:}
 

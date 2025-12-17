@@ -64,6 +64,7 @@ head(daily_vpd[order(daily_vpd$min_vpd), ])
 \code{\link{detect_vpd_changepoints}} for identifying suitable dates
 
 Other VPD changepoint functions: 
+\code{\link{detect_stable_vpd_periods}()},
 \code{\link{detect_vpd_changepoints}()}
 }
 \concept{VPD changepoint functions}

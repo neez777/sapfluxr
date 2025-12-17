@@ -745,6 +745,18 @@ plot_vh_timeseries <- function(vh_results,
     stop("No data available after filtering with specified parameters")
   }
 
+  # Define colors for methods to ensure consistency
+  unique_methods <- unique(filtered_data$method)
+  n_methods <- length(unique_methods)
+  
+  # Generate a color palette for methods (using a standard hue palette)
+  # This mimics ggplot default behavior but allows us to explicitly combine with flag colors
+  hue_pal <- function(n) {
+    hues <- seq(15, 375, length = n + 1)
+    hcl(h = hues, l = 65, c = 100)[1:n]
+  }
+  method_colours <- setNames(hue_pal(n_methods), unique_methods)
+
   # Create plot
   p <- ggplot2::ggplot(filtered_data, ggplot2::aes(x = datetime, y = Vh_cm_hr, color = method)) +
     ggplot2::geom_line(linewidth = 1) +
@@ -819,6 +831,16 @@ plot_vh_timeseries <- function(vh_results,
           # For DATA_MISSING, set Vh to 0 for plotting on x-axis
           Vh_plot = dplyr::if_else(quality_flag == "DATA_MISSING", 0, Vh_cm_hr)
         )
+      
+      # Update flag colors to use friendly labels as names, matching the data
+      # This ensures the scale mapping works correctly
+      flag_colours_mapped <- setNames(
+        flag_colours[names(flag_colours) %in% unique(markers$quality_flag)],
+        flag_labels[names(flag_colours) %in% unique(markers$quality_flag)]
+      )
+      
+      # Combine method colors and flag colors for a single scale
+      combined_colours <- c(method_colours, flag_colours_mapped)
 
       # Add all quality markers as a single layer with proper legend
       p <- p + ggplot2::geom_point(
@@ -833,9 +855,13 @@ plot_vh_timeseries <- function(vh_results,
                          flag_labels[names(flag_shapes) %in% unique(markers$quality_flag)])
       ) +
       ggplot2::scale_colour_manual(
-        name = "Quality Flags",
-        values = setNames(flag_colours[names(flag_colours) %in% unique(markers$quality_flag)],
-                         flag_labels[names(flag_colours) %in% unique(markers$quality_flag)])
+        name = "Legend", # Combined legend title, or separate via breaks
+        values = combined_colours,
+        # To show separate legends, we rely on ggplot separating them because one has 'shape' and other doesn't.
+        # But for 'colour', they share the scale. 
+        # We can guide ggplot to split them if we are careful, but usually it merges 'colour'.
+        # Here we just ensure everything has a color assigned.
+        breaks = c(names(method_colours), names(flag_colours_mapped))
       )
     }
   }
