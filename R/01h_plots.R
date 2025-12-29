@@ -1235,8 +1235,12 @@ build_correction_status_label <- function(vh_data) {
 #' }
 plot_correction_comparison <- function(vh_data,
                                         sensor = "outer",
+                                        sensor_position = NULL,  # Alias for sensor
                                         method = "HRM",
-                                        show_legend = TRUE) {
+                                        show_legend = TRUE,
+                                        title = NULL,  # Optional custom title
+                                        correction_stage = NULL,  # Ignored, for compatibility
+                                        ...) {  # Capture other unused arguments
 
   if (!requireNamespace("ggplot2", quietly = TRUE)) {
     stop("ggplot2 package required for this plot. Install with: install.packages('ggplot2')")
@@ -1244,6 +1248,11 @@ plot_correction_comparison <- function(vh_data,
 
   if (!requireNamespace("tidyr", quietly = TRUE)) {
     stop("tidyr package required for this plot. Install with: install.packages('tidyr')")
+  }
+
+  # Handle sensor_position alias
+  if (!is.null(sensor_position)) {
+    sensor <- sensor_position
   }
 
   # Filter to requested sensor/method
@@ -1281,6 +1290,13 @@ plot_correction_comparison <- function(vh_data,
   # Build subtitle
   subtitle_text <- build_correction_status_label(vh_data)
 
+  # Build title
+  plot_title <- if (!is.null(title)) {
+    title
+  } else {
+    sprintf("Correction Comparison: %s / %s", sensor, method)
+  }
+
   # Create plot
   p <- ggplot2::ggplot(comparison_long, ggplot2::aes(x = datetime, y = Vh_cm_hr)) +
     ggplot2::geom_line(ggplot2::aes(colour = version), linewidth = 0.6) +
@@ -1290,17 +1306,369 @@ plot_correction_comparison <- function(vh_data,
       guide = if (show_legend) ggplot2::guide_legend() else "none"
     ) +
     ggplot2::labs(
-      title = sprintf("Correction Comparison: %s / %s", sensor, method),
+      title = plot_title,
       subtitle = subtitle_text,
       x = "Date/Time",
       y = expression(V[h] ~ (cm ~ hr^-1)),
       colour = NULL
     ) +
-    ggplot2::theme_minimal() +
+    ggplot2::theme_classic() +
     ggplot2::theme(
+      plot.title = ggplot2::element_text(face = "bold", size = 14),
+      plot.subtitle = ggplot2::element_text(size = 11),
       legend.position = "bottom",
       strip.text = ggplot2::element_text(face = "bold", size = 11)
     )
+
+  return(p)
+}
+
+
+#' Plot Correction Steps
+#'
+#' Creates a time series plot showing the evolution of velocity values through
+#' each correction stage. Allows visual inspection of how each correction
+#' (spacing, wound) affects the raw velocity data.
+#'
+#' @param vh_data Data frame with vh_results structure containing correction columns
+#' @param method Character, calculation method to plot. Default: "HRM"
+#' @param sensor_position Character, sensor position to plot ("inner" or "outer").
+#'   Default: "outer"
+#' @param stages Character vector specifying which stages to plot. Options are:
+#'   "raw", "spacing", "wound". If NULL and session is interactive, prompts user
+#'   to select stages. Default: NULL
+#' @param start_date Start date/datetime (POSIXct) for plot window. If NULL, uses
+#'   data start. Default: NULL
+#' @param end_date End date/datetime (POSIXct) for plot window. If NULL, uses
+#'   data end. Default: NULL
+#' @param show_quality_markers Logical, display quality flag markers on plot.
+#'   Default: FALSE
+#'
+#' @return A ggplot2 object showing velocity evolution through correction stages
+#'
+#' @details
+#' This function automatically detects which correction columns are available:
+#' \itemize{
+#'   \item Raw: \code{Vh_cm_hr_raw}
+#'   \item Spacing Corrected: \code{Vh_cm_hr_sc} or \code{Vc_cm_hr_sc}
+#'   \item Wound Corrected: \code{Vh_cm_hr_wc} or \code{Vc_cm_hr_wc}
+#' }
+#'
+#' If \code{stages} is NULL and the session is interactive, the user will be
+#' prompted to select which stages to display.
+#'
+#' Colors used:
+#' \itemize{
+#'   \item Raw: Grey (#7f7f7f)
+#'   \item Spacing Corrected: Orange (#ff7f0e)
+#'   \item Wound Corrected: Blue (#1f78b4)
+#' }
+#'
+#' @family plotting functions
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' # Interactive mode - prompts for stage selection
+#' plot_correction_steps(vh_data)
+#'
+#' # Specify stages explicitly
+#' plot_correction_steps(vh_data, stages = c("raw", "wound"))
+#'
+#' # With date filtering
+#' plot_correction_steps(vh_data,
+#'                       stages = c("raw", "spacing", "wound"),
+#'                       start_date = as.POSIXct("2025-01-01"),
+#'                       end_date = as.POSIXct("2025-01-07"))
+#' }
+plot_correction_steps <- function(vh_data,
+                                   method = "HRM",
+                                   sensor_position = "outer",
+                                   stages = NULL,
+                                   start_date = NULL,
+                                   end_date = NULL,
+                                   show_quality_markers = FALSE) {
+
+  # Check required packages
+  if (!requireNamespace("ggplot2", quietly = TRUE)) {
+    stop("Package 'ggplot2' is required. Install with: install.packages('ggplot2')")
+  }
+  if (!requireNamespace("tidyr", quietly = TRUE)) {
+    stop("Package 'tidyr' is required. Install with: install.packages('tidyr')")
+  }
+  if (!requireNamespace("dplyr", quietly = TRUE)) {
+    stop("Package 'dplyr' is required. Install with: install.packages('dplyr')")
+  }
+
+  # Validate inputs
+  if (!sensor_position %in% c("inner", "outer")) {
+    stop("sensor_position must be 'inner' or 'outer'")
+  }
+
+  # Filter to requested sensor/method
+  plot_data <- vh_data[
+    vh_data$sensor_position == sensor_position & vh_data$method == method,
+  ]
+
+  if (nrow(plot_data) == 0) {
+    stop("No data found for sensor '", sensor_position, "' and method '", method, "'")
+  }
+
+  # Detect available correction columns
+  available_columns <- list()
+  available_stages <- character()
+
+  if ("Vh_cm_hr_raw" %in% names(plot_data)) {
+    available_columns$raw <- "Vh_cm_hr_raw"
+    available_stages <- c(available_stages, "raw")
+  }
+
+  # Check for spacing correction (try both naming conventions)
+  if ("Vh_cm_hr_sc" %in% names(plot_data)) {
+    available_columns$spacing <- "Vh_cm_hr_sc"
+    available_stages <- c(available_stages, "spacing")
+  } else if ("Vc_cm_hr_sc" %in% names(plot_data)) {
+    available_columns$spacing <- "Vc_cm_hr_sc"
+    available_stages <- c(available_stages, "spacing")
+  }
+
+  # Check for wound correction (try both naming conventions)
+  if ("Vh_cm_hr_wc" %in% names(plot_data)) {
+    available_columns$wound <- "Vh_cm_hr_wc"
+    available_stages <- c(available_stages, "wound")
+  } else if ("Vc_cm_hr_wc" %in% names(plot_data)) {
+    available_columns$wound <- "Vc_cm_hr_wc"
+    available_stages <- c(available_stages, "wound")
+  }
+
+  # Check if any stages available
+  if (length(available_stages) == 0) {
+    stop("No correction columns found. Expected at least one of: Vh_cm_hr_raw, Vh_cm_hr_sc, Vh_cm_hr_wc")
+  }
+
+  # Get date range from data
+  data_start <- min(plot_data$datetime, na.rm = TRUE)
+  data_end <- max(plot_data$datetime, na.rm = TRUE)
+  total_days <- as.numeric(difftime(data_end, data_start, units = "days"))
+
+  # Interactive prompts for dates if not specified
+  if (is.null(start_date) && interactive()) {
+    cat("\n")
+    cat(strrep("=", 67), "\n")
+    cat(sprintf("You have %.1f days of data\n", total_days))
+    cat(sprintf("Start: %s\n", format(data_start, "%Y-%m-%d %H:%M:%S")))
+    cat(sprintf("End:   %s\n", format(data_end, "%Y-%m-%d %H:%M:%S")))
+    cat(strrep("=", 67), "\n\n")
+
+    cat("Enter start date (YYYY-MM-DD) or day number [press Enter for data start]: ")
+    start_input <- readline()
+
+    # Default to data start if empty input
+    if (trimws(start_input) == "") {
+      start_date <- data_start
+      cat(sprintf("Using data start: %s\n", format(data_start, "%Y-%m-%d %H:%M:%S")))
+    } else {
+      start_date <- parse_date_input(start_input, data_start)
+    }
+  } else if (is.null(start_date)) {
+    # Non-interactive: use data start
+    start_date <- data_start
+  } else if (is.numeric(start_date)) {
+    # Convert day number to date
+    start_date <- data_start + (start_date - 1) * 86400
+  }
+
+  if (is.null(end_date) && interactive()) {
+    cat("\nEnter end date (YYYY-MM-DD) or number of days to plot [press Enter for data end]: ")
+    end_input <- readline()
+
+    # Default to data end if empty input
+    if (trimws(end_input) == "") {
+      end_date <- data_end
+      cat(sprintf("Using data end: %s\n", format(data_end, "%Y-%m-%d %H:%M:%S")))
+    } else {
+      end_date <- parse_date_input(end_input, start_date)
+    }
+  } else if (is.null(end_date)) {
+    # Non-interactive: use data end
+    end_date <- data_end
+  } else if (is.numeric(end_date)) {
+    # Convert number of days to end date
+    end_date <- start_date + end_date * 86400
+  }
+
+  # Validate date range (with 1-second tolerance for boundary comparisons)
+  tolerance <- 1  # 1 second tolerance
+  if (as.numeric(start_date) < (as.numeric(data_start) - tolerance) ||
+      as.numeric(start_date) > (as.numeric(data_end) + tolerance)) {
+    stop(sprintf("Start date %s is outside data range [%s to %s]",
+                 format(start_date, "%Y-%m-%d %H:%M:%S"),
+                 format(data_start, "%Y-%m-%d %H:%M:%S"),
+                 format(data_end, "%Y-%m-%d %H:%M:%S")))
+  }
+
+  if (as.numeric(end_date) < (as.numeric(data_start) - tolerance) ||
+      as.numeric(end_date) > (as.numeric(data_end) + tolerance)) {
+    stop(sprintf("End date %s is outside data range [%s to %s]",
+                 format(end_date, "%Y-%m-%d %H:%M:%S"),
+                 format(data_start, "%Y-%m-%d %H:%M:%S"),
+                 format(data_end, "%Y-%m-%d %H:%M:%S")))
+  }
+
+  if (end_date <= start_date) {
+    stop("End date must be after start date")
+  }
+
+  # Interactive stage selection if needed
+  if (is.null(stages)) {
+    if (interactive()) {
+      cat("\n")
+      cat(strrep("=", 67), "\n")
+      cat("Available correction stages:\n")
+
+      # Build stage names based on actual columns detected
+      stage_names <- c()
+      if ("raw" %in% available_stages) {
+        stage_names["raw"] <- paste0("Raw Velocity (", available_columns$raw, ")")
+      }
+      if ("spacing" %in% available_stages) {
+        stage_names["spacing"] <- paste0("Spacing Corrected (", available_columns$spacing, ")")
+      }
+      if ("wound" %in% available_stages) {
+        stage_names["wound"] <- paste0("Wound Corrected (", available_columns$wound, ")")
+      }
+
+      for (i in seq_along(available_stages)) {
+        cat(sprintf("  [%d] %s\n", i, stage_names[available_stages[i]]))
+      }
+      cat(strrep("=", 67), "\n")
+      cat("\nEnter stage numbers (comma-separated, e.g., 1,3) or 'all': ")
+      stage_input <- readline()
+
+      if (tolower(trimws(stage_input)) == "all") {
+        stages <- available_stages
+      } else {
+        stage_indices <- as.numeric(strsplit(stage_input, ",")[[1]])
+        stage_indices <- stage_indices[!is.na(stage_indices)]
+        if (length(stage_indices) == 0) {
+          message("No valid stages selected, using all available stages")
+          stages <- available_stages
+        } else {
+          stages <- available_stages[stage_indices]
+        }
+      }
+    } else {
+      # Non-interactive: use all available stages
+      stages <- available_stages
+    }
+  }
+
+  # Validate selected stages are available
+  invalid_stages <- setdiff(stages, available_stages)
+  if (length(invalid_stages) > 0) {
+    stop("Stages not available in data: ", paste(invalid_stages, collapse = ", "),
+         "\nAvailable stages: ", paste(available_stages, collapse = ", "))
+  }
+
+  # Apply date filtering
+  plot_data <- plot_data[
+    plot_data$datetime >= start_date & plot_data$datetime <= end_date,
+  ]
+
+  if (nrow(plot_data) == 0) {
+    stop("No data available after date filtering")
+  }
+
+  # Build list of columns to include
+  cols_to_plot <- character()
+  stage_labels <- character()
+
+  for (stage in stages) {
+    if (stage == "raw" && "raw" %in% names(available_columns)) {
+      cols_to_plot <- c(cols_to_plot, available_columns$raw)
+      stage_labels <- c(stage_labels, "Raw")
+    } else if (stage == "spacing" && "spacing" %in% names(available_columns)) {
+      cols_to_plot <- c(cols_to_plot, available_columns$spacing)
+      stage_labels <- c(stage_labels, "Spacing Corrected")
+    } else if (stage == "wound" && "wound" %in% names(available_columns)) {
+      cols_to_plot <- c(cols_to_plot, available_columns$wound)
+      stage_labels <- c(stage_labels, "Wound Corrected")
+    }
+  }
+
+  # Reshape to long format
+  plot_long <- plot_data[, c("datetime", cols_to_plot)]
+
+  # Rename columns to stage labels for plotting
+  names(plot_long) <- c("datetime", stage_labels)
+
+  plot_long <- tidyr::pivot_longer(
+    plot_long,
+    cols = -datetime,
+    names_to = "Correction_Stage",
+    values_to = "Velocity"
+  )
+
+  # Make Correction_Stage a factor with proper ordering
+  plot_long$Correction_Stage <- factor(
+    plot_long$Correction_Stage,
+    levels = c("Raw", "Spacing Corrected", "Wound Corrected")
+  )
+
+  # Define colors for stages
+  stage_colors <- c(
+    "Raw" = "#7f7f7f",              # Grey
+    "Spacing Corrected" = "#ff7f0e", # Orange
+    "Wound Corrected" = "#1f78b4"   # Blue
+  )
+
+  # Filter colors to only those being plotted
+  stage_colors <- stage_colors[names(stage_colors) %in% stage_labels]
+
+  # Create plot
+  p <- ggplot2::ggplot(plot_long, ggplot2::aes(x = datetime, y = Velocity, color = Correction_Stage)) +
+    ggplot2::geom_line(linewidth = 1) +
+    ggplot2::scale_color_manual(values = stage_colors) +
+    ggplot2::labs(
+      title = sprintf("Correction Steps: %s / %s", sensor_position, method),
+      subtitle = paste("Showing:", paste(stage_labels, collapse = ", ")),
+      x = "Date/Time",
+      y = expression(paste("V"[h], " (cm hr"^-1, ")")),
+      color = "Correction Stage"
+    ) +
+    ggplot2::theme_classic() +
+    ggplot2::theme(
+      plot.title = ggplot2::element_text(face = "bold", size = 14),
+      plot.subtitle = ggplot2::element_text(size = 11),
+      legend.position = "bottom",
+      axis.text.x = ggplot2::element_text(angle = 45, hjust = 1)
+    )
+
+  # Add quality markers if requested
+  if (show_quality_markers && "quality_flag" %in% names(plot_data)) {
+    # Get non-OK quality flags
+    markers <- plot_data[plot_data$quality_flag != "OK" & !is.na(plot_data$quality_flag), ]
+
+    if (nrow(markers) > 0) {
+      # Use the current Vh column for marker positioning
+      current_col <- attr(vh_data, "current_vh_column")
+      if (is.null(current_col)) {
+        current_col <- "Vh_cm_hr"
+      }
+
+      if (current_col %in% names(markers)) {
+        # Add markers
+        p <- p + ggplot2::geom_point(
+          data = markers,
+          ggplot2::aes(x = datetime, y = .data[[current_col]]),
+          shape = 4,  # X shape
+          size = 2,
+          color = "red",
+          inherit.aes = FALSE
+        )
+      }
+    }
+  }
 
   return(p)
 }

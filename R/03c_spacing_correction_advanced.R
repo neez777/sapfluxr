@@ -95,6 +95,11 @@ apply_spacing_correction_per_segment <- function(vh_data,
   segment_results <- list()
   corrected_vh <- numeric(nrow(sensor_data))
 
+  # Initialise correction factor tracking vectors (for transparency)
+  coef_a_vector <- rep(NA_real_, nrow(sensor_data))
+  coef_b_vector <- rep(NA_real_, nrow(sensor_data))
+  baseline_offset_vector <- rep(NA_real_, nrow(sensor_data))
+
   # Process each segment
   for (seg_id in seq_len(n_segments)) {
 
@@ -170,6 +175,11 @@ apply_spacing_correction_per_segment <- function(vh_data,
       # Apply correction to this segment
       corrected_vh[seg_mask] <- coef_result$coef_a * vh_values + coef_result$coef_b
 
+      # Store correction factors for this segment (for transparency)
+      coef_a_vector[seg_mask] <- coef_result$coef_a
+      coef_b_vector[seg_mask] <- coef_result$coef_b
+      baseline_offset_vector[seg_mask] <- zero_vh
+
       # Store segment results
       segment_results[[seg_id]] <- list(
         segment_id = seg_id,
@@ -219,6 +229,16 @@ apply_spacing_correction_per_segment <- function(vh_data,
   corrected_data[[corrected_col]][sensor_method_mask] <- corrected_vh
   corrected_data$spacing_correction_applied[sensor_method_mask] <- TRUE
 
+  # Add correction factor columns (for transparency - matches wound correction pattern)
+  if (!"spacing_correction_a" %in% names(corrected_data)) {
+    corrected_data$spacing_correction_a <- NA_real_
+    corrected_data$spacing_correction_b <- NA_real_
+    corrected_data$baseline_offset_cm_hr <- NA_real_
+  }
+  corrected_data$spacing_correction_a[sensor_method_mask] <- coef_a_vector
+  corrected_data$spacing_correction_b[sensor_method_mask] <- coef_b_vector
+  corrected_data$baseline_offset_cm_hr[sensor_method_mask] <- baseline_offset_vector
+
   # Create metadata
   metadata <- list(
     method = method,
@@ -239,6 +259,10 @@ apply_spacing_correction_per_segment <- function(vh_data,
     cat("  ", length(segment_results), "segments processed\n")
     n_corrected <- sum(corrected_data$spacing_correction_applied, na.rm = TRUE)
     cat("  ", n_corrected, "observations corrected\n")
+    cat("\nCorrection factor columns added:\n")
+    cat("  spacing_correction_a - Slope coefficient (a)\n")
+    cat("  spacing_correction_b - Intercept coefficient (b)\n")
+    cat("  baseline_offset_cm_hr - Zero-flow baseline (cm/hr)\n")
     cat(strrep("=", 72), "\n")
     cat("\n")
   }
@@ -281,7 +305,15 @@ apply_spacing_correction_per_segment <- function(vh_data,
 #' @param verbose Logical, whether to print progress messages (default: TRUE)
 #'
 #' @return A list containing:
-#'   \item{vh_corrected}{Data frame with spacing corrections applied}
+#'   \item{vh_corrected}{Data frame with spacing corrections applied, including:
+#'     \itemize{
+#'       \item \code{Vh_cm_hr_sc} - Spacing-corrected velocities (if create_new_col = TRUE)
+#'       \item \code{spacing_correction_applied} - Logical flag indicating correction
+#'       \item \code{spacing_correction_a} - Slope coefficient (a) applied per row
+#'       \item \code{spacing_correction_b} - Intercept coefficient (b) applied per row
+#'       \item \code{baseline_offset_cm_hr} - Zero-flow baseline used (cm/hr)
+#'     }
+#'   }
 #'   \item{segment_results}{List of correction results per segment}
 #'   \item{metadata}{List containing correction metadata}
 #'
@@ -482,6 +514,11 @@ apply_manual_spacing_correction <- function(vh_data,
   segment_results <- list()
   corrected_vh <- numeric(nrow(sensor_data))
 
+  # Initialise correction factor tracking vectors (for transparency)
+  coef_a_vector <- rep(NA_real_, nrow(sensor_data))
+  coef_b_vector <- rep(NA_real_, nrow(sensor_data))
+  baseline_offset_vector <- rep(NA_real_, nrow(sensor_data))
+
   # Process each segment
   for (seg_id in seq_len(n_segments)) {
 
@@ -577,6 +614,11 @@ apply_manual_spacing_correction <- function(vh_data,
       # Apply correction to this segment
       corrected_vh[seg_mask] <- coef_result$coef_a * vh_values + coef_result$coef_b
 
+      # Store correction factors for this segment (for transparency)
+      coef_a_vector[seg_mask] <- coef_result$coef_a
+      coef_b_vector[seg_mask] <- coef_result$coef_b
+      baseline_offset_vector[seg_mask] <- zero_vh
+
       # Store segment results
       segment_results[[seg_id]] <- list(
         segment_id = seg_id,
@@ -627,6 +669,16 @@ apply_manual_spacing_correction <- function(vh_data,
   corrected_data[[corrected_col]][sensor_method_mask] <- corrected_vh
   corrected_data$spacing_correction_applied[sensor_method_mask] <- TRUE
 
+  # Add correction factor columns (for transparency - matches wound correction pattern)
+  if (!"spacing_correction_a" %in% names(corrected_data)) {
+    corrected_data$spacing_correction_a <- NA_real_
+    corrected_data$spacing_correction_b <- NA_real_
+    corrected_data$baseline_offset_cm_hr <- NA_real_
+  }
+  corrected_data$spacing_correction_a[sensor_method_mask] <- coef_a_vector
+  corrected_data$spacing_correction_b[sensor_method_mask] <- coef_b_vector
+  corrected_data$baseline_offset_cm_hr[sensor_method_mask] <- baseline_offset_vector
+
   # Create metadata
   metadata <- list(
     method = method,
@@ -652,6 +704,10 @@ apply_manual_spacing_correction <- function(vh_data,
     cat("  ", n_auto_detected, "auto-detected baseline(s)\n")
     n_corrected <- sum(corrected_data$spacing_correction_applied, na.rm = TRUE)
     cat("  ", n_corrected, "observations corrected\n")
+    cat("\nCorrection factor columns added:\n")
+    cat("  spacing_correction_a - Slope coefficient (a)\n")
+    cat("  spacing_correction_b - Intercept coefficient (b)\n")
+    cat("  baseline_offset_cm_hr - Zero-flow baseline (cm/hr)\n")
     cat(strrep("=", 72), "\n")
     cat("\n")
   }

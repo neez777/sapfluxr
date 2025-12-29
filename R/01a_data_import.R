@@ -56,18 +56,20 @@ trim_incomplete_days <- function(measurements, diagnostics, verbose = TRUE) {
     return(list(measurements = measurements, diagnostics = diagnostics))
   }
 
-  # Extract dates
+  # Extract valid datetimes
   valid_times <- !is.na(measurements$datetime)
   if (!any(valid_times)) {
     return(list(measurements = measurements, diagnostics = diagnostics))
   }
 
-  # Get date (without time) for each measurement
-  measurement_dates <- as.Date(measurements$datetime[valid_times])
+  # OPTIMISATION: Use min/max range detection instead of converting all timestamps
+  # Find overall min and max datetime
+  min_datetime <- min(measurements$datetime, na.rm = TRUE)
+  max_datetime <- max(measurements$datetime, na.rm = TRUE)
 
-  # Find first and last dates
-  first_date <- min(measurement_dates, na.rm = TRUE)
-  last_date <- max(measurement_dates, na.rm = TRUE)
+  # Extract first and last dates
+  first_date <- as.Date(min_datetime)
+  last_date <- as.Date(max_datetime)
 
   # If dataset spans less than 3 days, don't trim (keep all data)
   if (as.numeric(difftime(last_date, first_date, units = "days")) < 2) {
@@ -77,40 +79,54 @@ trim_incomplete_days <- function(measurements, diagnostics, verbose = TRUE) {
     return(list(measurements = measurements, diagnostics = diagnostics))
   }
 
-  # Count measurements per day
-  dates_to_keep <- measurement_dates
-  dates_to_keep <- dates_to_keep[dates_to_keep > first_date & dates_to_keep < last_date]
+  # Check first day: find min and max times on first day
+  first_day_start <- as.POSIXct(paste(first_date, "00:00:00"), tz = attr(min_datetime, "tzone") %||% "UTC")
+  first_day_end <- as.POSIXct(paste(first_date, "23:59:59"), tz = attr(min_datetime, "tzone") %||% "UTC")
+  first_day_times <- measurements$datetime[measurements$datetime >= first_day_start & measurements$datetime <= first_day_end]
 
-  # Check if first/last days have < 23 hours of data (allowing 1 hour buffer for gaps)
-  first_day_times <- measurements$datetime[valid_times][measurement_dates == first_date]
-  last_day_times <- measurements$datetime[valid_times][measurement_dates == last_date]
+  first_day_duration_hours <- if (length(first_day_times) > 0) {
+    as.numeric(difftime(max(first_day_times), min(first_day_times), units = "hours"))
+  } else {
+    0
+  }
 
-  first_day_duration_hours <- as.numeric(
-    difftime(max(first_day_times), min(first_day_times), units = "hours")
-  )
-  last_day_duration_hours <- as.numeric(
-    difftime(max(last_day_times), min(last_day_times), units = "hours")
-  )
+  # Check last day: find min and max times on last day
+  last_day_start <- as.POSIXct(paste(last_date, "00:00:00"), tz = attr(max_datetime, "tzone") %||% "UTC")
+  last_day_end <- as.POSIXct(paste(last_date, "23:59:59"), tz = attr(max_datetime, "tzone") %||% "UTC")
+  last_day_times <- measurements$datetime[measurements$datetime >= last_day_start & measurements$datetime <= last_day_end]
 
-  # Include first day if it has >= 23 hours
+  last_day_duration_hours <- if (length(last_day_times) > 0) {
+    as.numeric(difftime(max(last_day_times), min(last_day_times), units = "hours"))
+  } else {
+    0
+  }
+
+  # Determine keep range based on first/last day completeness
+  # Start of keep range
   if (first_day_duration_hours >= 23) {
-    dates_to_keep <- c(first_date, dates_to_keep)
+    # Keep first day - start at beginning of first day
+    keep_start <- first_day_start
+  } else {
+    # Remove first day - start at beginning of second day
+    keep_start <- as.POSIXct(paste(first_date + 1, "00:00:00"), tz = attr(min_datetime, "tzone") %||% "UTC")
   }
 
-  # Include last day if it has >= 23 hours
+  # End of keep range
   if (last_day_duration_hours >= 23) {
-    dates_to_keep <- c(dates_to_keep, last_date)
+    # Keep last day - end at end of last day
+    keep_end <- last_day_end
+  } else {
+    # Remove last day - end at end of second-to-last day
+    keep_end <- as.POSIXct(paste(last_date - 1, "23:59:59"), tz = attr(max_datetime, "tzone") %||% "UTC")
   }
 
-  # Filter measurements
-  measurement_dates_all <- as.Date(measurements$datetime)
-  measurements_trimmed <- measurements[measurement_dates_all %in% dates_to_keep, ]
+  # OPTIMISATION: Use fast range filtering instead of %in%
+  measurements_trimmed <- dplyr::filter(measurements, datetime >= keep_start & datetime <= keep_end)
 
   # Filter diagnostics to match
   if (!is.null(diagnostics) && nrow(diagnostics) > 0) {
     if ("datetime" %in% names(diagnostics)) {
-      diagnostic_dates <- as.Date(diagnostics$datetime)
-      diagnostics_trimmed <- diagnostics[diagnostic_dates %in% dates_to_keep, ]
+      diagnostics_trimmed <- dplyr::filter(diagnostics, datetime >= keep_start & datetime <= keep_end)
     } else if ("pulse_id" %in% names(measurements) && "pulse_id" %in% names(diagnostics)) {
       # Match by pulse_id if datetime not in diagnostics
       valid_pulse_ids <- unique(measurements_trimmed$pulse_id)

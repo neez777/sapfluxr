@@ -10,9 +10,11 @@ calibrate_method_to_primary(
   secondary_method,
   sensor_position = "outer",
   threshold_velocity,
+  handover_pct = 0.5,
   fit_type = "auto",
   min_points = 50,
-  verbose = TRUE
+  verbose = TRUE,
+  velocity_col = "Vh_cm_hr"
 )
 }
 \arguments{
@@ -25,7 +27,12 @@ calibrate_method_to_primary(
 \item{sensor_position}{Sensor position ("outer" or "inner").}
 
 \item{threshold_velocity}{Minimum velocity for calibration (cm/hr).
-Only points where primary method > threshold are used.}
+This is the breakpoint where method switching occurs.}
+
+\item{handover_pct}{Proportion of threshold to use for handover window (default: 0.5).
+Training data is filtered to points between \code{threshold * (1 - handover_pct)}
+and \code{threshold}. This focuses calibration on the transition zone for
+smooth handover.}
 
 \item{fit_type}{Type of fit: "linear", "quadratic", or "auto" (default: "auto").}
 
@@ -34,18 +41,14 @@ Only points where primary method > threshold are used.}
 \item{verbose}{Logical indicating whether to print summary (default: TRUE).}
 }
 \value{
-A list (class "method_calibration") containing:
-\item{coefficients}{Fit coefficients (intercept, slope, quadratic term if applicable)}
-\item{fit_type}{Type of fit used ("linear" or "quadratic")}
-\item{r_squared}{R-squared of fit}
-\item{rmse}{Root mean squared error}
-\item{n_points}{Number of points used for calibration}
-\item{threshold}{Velocity threshold used}
-\item{transformation_function}{Function to transform secondary method values}
-\item{primary_method}{Primary method name}
-\item{secondary_method}{Secondary method name}
-\item{sensor_position}{Sensor position}
-\item{calibration_data}{Data frame of calibration points (for plotting)}
+A list (class "method_calibration") with components \code{coefficients}
+(fit coefficients), \code{fit_type} ("linear" or "quadratic"), \code{r_squared}
+(R-squared of fit), \code{rmse} (root mean squared error), \code{n_points}
+(number of calibration points), \code{threshold} (velocity threshold used),
+\code{handover_window} (range of velocities used for calibration),
+\code{transformation_function} (function to transform secondary method values),
+\code{primary_method}, \code{secondary_method}, \code{sensor_position}, and
+\code{calibration_data} (data frame for plotting)
 }
 \description{
 Fits relationship between primary and secondary methods in their overlap
@@ -56,11 +59,25 @@ to the primary method scale.
 \strong{Calibration Process:}
 \enumerate{
 \item Merges primary and secondary method data by pulse_id
-\item Filters to points where primary method <= threshold_velocity (valid region)
+\item Filters to \strong{handover window}: points where primary method is between
+\code{threshold * (1 - handover_pct)} and \code{threshold}
 \item Fits regression: primary ~ secondary (or primary ~ secondary + secondary²)
 \item Creates transformation function to convert secondary values to primary scale
 \item This transformation is then applied to ALL secondary data, especially above
 the threshold where the primary method becomes unreliable
+}
+
+\strong{Handover Window (NEW):}
+
+The handover window ensures smooth transitions when methods are attenuated
+(secondary produces lower values than primary even in valid range):
+\itemize{
+\item With \code{handover_pct = 0.5} and \code{threshold = 10}, calibration
+uses data from 5-10 cm/hr
+\item This optimises the fit for the transition zone
+\item Ensures the calibrated secondary method value at the threshold exactly
+matches the primary method value, preventing discontinuities
+\item Use \code{handover_pct = 1.0} to use all data below threshold (legacy behaviour)
 }
 
 \strong{Fit Type Selection:}
@@ -80,23 +97,27 @@ secondary method dataset to the primary scale using
 }
 \examples{
 \dontrun{
-# Calibrate MHR to HRM at 10 cm/hr threshold
+# Calibrate MHR to HRM at 10 cm/hr threshold with handover window
 calibration <- calibrate_method_to_primary(
   vh_corrected = vh_corrected,
   primary_method = "HRM",
   secondary_method = "MHR",
   sensor_position = "outer",
-  threshold_velocity = 10
+  threshold_velocity = 10,
+  handover_pct = 0.5  # Use 5-10 cm/hr for calibration
 )
 
 print(calibration$r_squared)
 print(calibration$coefficients)
+print(calibration$handover_window)
 }
 
 }
 \seealso{
 Other method calibration functions: 
 \code{\link{calibrate_multiple_methods}()},
+\code{\link{compare_methods_enhanced}()},
+\code{\link{compare_methods_segmented}()},
 \code{\link{find_optimal_calibration_threshold}()},
 \code{\link{transform_multiple_methods}()},
 \code{\link{transform_secondary_method}()}

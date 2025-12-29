@@ -10,7 +10,8 @@ apply_wound_correction(
   probe_spacing = "5mm",
   wood_properties = NULL,
   use_spacing_corrected = TRUE,
-  confirm_parameters = TRUE
+  confirm_parameters = TRUE,
+  verbose = TRUE
 )
 }
 \arguments{
@@ -40,13 +41,21 @@ applies wound correction to spacing-corrected velocities. Default: TRUE}
 
 \item{confirm_parameters}{Logical. If TRUE and in interactive mode, prompts user
 to confirm parameters before applying correction. Default: TRUE}
+
+\item{verbose}{Logical. If TRUE, prints progress messages and summary.
+Default: TRUE}
 }
 \value{
 Data frame with original columns plus:
 \describe{
-\item{Vc_cm_hr}{Wound-corrected velocity (cm/hr)}
+\item{Vh_cm_hr_raw}{Original raw velocities (preserved)}
+\item{Vh_cm_hr_sc}{Spacing correction results (preserved if it existed)}
+\item{Vh_cm_hr_wc}{Wound correction results (new audit column)}
+\item{Vh_cm_hr}{Current best available velocity (hybrid)}
+\item{Vc_cm_hr}{Alias for current best (legacy, same as Vh_cm_hr)}
 \item{wound_correction_factor}{Linear correction factor B applied}
-\item{wound_diameter_cm}{Wound diameter used for correction}
+\item{wound_diameter_cm}{Wound diameter used for correction (cm)}
+\item{wound_correction_applied}{Logical flag indicating correction was applied}
 }
 }
 \description{

@@ -7,8 +7,12 @@
 plot_correction_comparison(
   vh_data,
   sensor = "outer",
+  sensor_position = NULL,
   method = "HRM",
-  show_legend = TRUE
+  show_legend = TRUE,
+  title = NULL,
+  correction_stage = NULL,
+  ...
 )
 }
 \arguments{
@@ -50,6 +54,7 @@ plot_correction_comparison(vh_corrected, sensor = "outer", method = "HRM")
 }
 \seealso{
 Other plotting functions: 
-\code{\link{build_correction_status_label}()}
+\code{\link{build_correction_status_label}()},
+\code{\link{plot_correction_steps}()}
 }
 \concept{plotting functions}

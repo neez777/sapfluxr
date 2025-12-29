@@ -39,6 +39,7 @@ Imports:
     yaml (>= 2.3.0),
     patchwork (>= 1.1.0),
     changepoint (>= 2.2.0),
+    segmented (>= 1.6.0),
     Rcpp (>= 1.0.0)
 LinkingTo: Rcpp
 Suggests:

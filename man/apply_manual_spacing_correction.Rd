@@ -55,7 +55,15 @@ If a segment is not specified, its baseline will be auto-detected as the minimum
 }
 \value{
 A list containing:
-\item{vh_corrected}{Data frame with spacing corrections applied}
+\item{vh_corrected}{Data frame with spacing corrections applied, including:
+\itemize{
+\item \code{Vh_cm_hr_sc} - Spacing-corrected velocities (if create_new_col = TRUE)
+\item \code{spacing_correction_applied} - Logical flag indicating correction
+\item \code{spacing_correction_a} - Slope coefficient (a) applied per row
+\item \code{spacing_correction_b} - Intercept coefficient (b) applied per row
+\item \code{baseline_offset_cm_hr} - Zero-flow baseline used (cm/hr)
+}
+}
 \item{segment_results}{List of correction results per segment}
 \item{metadata}{List containing correction metadata}
 }

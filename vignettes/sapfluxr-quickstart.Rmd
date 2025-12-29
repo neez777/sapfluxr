@@ -1,0 +1,102 @@
+---
+title: "Quick Start Guide"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Quick Start Guide}
+  %%\VignetteEngine{knitr::rmarkdown}
+  %%\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+# Fast Track Workflow
+
+This guide demonstrates the standard `sapfluxr` pipeline from raw data to daily water use.
+
+```{r setup}
+library(sapfluxr)
+```
+
+## 1. Import Data
+
+```{r import, eval=FALSE}
+# Import Heat Pulse Data (auto-detects format)
+sapdata <- read_heat_pulse_data("path/to/data.txt", show_progress = TRUE)
+
+# Import Weather Data (for VPD)
+weather <- read_weather_data("path/to/weather.csv")
+weather <- calc_vpd(weather)
+```
+
+## 2. Calculate Velocity
+
+Calculate raw velocities for all candidate methods.
+
+```{r calc, eval=FALSE}
+vh_raw <- calc_heat_pulse_velocity(
+  sapdata,
+  methods = c("HRM", "MHR", "HRMXb"),
+  wood_properties = "eucalyptus"
+)
+```
+
+## 3. Apply Corrections
+
+**Spacing Correction:** Use stable VPD (pre-dawn) periods to zero the data.
+
+```{r spacing, eval=FALSE}
+vh_sc <- apply_spacing_correction(
+  vh_raw,
+  method = "vpd",
+  weather_data = weather,
+  min_segment_days = 21
+)
+```
+
+**Wound Correction:** Account for probe injury.
+
+```{r wound, eval=FALSE}
+wood_props <- load_wood_properties("eucalyptus")
+wood_props$wound_correction$final_diameter_mm <- 2.8
+
+vh_final <- apply_wound_correction(
+  vh_sc$vh_corrected,
+  wood_properties = wood_props
+)
+```
+
+## 4. sDMA Method Switching
+
+Combine low-flow accuracy (HRM) with high-flow range (MHR).
+
+```{r sdma, eval=FALSE}
+# 1. Find optimal breakpoint (Segmented Regression)
+seg_res <- compare_methods_segmented(vh_final, "HRM", "MHR")
+
+# 2. Calibrate MHR to match HRM at the breakpoint
+calib <- calibrate_method_to_primary(
+  vh_final,
+  primary = "HRM", secondary = "MHR",
+  threshold_velocity = seg_res$breakpoint
+)
+
+# 3. Switch based on Peclet > 1.0
+vh_sdma <- apply_sdma_switching(
+  vh_final,
+  secondary = "MHR",
+  switching_mode = "peclet",
+  threshold = 1.0,
+  calibration = calib
+)
+```
+
+## 5. Water Use
+
+Convert to flux density ($J_v$) and scale to whole-tree flow ($Q$).
+
+```{r flux, eval=FALSE}
+flux <- apply_flux_conversion(vh_sdma, wood_properties = wood_props, velocity_col = "Vh_sdma")
+daily <- aggregate_daily(flux)
+```

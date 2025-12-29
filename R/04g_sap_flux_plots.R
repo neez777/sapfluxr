@@ -92,9 +92,11 @@ plot_sap_flux_timeseries <- function(data, y_col = "Q_cm3_hr",
       x = "Date/Time",
       y = y_label
     ) +
-    ggplot2::theme_minimal() +
+    ggplot2::theme_classic() +
     ggplot2::theme(
-      plot.title = ggplot2::element_text(size = 14, face = "bold"),
+      plot.title = ggplot2::element_text(face = "bold", size = 14),
+      plot.subtitle = ggplot2::element_text(size = 11),
+      legend.position = "bottom",
       axis.title = ggplot2::element_text(size = 12),
       axis.text = ggplot2::element_text(size = 10)
     )
@@ -210,9 +212,11 @@ plot_flux_proportion <- function(data, flux_col = "Q_cm3_hr",
     ggplot2::scale_y_continuous(limits = c(0, 1),
                                  breaks = seq(0, 1, 0.25),
                                  labels = scales::percent) +
-    ggplot2::theme_minimal() +
+    ggplot2::theme_classic() +
     ggplot2::theme(
-      plot.title = ggplot2::element_text(size = 14, face = "bold"),
+      plot.title = ggplot2::element_text(face = "bold", size = 14),
+      plot.subtitle = ggplot2::element_text(size = 11),
+      legend.position = "bottom",
       axis.title = ggplot2::element_text(size = 12),
       axis.text = ggplot2::element_text(size = 10)
     )
@@ -353,9 +357,11 @@ plot_diurnal_pattern <- function(data, y_col = "Qps_cm_hr",
       y = y_label
     ) +
     ggplot2::scale_x_continuous(breaks = seq(0, 24, 4)) +
-    ggplot2::theme_minimal() +
+    ggplot2::theme_classic() +
     ggplot2::theme(
-      plot.title = ggplot2::element_text(size = 14, face = "bold"),
+      plot.title = ggplot2::element_text(face = "bold", size = 14),
+      plot.subtitle = ggplot2::element_text(size = 11),
+      legend.position = "bottom",
       axis.title = ggplot2::element_text(size = 12),
       axis.text = ggplot2::element_text(size = 10)
     )
@@ -467,9 +473,11 @@ plot_daily_timeseries <- function(data, y_col = "Qp_daily_L_day",
       x = "Date",
       y = y_label
     ) +
-    ggplot2::theme_minimal() +
+    ggplot2::theme_classic() +
     ggplot2::theme(
-      plot.title = ggplot2::element_text(size = 14, face = "bold"),
+      plot.title = ggplot2::element_text(face = "bold", size = 14),
+      plot.subtitle = ggplot2::element_text(size = 11),
+      legend.position = "bottom",
       axis.title = ggplot2::element_text(size = 12),
       axis.text = ggplot2::element_text(size = 10)
     )

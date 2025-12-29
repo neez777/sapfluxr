@@ -4,7 +4,11 @@
 \alias{transform_secondary_method}
 \title{Transform Secondary Method Using Calibration}
 \usage{
-transform_secondary_method(vh_corrected, calibration)
+transform_secondary_method(
+  vh_corrected,
+  calibration,
+  velocity_col = "Vh_cm_hr"
+)
 }
 \arguments{
 \item{vh_corrected}{Corrected velocity data.}
@@ -48,6 +52,8 @@ vh_transformed <- transform_secondary_method(vh_corrected, calibration)
 Other method calibration functions: 
 \code{\link{calibrate_method_to_primary}()},
 \code{\link{calibrate_multiple_methods}()},
+\code{\link{compare_methods_enhanced}()},
+\code{\link{compare_methods_segmented}()},
 \code{\link{find_optimal_calibration_threshold}()},
 \code{\link{transform_multiple_methods}()}
 }

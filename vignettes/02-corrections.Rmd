@@ -1,0 +1,45 @@
+---
+title: "02. Spacing & Wound Corrections"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{02. Spacing & Wound Corrections}
+  %%\VignetteEngine{knitr::rmarkdown}
+  %%\VignetteEncoding{UTF-8}
+---
+
+# Spacing Correction (Zero-Flow)
+
+Probe misalignment causes a zero-flow offset. We correct this by identifying zero-flow periods.
+
+## Method A: Stable VPD (Recommended)
+Uses environmental data to find stable pre-dawn periods.
+
+```r
+# 1. Detect stable periods
+vpd_pts <- detect_stable_vpd_periods(weather, vpd_threshold = 0.1)
+
+# 2. Apply correction
+vh_sc <- apply_spacing_correction(vh_raw, method = "vpd", weather_data = weather)
+```
+
+## Method B: Heartwood Reference
+If the inner sensor is in heartwood (non-conducting), it acts as a continuous zero reference.
+
+```r
+vh_sc <- apply_heartwood_reference_correction(vh_raw)
+```
+
+# Wound Correction
+
+Wounding causes flow to bypass the sensor, leading to underestimation. The effect increases over time.
+
+## Temporal Tracking
+`sapfluxr` models wound expansion linearly from installation to removal.
+
+```r
+wood <- load_wood_properties("eucalyptus")
+wood$wound_correction$initial_diameter_mm <- 2.6 # Drill bit + immediate trauma
+wood$wound_correction$final_diameter_mm <- 4.5   # Measured at end
+
+vh_wc <- apply_wound_correction(vh_sc, wood_properties = wood)
+```

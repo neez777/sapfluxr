@@ -1,0 +1,45 @@
+---
+title: "04. Flux Density & Tree Scaling"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{04. Flux Density & Tree Scaling}
+  %%\VignetteEngine{knitr::rmarkdown}
+  %%\VignetteEncoding{UTF-8}
+---
+
+# 1. Flux Density ($J_v$)
+
+Convert velocity ($V_h$) to Flux Density ($J_v$) using wood properties (Density, Moisture).
+
+$$J_v = V_h 	imes rac{\rho_b}{\rho_s} (m_c + c_{dw})$$
+
+```r
+flux <- apply_flux_conversion(vh_sdma, wood_properties = wood)
+```
+
+# 2. Sapwood Integration
+
+Scale point measurements to the whole tree sapwood area.
+
+## Weighted Average Method
+Divides sapwood into rings corresponding to each sensor.
+
+```r
+areas <- calc_sapwood_areas(
+  dbh = 25,           # cm
+  sapwood_depth = 2.5 # cm
+)
+
+tree_flow <- calc_sap_flux(
+  flux_density = flux,
+  sapwood_areas = areas
+)
+```
+
+# 3. Daily Aggregation
+
+Sum instantaneous flow (L/hr) to daily totals (L/day).
+
+```r
+daily <- aggregate_daily(tree_flow)
+```

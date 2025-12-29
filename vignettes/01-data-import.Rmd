@@ -1,0 +1,42 @@
+---
+title: "01. Data Import & Validation"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{01. Data Import & Validation}
+  %%\VignetteEngine{knitr::rmarkdown}
+  %%\VignetteEncoding{UTF-8}
+---
+
+# Supported Formats
+
+`sapfluxr` automatically detects data formats from ICT SFM1x sensors.
+
+## 1. ICT Current (JSON-like)
+The standard format for modern SFM1x loggers.
+
+```r
+data <- read_heat_pulse_data("data.txt")
+```
+
+## 2. Legacy & CSV
+Supports older tab-delimited files and standard CSV exports.
+
+# Handling Missing Data
+
+The package automatically checks for gaps in the pulse sequence.
+
+## Gaps vs. Zeroes
+*   **Gap:** No data recorded (e.g., battery failure). `read_heat_pulse_data` fills these with `NA` placeholders to maintain the timeline.
+*   **Zero:** Valid data recording 0 velocity.
+
+# Clock Drift Correction
+
+Logger clocks drift over months. Fix this by providing a known "actual" time.
+
+```r
+fixed_data <- fix_clock_drift(
+  data = raw_data,
+  observed_device_time = "2024-12-01 10:05:00",
+  observed_actual_time = "2024-12-01 10:00:00"
+)
+```

@@ -1,0 +1,48 @@
+---
+title: "03. Method Calibration & sDMA"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{03. Method Calibration & sDMA}
+  %%\VignetteEngine{knitr::rmarkdown}
+  %%\VignetteEncoding{UTF-8}
+---
+
+# The Challenge: High Flow Saturation
+
+The Heat Ratio Method (HRM) is excellent for low flows but fails at high velocities (Peclet > 1).
+Methods like MHR or Tmax are better for high flows but may have a different scale/offset.
+
+## The Solution: Selectable DMA (sDMA)
+
+We switch methods based on flow conditions, but **calibration** is required to ensure a smooth transition.
+
+### 1. Identify the Breakpoint
+Use segmented regression to find exactly where HRM and MHR diverge.
+
+```r
+seg <- compare_methods_segmented(vh_data, "HRM", "MHR")
+print(seg$breakpoint) # e.g., 12.5 cm/hr
+```
+
+### 2. Calibrate the Secondary Method
+We trust HRM below the breakpoint. We trust the *shape* of MHR above it.
+We calibrate MHR to match the HRM scale at the transition.
+
+```r
+calib <- calibrate_method_to_primary(
+  vh_data,
+  threshold_velocity = seg$breakpoint
+)
+```
+
+### 3. Switch (Physics-Led)
+We switch when the physics dictate (Peclet > 1.0), using the calibrated MHR data.
+
+```r
+vh_final <- apply_sdma_switching(
+  vh_data,
+  switching_mode = "peclet",
+  threshold = 1.0,
+  calibration = calib
+)
+```

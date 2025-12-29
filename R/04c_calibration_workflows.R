@@ -209,9 +209,11 @@ apply_late_calibration_sdma <- function(vh_corrected,
                                          peclet_threshold = 1.0) {
 
   # Determine which velocity column to use
-  # Preference: Vc_cm_hr (wound-corrected) > Vh_cm_hr (spacing-corrected) > Vh_cm_hr (raw)
+  # Preference: Vc_cm_hr (wound-corrected) > Vh_cm_hr_sc (spacing-corrected) > Vh_cm_hr (raw)
   velocity_col <- if ("Vc_cm_hr" %in% names(vh_corrected)) {
     "Vc_cm_hr"
+  } else if ("Vh_cm_hr_sc" %in% names(vh_corrected)) {
+    "Vh_cm_hr_sc"
   } else {
     "Vh_cm_hr"
   }
@@ -230,12 +232,17 @@ apply_late_calibration_sdma <- function(vh_corrected,
     primary_method = primary_method,
     secondary_methods = secondary_methods,
     sensor_position = sensor_position,
-    manual_thresholds = manual_thresholds
+    manual_thresholds = manual_thresholds,
+    velocity_col = velocity_col
   )
 
   # 2. Apply calibrations
   cat("\nStep 2: Applying calibrations...\n")
-  vh_calibrated <- transform_multiple_methods(vh_corrected, calibrations)
+  vh_calibrated <- transform_multiple_methods(
+    vh_corrected,
+    calibrations,
+    velocity_col = velocity_col
+  )
 
   # 3. Apply sDMA using CORRECTED velocities
   if (!is.null(sdma_methods) && length(sdma_methods) > 0) {

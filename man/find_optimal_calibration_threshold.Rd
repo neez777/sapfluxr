@@ -16,7 +16,8 @@ find_optimal_calibration_threshold(
   min_points = 50,
   create_plots = TRUE,
   verbose = TRUE,
-  manual_threshold = NULL
+  manual_threshold = NULL,
+  velocity_col = "Vh_cm_hr"
 )
 }
 \arguments{
@@ -51,15 +52,12 @@ Useful when you want to use a specific threshold based on domain knowledge
 or visual inspection of R² vs threshold plot. Default: NULL (automatic).}
 }
 \value{
-A list containing:
-\item{optimal_threshold}{Velocity threshold with highest R²}
-\item{optimal_r_squared}{R² value at optimal threshold}
-\item{optimal_calibration}{Full calibration object at optimal threshold}
-\item{threshold_results}{Data frame of all thresholds tested with R², RMSE, n_points}
-\item{plots}{List of diagnostic plots (if create_plots = TRUE)}
-\item{primary_method}{Primary method used}
-\item{secondary_method}{Secondary method calibrated}
-\item{sensor_position}{Sensor position analysed}
+A list with components \code{optimal_threshold} (velocity threshold
+with highest R²), \code{optimal_r_squared} (R² value at optimal threshold),
+\code{optimal_calibration} (full calibration object), \code{threshold_results}
+(data frame of tested thresholds with R², RMSE, n_points), \code{plots}
+(diagnostic plots if \code{create_plots = TRUE}), \code{primary_method},
+\code{secondary_method}, and \code{sensor_position}
 }
 \description{
 Automatically determines the best velocity threshold for calibrating a
@@ -124,6 +122,8 @@ print(threshold_result$plots$calibration_plot)
 Other method calibration functions: 
 \code{\link{calibrate_method_to_primary}()},
 \code{\link{calibrate_multiple_methods}()},
+\code{\link{compare_methods_enhanced}()},
+\code{\link{compare_methods_segmented}()},
 \code{\link{transform_multiple_methods}()},
 \code{\link{transform_secondary_method}()}
 }

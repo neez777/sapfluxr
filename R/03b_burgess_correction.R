@@ -156,7 +156,7 @@ calculate_burgess_coefficients <- function(zero_vh_range = seq(-10, 10, by = 0.1
 
         # Intercept: geometric correction term
         # FIXED: Now includes factor of 2 in denominator (2*t instead of t)
-        intercept <- -(x2^2 - x1^2) / (2 * t * (x1 + x2)) * 3600
+        intercept <- (x2^2 - x1^2) / (2 * t * (x1 + x2)) * 3600
 
         return(c(slope = slope, intercept = intercept))
       }

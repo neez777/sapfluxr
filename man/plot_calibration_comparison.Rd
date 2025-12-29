@@ -150,4 +150,8 @@ plot_calibration_comparison(
 }
 
 }
+\seealso{
+Other calibration plotting functions: 
+\code{\link{plot_sdma_transition}()}
+}
 \concept{calibration plotting functions}

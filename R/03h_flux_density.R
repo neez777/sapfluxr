@@ -56,9 +56,27 @@
 #'
 #' @family flux density functions
 #' @export
-calc_sap_flux_density <- function(Vh, wood_properties) {
+calc_sap_flux_density <- function(Vh,
+                                   wood_properties,
+                                   vh_data = NULL,      # Alias for data frame input
+                                   velocity_col = NULL, # Column name if vh_data provided
+                                   ...) {
 
-  # Input validation
+  # Handle data frame input (for user convenience)
+  if (!is.null(vh_data)) {
+    # User provided a data frame - delegate to apply_flux_conversion
+    if (is.null(velocity_col)) {
+      velocity_col <- "Vh_cm_hr"  # Default
+    }
+    return(apply_flux_conversion(
+      data = vh_data,
+      wood_properties = wood_properties,
+      velocity_col = velocity_col,
+      ...
+    ))
+  }
+
+  # Input validation (vector form)
   if (!inherits(wood_properties, "WoodProperties")) {
     stop("wood_properties must be a WoodProperties R6 object")
   }
@@ -73,7 +91,7 @@ calc_sap_flux_density <- function(Vh, wood_properties) {
     ))
   }
 
-  # Apply conversion
+  # Apply conversion (vector form)
   Jv <- Vh * Z
 
   return(Jv)

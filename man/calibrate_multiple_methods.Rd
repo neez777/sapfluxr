@@ -16,7 +16,8 @@ calibrate_multiple_methods(
   min_points = 50,
   create_plots = TRUE,
   verbose = TRUE,
-  manual_thresholds = NULL
+  manual_thresholds = NULL,
+  velocity_col = "Vh_cm_hr"
 )
 }
 \arguments{
@@ -127,6 +128,8 @@ vh_calibrated <- transform_multiple_methods(vh_calibrated, calibrations_inner)
 \seealso{
 Other method calibration functions: 
 \code{\link{calibrate_method_to_primary}()},
+\code{\link{compare_methods_enhanced}()},
+\code{\link{compare_methods_segmented}()},
 \code{\link{find_optimal_calibration_threshold}()},
 \code{\link{transform_multiple_methods}()},
 \code{\link{transform_secondary_method}()}

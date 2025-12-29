@@ -32,7 +32,17 @@
 #' @param verbose Logical, whether to print progress messages (default: TRUE)
 #'
 #' @return A list with class \code{"spacing_correction_result"} containing:
-#'   \item{vh_corrected}{Data frame with corrected velocities}
+#'   \item{vh_corrected}{Data frame with corrected velocities, including:
+#'     \itemize{
+#'       \item \code{Vh_cm_hr_raw} - Original raw values
+#'       \item \code{Vh_cm_hr_sc} - Spacing-corrected results
+#'       \item \code{Vh_cm_hr} - Current best available (hybrid)
+#'       \item \code{spacing_correction_a} - Slope coefficient (a) applied
+#'       \item \code{spacing_correction_b} - Intercept coefficient (b) applied
+#'       \item \code{baseline_offset_cm_hr} - Zero-flow baseline (cm/hr)
+#'       \item \code{spacing_correction_applied} - Logical flag
+#'     }
+#'   }
 #'   \item{method_used}{Character, which detection method was used}
 #'   \item{changepoints}{Detected or specified changepoints (Date vector)}
 #'   \item{segments}{Data frame describing correction segments}
@@ -249,7 +259,7 @@ apply_spacing_correction <- function(vh_data,
   # Extract additional parameters
   dots <- list(...)
 
-  # Get thermal diffusivity from wood properties
+  # Get thermal diffusivity from wood properties, dots, or attributes
   k_assumed <- if (!is.null(wood_properties)) {
     if ("derived_properties" %in% names(wood_properties)) {
       wood_properties$derived_properties$thermal_diffusivity_actual_cm2_s
@@ -258,6 +268,10 @@ apply_spacing_correction <- function(vh_data,
     } else {
       0.0025  # Default fallback
     }
+  } else if (!is.null(dots$k_assumed)) {
+    dots$k_assumed
+  } else if (!is.null(attr(vh_data, "diffusivity"))) {
+    attr(vh_data, "diffusivity")
   } else {
     0.0025  # Default
   }
@@ -539,6 +553,60 @@ apply_spacing_correction <- function(vh_data,
     }
   )
 
+  # =========================================================================
+  # CREATE AUDIT COLUMNS FOR AUDITABLE WORKFLOW
+  # =========================================================================
+  # User workflow requirement: Create separate columns for each correction stage
+  # - Vh_cm_hr_raw: Original raw values (preserved)
+  # - Vh_cm_hr_sc: Spacing correction results (new, shows only corrected values)
+  # - Vh_cm_hr: Current "best available" (hybrid of raw + corrections)
+
+  vh_corrected <- result$vh_corrected
+
+  # Ensure Vh_cm_hr_raw exists (preserve original values)
+  if (!"Vh_cm_hr_raw" %in% names(vh_corrected)) {
+    # If raw doesn't exist, save current Vh_cm_hr as raw before modifying
+    vh_corrected$Vh_cm_hr_raw <- vh_corrected$Vh_cm_hr
+  }
+
+  # Create Vh_cm_hr_sc audit column showing spacing correction results
+  # This column shows what spacing correction calculated, NA for uncorrected rows
+  if ("spacing_correction_applied" %in% names(vh_corrected)) {
+    # Mark which rows were spacing-corrected
+    spacing_corrected_rows <- vh_corrected$spacing_correction_applied %in% c(TRUE, "TRUE")
+    spacing_corrected_rows[is.na(spacing_corrected_rows)] <- FALSE
+
+    # Create Vh_cm_hr_sc: spacing-corrected values where applied, NA elsewhere
+    vh_corrected$Vh_cm_hr_sc <- ifelse(
+      spacing_corrected_rows,
+      vh_corrected$Vh_cm_hr,  # Current Vh_cm_hr has corrected values
+      NA_real_
+    )
+
+    if (verbose) {
+      cat("\nCreated audit column: Vh_cm_hr_sc (spacing correction results)\n")
+      cat(sprintf("  Corrected rows: %d\n", sum(spacing_corrected_rows, na.rm = TRUE)))
+      cat(sprintf("  Uncorrected rows: %d\n", sum(!spacing_corrected_rows, na.rm = TRUE)))
+    }
+  } else {
+    # No spacing correction flag - assume all rows of specified method were corrected
+    method_rows <- vh_corrected$method == hpv_method
+    vh_corrected$Vh_cm_hr_sc <- ifelse(
+      method_rows,
+      vh_corrected$Vh_cm_hr,
+      NA_real_
+    )
+
+    if (verbose) {
+      cat("\nCreated audit column: Vh_cm_hr_sc (spacing correction results)\n")
+      cat(sprintf("  Method '%s' rows: %d\n", hpv_method, sum(method_rows, na.rm = TRUE)))
+    }
+  }
+
+  # Vh_cm_hr already contains hybrid values (helpers update it in place)
+  # Update result with modified data frame
+  result$vh_corrected <- vh_corrected
+
   # Add class
   class(result) <- c("unified_spacing_correction_result", "list")
 
@@ -554,6 +622,14 @@ apply_spacing_correction <- function(vh_data,
     } else {
       cat("Correction type: Continuous (heartwood reference)\n")
     }
+    cat("\nAudit columns created:\n")
+    cat("  Vh_cm_hr_raw - Original raw values\n")
+    cat("  Vh_cm_hr_sc - Spacing correction results\n")
+    cat("  Vh_cm_hr - Current best available (hybrid)\n")
+    cat("\nCorrection factor columns:\n")
+    cat("  spacing_correction_a - Slope coefficient (a)\n")
+    cat("  spacing_correction_b - Intercept coefficient (b)\n")
+    cat("  baseline_offset_cm_hr - Zero-flow baseline (cm/hr)\n")
     cat(strrep("=", 72), "\n")
     cat("\n")
   }

@@ -35,7 +35,8 @@ Returns strings like:
 }
 \seealso{
 Other plotting functions: 
-\code{\link{plot_correction_comparison}()}
+\code{\link{plot_correction_comparison}()},
+\code{\link{plot_correction_steps}()}
 }
 \concept{plotting functions}
 \keyword{internal}

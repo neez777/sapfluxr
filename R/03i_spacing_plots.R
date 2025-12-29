@@ -125,9 +125,11 @@ plot_zero_flow_periods <- function(vh_data,
       x = "Date/Time",
       y = "Velocity (cm/hr)"
     ) +
-    ggplot2::theme_minimal() +
+    ggplot2::theme_classic() +
     ggplot2::theme(
       plot.title = ggplot2::element_text(face = "bold", size = 14),
+      plot.subtitle = ggplot2::element_text(size = 11),
+      legend.position = "bottom",
       axis.title = ggplot2::element_text(size = 12),
       panel.grid.minor = ggplot2::element_blank()
     )
@@ -261,9 +263,10 @@ plot_spacing_correction_comparison <- function(spacing_result,
       y = "Velocity (cm/hr)",
       color = ""
     ) +
-    ggplot2::theme_minimal() +
+    ggplot2::theme_classic() +
     ggplot2::theme(
       plot.title = ggplot2::element_text(face = "bold", size = 14),
+      plot.subtitle = ggplot2::element_text(size = 11),
       legend.position = "top"
     )
 
@@ -283,8 +286,12 @@ plot_spacing_correction_comparison <- function(spacing_result,
         x = "Date/Time",
         y = "Difference (Corrected - Original, cm/hr)"
       ) +
-      ggplot2::theme_minimal() +
-      ggplot2::theme(plot.title = ggplot2::element_text(face = "bold", size = 12))
+      ggplot2::theme_classic() +
+      ggplot2::theme(
+        plot.title = ggplot2::element_text(face = "bold", size = 14),
+        plot.subtitle = ggplot2::element_text(size = 11),
+        legend.position = "bottom"
+      )
 
     # Try to combine with patchwork if available
     if (requireNamespace("patchwork", quietly = TRUE)) {
@@ -376,9 +383,10 @@ plot_burgess_coefficients <- function(lookup_table,
       color = "Coefficient",
       caption = "Vh_corrected = a × Vh + b"
     ) +
-    ggplot2::theme_minimal() +
+    ggplot2::theme_classic() +
     ggplot2::theme(
       plot.title = ggplot2::element_text(face = "bold", size = 14),
+      plot.subtitle = ggplot2::element_text(size = 11),
       legend.position = "top"
     )
 
@@ -533,9 +541,10 @@ plot_temperature_traces <- function(heat_pulse_data,
       y = "Temperature (°C)",
       color = "Probe"
     ) +
-    ggplot2::theme_minimal() +
+    ggplot2::theme_classic() +
     ggplot2::theme(
       plot.title = ggplot2::element_text(face = "bold", size = 14),
+      plot.subtitle = ggplot2::element_text(size = 11),
       legend.position = "top"
     )
 
@@ -624,9 +633,11 @@ plot_k_estimation_summary <- function(k_result,
       x = "Sensor",
       y = "k (cm²/s)"
     ) +
-    ggplot2::theme_minimal() +
+    ggplot2::theme_classic() +
     ggplot2::theme(
-      plot.title = ggplot2::element_text(face = "bold", size = 14)
+      plot.title = ggplot2::element_text(face = "bold", size = 14),
+      plot.subtitle = ggplot2::element_text(size = 11),
+      legend.position = "bottom"
     )
 
   # Add error bars if SD is available
@@ -744,9 +755,10 @@ plot_symmetry_check <- function(k_result) {
       color = "Status"
     ) +
     ggplot2::coord_equal() +
-    ggplot2::theme_minimal() +
+    ggplot2::theme_classic() +
     ggplot2::theme(
       plot.title = ggplot2::element_text(face = "bold", size = 14),
+      plot.subtitle = ggplot2::element_text(size = 11),
       legend.position = "top"
     )
 

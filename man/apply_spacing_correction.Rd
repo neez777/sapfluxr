@@ -81,7 +81,17 @@ adds columns:
 }
 
 A list with class \code{"spacing_correction_result"} containing:
-\item{vh_corrected}{Data frame with corrected velocities}
+\item{vh_corrected}{Data frame with corrected velocities, including:
+\itemize{
+\item \code{Vh_cm_hr_raw} - Original raw values
+\item \code{Vh_cm_hr_sc} - Spacing-corrected results
+\item \code{Vh_cm_hr} - Current best available (hybrid)
+\item \code{spacing_correction_a} - Slope coefficient (a) applied
+\item \code{spacing_correction_b} - Intercept coefficient (b) applied
+\item \code{baseline_offset_cm_hr} - Zero-flow baseline (cm/hr)
+\item \code{spacing_correction_applied} - Logical flag
+}
+}
 \item{method_used}{Character, which detection method was used}
 \item{changepoints}{Detected or specified changepoints (Date vector)}
 \item{segments}{Data frame describing correction segments}

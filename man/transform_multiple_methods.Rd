@@ -4,7 +4,12 @@
 \alias{transform_multiple_methods}
 \title{Transform Multiple Secondary Methods Using Calibrations}
 \usage{
-transform_multiple_methods(vh_corrected, calibrations, verbose = TRUE)
+transform_multiple_methods(
+  vh_corrected,
+  calibrations,
+  verbose = TRUE,
+  velocity_col = "Vh_cm_hr"
+)
 }
 \arguments{
 \item{vh_corrected}{Corrected velocity data.}
@@ -49,6 +54,8 @@ vh_calibrated <- transform_multiple_methods(vh_corrected, calibrations)
 Other method calibration functions: 
 \code{\link{calibrate_method_to_primary}()},
 \code{\link{calibrate_multiple_methods}()},
+\code{\link{compare_methods_enhanced}()},
+\code{\link{compare_methods_segmented}()},
 \code{\link{find_optimal_calibration_threshold}()},
 \code{\link{transform_secondary_method}()}
 }

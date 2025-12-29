@@ -413,7 +413,7 @@ plot_calibration_comparison <- function(vh_original,
       color = "Method",
       linetype = "Method"
     ) +
-    ggplot2::theme_minimal() +
+    ggplot2::theme_classic() +
     ggplot2::theme(
       plot.title = ggplot2::element_text(face = "bold", size = 14),
       plot.subtitle = ggplot2::element_text(size = 11),
@@ -461,4 +461,260 @@ parse_date_input <- function(input, reference_date) {
     stop("Could not parse date input: ", input,
          "\nUse format YYYY-MM-DD or numeric day number")
   })
+}
+
+
+#' Plot sDMA Transition Zone
+#'
+#' Creates a diagnostic plot zooming in on the method transition zone to verify
+#' smooth handover between primary and calibrated secondary methods. Visually
+#' confirms there are no discontinuities ("steps") at the switching threshold.
+#'
+#' @param data Data frame containing sDMA results with columns: datetime, method,
+#'   sensor_position, Vh_cm_hr (or velocity_col), Vh_sdma, sdma_source.
+#' @param threshold Numeric. The velocity or Peclet threshold where switching occurs.
+#' @param window_days Numeric. Number of days around the transition to display
+#'   (default: 7). The plot will show data from threshold ± window_days.
+#' @param sensor_position Character. Sensor position to plot ("outer" or "inner").
+#'   Default: "outer".
+#' @param primary_method Character. Name of primary method (default: "HRM").
+#' @param secondary_method Character. Name of secondary method (e.g., "MHR").
+#' @param velocity_col Character. Name of velocity column (default: "Vh_cm_hr").
+#' @param mode Character. Switching mode: "velocity" or "peclet" (default: "velocity").
+#' @param peclet_col Character. Name of Peclet column if mode = "peclet"
+#'   (default: "hrm_peclet_number").
+#'
+#' @return A ggplot2 object showing:
+#'   \itemize{
+#'     \item Primary method values (fading out above threshold) - blue
+#'     \item Calibrated secondary values (fading in above threshold) - red
+#'     \item Combined sDMA velocity - green (should be continuous)
+#'     \item Vertical dashed line at threshold
+#'     \item Shaded region showing transition zone
+#'   }
+#'
+#' @details
+#' **Purpose:**
+#'
+#' This diagnostic plot addresses the "attenuated data" problem where secondary
+#' methods produce lower values than primary even in valid ranges. Without
+#' proper handover calibration, this creates visible discontinuities ("steps")
+#' at the switching threshold.
+#'
+#' **What to Look For:**
+#'
+#' \itemize{
+#'   \item **Good handover**: The green sDMA line should be continuous with no
+#'         visible jump at the threshold
+#'   \item **Smooth transition**: Primary (blue) and calibrated secondary (red)
+#'         should converge at the threshold
+#'   \item **No "volcano effect"**: Avoid sudden drops in velocity timeseries
+#' }
+#'
+#' **Interpreting the Plot:**
+#'
+#' \itemize{
+#'   \item Left of threshold: Blue line dominant (primary method used)
+#'   \item Right of threshold: Red line dominant (calibrated secondary used)
+#'   \item Green line (sDMA): Should show smooth transition through threshold
+#'   \item Any gap in green line = discontinuity problem (poor calibration)
+#' }
+#'
+#' @examples
+#' \dontrun{
+#' # After applying sDMA with calibration
+#' vh_sdma <- apply_sdma_switching(
+#'   data = vh_corrected,
+#'   secondary = "MHR",
+#'   mode = "velocity",
+#'   threshold = 10,
+#'   calibrate = TRUE
+#' )
+#'
+#' # Check transition zone
+#' plot_sdma_transition(
+#'   data = vh_sdma,
+#'   threshold = 10,
+#'   window_days = 7,
+#'   secondary_method = "MHR"
+#' )
+#' }
+#'
+#' @family calibration plotting functions
+#' @export
+plot_sdma_transition <- function(data,
+                                  threshold,
+                                  window_days = 7,
+                                  sensor_position = "outer",
+                                  primary_method = "HRM",
+                                  secondary_method,
+                                  velocity_col = "Vh_cm_hr",
+                                  mode = c("velocity", "peclet"),
+                                  peclet_col = "hrm_peclet_number") {
+
+  mode <- match.arg(mode)
+
+  # Check for ggplot2
+  if (!requireNamespace("ggplot2", quietly = TRUE)) {
+    stop("ggplot2 package is required for plotting. Install with: install.packages('ggplot2')")
+  }
+
+  # Validate inputs
+  if (!is.data.frame(data)) {
+    stop("data must be a data frame")
+  }
+
+  required_cols <- c("datetime", "method", "sensor_position", velocity_col)
+  if ("Vh_sdma" %in% names(data)) {
+    required_cols <- c(required_cols, "Vh_sdma", "sdma_source")
+  }
+
+  missing_cols <- setdiff(required_cols, names(data))
+  if (length(missing_cols) > 0) {
+    stop("data missing required columns: ", paste(missing_cols, collapse = ", "))
+  }
+
+  # Filter to sensor position
+  plot_data <- data[data$sensor_position == sensor_position, ]
+
+  if (nrow(plot_data) == 0) {
+    stop("No data found for sensor_position = '", sensor_position, "'")
+  }
+
+  # Determine switch variable (velocity or Peclet)
+  if (mode == "peclet") {
+    if (!peclet_col %in% names(plot_data)) {
+      stop("Peclet column '", peclet_col, "' not found in data")
+    }
+    switch_var <- peclet_col
+    switch_label <- "Peclet Number"
+  } else {
+    switch_var <- velocity_col
+    switch_label <- "Velocity (cm/hr)"
+  }
+
+  # Find data around the threshold
+  # Get primary method data to identify when we're near threshold
+  primary_data <- plot_data[plot_data$method == primary_method, ]
+
+  if (nrow(primary_data) == 0) {
+    stop("No primary method data found for '", primary_method, "'")
+  }
+
+  # Calculate velocity buffer around threshold for temporal windowing
+  # This ensures we capture transitions even if they're spread over time
+  threshold_window <- threshold * 0.2  # ±20% of threshold
+
+  # Find times when we're near the threshold
+  near_threshold <- primary_data[[switch_var]] >= (threshold - threshold_window) &
+                    primary_data[[switch_var]] <= (threshold + threshold_window)
+
+  if (!any(near_threshold, na.rm = TRUE)) {
+    warning("No data found near threshold (", threshold, " ± ", round(threshold_window, 2), ")")
+    # Fall back to showing all data
+    transition_times <- primary_data$datetime
+  } else {
+    transition_times <- primary_data$datetime[near_threshold]
+  }
+
+  # Define temporal window around transitions
+  if (length(transition_times) > 0) {
+    min_time <- min(transition_times, na.rm = TRUE) - (window_days * 86400 / 2)
+    max_time <- max(transition_times, na.rm = TRUE) + (window_days * 86400 / 2)
+
+    plot_data <- plot_data[
+      plot_data$datetime >= min_time & plot_data$datetime <= max_time,
+    ]
+  }
+
+  if (nrow(plot_data) == 0) {
+    stop("No data in transition window. Try increasing window_days.")
+  }
+
+  # Prepare data for plotting
+  # Extract primary and secondary values
+  primary_vals <- plot_data[
+    plot_data$method == primary_method,
+    c("datetime", velocity_col, switch_var)
+  ]
+  names(primary_vals) <- c("datetime", "velocity", "switch_val")
+  primary_vals$series <- paste0(primary_method, " (primary)")
+
+  secondary_vals <- plot_data[
+    plot_data$method == secondary_method,
+    c("datetime", velocity_col)
+  ]
+  names(secondary_vals) <- c("datetime", "velocity")
+  secondary_vals$series <- paste0(secondary_method, " (calibrated)")
+  secondary_vals$switch_val <- NA_real_
+
+  # Get sDMA combined values if available
+  if ("Vh_sdma" %in% names(plot_data)) {
+    sdma_vals <- plot_data[
+      plot_data$method == primary_method & !is.na(plot_data$Vh_sdma),
+      c("datetime", "Vh_sdma", switch_var)
+    ]
+    names(sdma_vals) <- c("datetime", "velocity", "switch_val")
+    sdma_vals$series <- "sDMA (combined)"
+
+    # Combine all series
+    plot_df <- rbind(primary_vals, secondary_vals, sdma_vals)
+  } else {
+    # No sDMA column, just show primary and secondary
+    plot_df <- rbind(primary_vals, secondary_vals)
+  }
+
+  # Create plot
+  p <- ggplot2::ggplot(plot_df, ggplot2::aes(x = datetime, y = velocity, color = series)) +
+    # Shaded transition zone
+    ggplot2::annotate("rect",
+                      xmin = -Inf, xmax = Inf,
+                      ymin = threshold - threshold_window,
+                      ymax = threshold + threshold_window,
+                      alpha = 0.1, fill = "grey50") +
+
+    # Data lines
+    ggplot2::geom_line(linewidth = 0.8, alpha = 0.7) +
+    ggplot2::geom_point(size = 1.5, alpha = 0.5) +
+
+    # Threshold line
+    ggplot2::geom_hline(yintercept = threshold, linetype = "dashed",
+                        color = "black", linewidth = 1) +
+
+    # Threshold annotation
+    ggplot2::annotate("text",
+                      x = min(plot_df$datetime, na.rm = TRUE),
+                      y = threshold,
+                      label = paste0("Threshold: ", threshold, if (mode == "velocity") " cm/hr" else ""),
+                      hjust = 0, vjust = -0.5, color = "black", size = 3.5) +
+
+    # Colors
+    ggplot2::scale_color_manual(
+      values = c(
+        "HRM (primary)" = "steelblue",
+        "MHR (calibrated)" = "coral",
+        "sDMA (combined)" = "darkgreen"
+      )
+    ) +
+
+    # Labels and theme
+    ggplot2::labs(
+      title = paste("sDMA Transition Zone:", primary_method, "↔", secondary_method),
+      subtitle = paste0("Threshold: ", threshold, if (mode == "velocity") " cm/hr" else "",
+                        " | Window: ±", window_days, " days | ",
+                        "Check for discontinuities at threshold"),
+      x = "Date/Time",
+      y = "Velocity (cm/hr)",
+      color = "Method"
+    ) +
+    ggplot2::theme_classic() +
+    ggplot2::theme(
+      plot.title = ggplot2::element_text(face = "bold", size = 14),
+      plot.subtitle = ggplot2::element_text(size = 11),
+      legend.position = "bottom",
+      axis.title = ggplot2::element_text(size = 12),
+      axis.text = ggplot2::element_text(size = 10)
+    )
+
+  return(p)
 }

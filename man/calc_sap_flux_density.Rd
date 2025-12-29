@@ -4,7 +4,13 @@
 \alias{calc_sap_flux_density}
 \title{Convert Heat Pulse Velocity to Sap Flux Density}
 \usage{
-calc_sap_flux_density(Vh, wood_properties)
+calc_sap_flux_density(
+  Vh,
+  wood_properties,
+  vh_data = NULL,
+  velocity_col = NULL,
+  ...
+)
 }
 \arguments{
 \item{Vh}{Heat pulse velocity (cm/h). Can be raw, spacing-corrected, or

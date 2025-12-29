@@ -24,8 +24,6 @@ NULL
 #'     \item{d}{Polynomial coefficient d}
 #'     \item{B_linear}{Linear correction coefficient (recommended)}
 #'     \item{r_squared}{R² for linear approximation}
-#'     \item{reinstall_dates}{POSIXct vector of reinstallation dates, optional}
-#'     \item{reinstall_measured_diameters}{Numeric vector of measured wound diameters at each reinstallation (mm), optional. Enables Segmented Sawtooth Model with period-specific growth rates.}
 #'   }
 #'
 #' @details
@@ -152,40 +150,6 @@ calc_wound_diameter <- function(timestamps, wound_config) {
   wound_addition <- if (is.null(wound_config$wound_addition_mm)) 0.3 else wound_config$wound_addition_mm
 
   # -------------------------------------------------------------------------
-  # AUTO-DETECT dates from data if final_diameter_mm specified but dates missing
-  # -------------------------------------------------------------------------
-
-  if (!is.null(wound_config$final_diameter_mm)) {
-    # User wants temporal growth but may not have specified dates
-    if (is.null(wound_config$initial_date) && is.null(wound_config$final_date)) {
-      # Auto-detect from timestamps
-      wound_config$initial_date <- as.character(min(timestamps))
-      wound_config$final_date <- as.character(max(timestamps))
-
-      warning("Temporal wound tracking: initial_date and final_date not specified.\n",
-              "  Auto-detected from data:\n",
-              "    initial_date: ", wound_config$initial_date, "\n",
-              "    final_date: ", wound_config$final_date, "\n",
-              "  Wound will grow from base diameter (",
-              wound_config$drill_bit_diameter_mm + 2 * wound_addition, " mm) to ",
-              wound_config$final_diameter_mm, " mm over this period.\n",
-              "  To override, specify initial_date and final_date explicitly.",
-              call. = FALSE)
-    } else if (is.null(wound_config$initial_date)) {
-      # Only initial_date missing
-      wound_config$initial_date <- as.character(min(timestamps))
-      warning("initial_date not specified. Auto-detected as: ", wound_config$initial_date,
-              call. = FALSE)
-    } else if (is.null(wound_config$final_date)) {
-      # Only final_date missing
-      wound_config$final_date <- as.character(max(timestamps))
-      warning("final_date not specified. Auto-detected as: ", wound_config$final_date,
-              call. = FALSE)
-    }
-  }
-
-
-  # -------------------------------------------------------------------------
   # STEP 1: Determine wound tracking model and validate parameters
   # -------------------------------------------------------------------------
 
@@ -209,16 +173,8 @@ calc_wound_diameter <- function(timestamps, wound_config) {
   growth_rate_mm_per_day <- 0  # Default for Model A with no temporal tracking
 
   # -------------------------------------------------------------------------
+  # MODEL A: Constant Healing Rate (Linear Growth)
   # -------------------------------------------------------------------------
-  # MODEL A: Healing Rate Calculation
-  # -------------------------------------------------------------------------
-  # Two sub-models:
-  #   - Global Rate: Single growth rate from initial to final (original)
-  #   - Segmented Rate: Period-specific rates using intermediate measurements
-
-  period_growth_rates <- NULL  # Will hold period-specific rates if segmented model
-  use_segmented_rates <- FALSE
-
   if (has_model_a_params) {
     initial_date <- as.POSIXct(wound_config$initial_date)
     final_date <- as.POSIXct(wound_config$final_date)
@@ -229,73 +185,13 @@ calc_wound_diameter <- function(timestamps, wound_config) {
       stop("final_date must be after initial_date")
     }
 
-    # Check if segmented model requested via reinstall_measured_diameters
-    if (!is.null(wound_config$reinstall_measured_diameters)) {
-      # ===================================================================
-      # SEGMENTED SAWTOOTH MODEL: Period-specific growth rates
-      # ===================================================================
-
-      if (is.null(wound_config$reinstall_dates)) {
-        stop("reinstall_measured_diameters requires reinstall_dates to be specified")
-      }
-
-      reinstall_dates <- as.POSIXct(wound_config$reinstall_dates)
-      reinstall_measured_diameters <- wound_config$reinstall_measured_diameters
-
-      # Validate: must have same length
-      if (length(reinstall_measured_diameters) != length(reinstall_dates)) {
-        stop(sprintf("reinstall_measured_diameters must have same length as reinstall_dates. Expected %d, got %d.",
-                    length(reinstall_dates), length(reinstall_measured_diameters)))
-      }
-
-      # Validate chronological order
-      if (is.unsorted(reinstall_dates)) {
-        stop("reinstall_dates must be in chronological order")
-      }
-
-      # Calculate period-specific growth rates
-      # Period 1: (Measured[1] - Base) / (ReinstallDate[1] - InitialDate)
-      # Period i: (Measured[i] - Base) / (ReinstallDate[i] - ReinstallDate[i-1])
-      # Final Period: (FinalDiam - Base) / (FinalDate - ReinstallDate[Last])
-
-      n_periods <- length(reinstall_dates) + 1  # Initial period + periods after each reinstall
-      period_growth_rates <- numeric(n_periods)
-
-      # Period 1: Initial to first reinstall
-      days_period1 <- as.numeric(difftime(reinstall_dates[1], initial_date, units = "days"))
-      diameter_increase_period1 <- reinstall_measured_diameters[1] - base_diameter_mm
-      period_growth_rates[1] <- diameter_increase_period1 / days_period1
-
-      # Periods 2 to n-1: Between reinstalls
-      if (length(reinstall_dates) > 1) {
-        for (j in 2:length(reinstall_dates)) {
-          days_period <- as.numeric(difftime(reinstall_dates[j], reinstall_dates[j-1], units = "days"))
-          diameter_increase <- reinstall_measured_diameters[j] - base_diameter_mm
-          period_growth_rates[j] <- diameter_increase / days_period
-        }
-      }
-
-      # Final period: Last reinstall to final date
-      days_final <- as.numeric(difftime(final_date, reinstall_dates[length(reinstall_dates)], units = "days"))
-      diameter_increase_final <- final_diameter_mm - base_diameter_mm
-      period_growth_rates[n_periods] <- diameter_increase_final / days_final
-
-      use_segmented_rates <- TRUE
-
-      message("Using Segmented Sawtooth Model with ", n_periods, " period-specific growth rates")
-
-    } else {
-      # ===================================================================
-      # GLOBAL SAWTOOTH MODEL: Single growth rate (original)
-      # ===================================================================
-
-      # Calculate single global growth rate from initial to final
-      days_between <- as.numeric(difftime(final_date, initial_date, units = "days"))
-      diameter_increase <- final_diameter_mm - base_diameter_mm
-      growth_rate_mm_per_day <- diameter_increase / days_between
-    }
+    # Calculate growth rate from initial to final
+    days_between <- as.numeric(difftime(final_date, initial_date, units = "days"))
+    diameter_increase <- final_diameter_mm - base_diameter_mm
+    growth_rate_mm_per_day <- diameter_increase / days_between
   }
 
+  # -------------------------------------------------------------------------
   # STEP 2: Identify installation periods and wound diameters
   # -------------------------------------------------------------------------
 
@@ -336,17 +232,15 @@ calc_wound_diameter <- function(timestamps, wound_config) {
     }
 
     # Assign wound diameters based on which period each timestamp falls into
-    # VECTORIZED: Use findInterval instead of loop - much faster!
-    # findInterval(x, vec) returns i such that vec[i] <= x < vec[i+1]
-    # For right=TRUE: vec[i] < x <= vec[i+1] (what we want)
-    period_indices <- findInterval(timestamps, period_starts, rightmost.closed = TRUE, left.open = FALSE)
+    wound_diameter_mm <- numeric(length(timestamps))
 
-    # findInterval returns 0 for values before first period start
-    # We want these to use period 1
-    period_indices[period_indices == 0] <- 1
-
-    # Assign diameters based on period
-    wound_diameter_mm <- period_diameters_mm[period_indices]
+    for (i in seq_along(timestamps)) {
+      # Find which period this timestamp belongs to
+      # Period j if: period_starts[j] < timestamp <= period_starts[j+1]
+      # (or timestamp > period_starts[j] for last period)
+      period_idx <- sum(timestamps[i] >= period_starts)
+      wound_diameter_mm[i] <- period_diameters_mm[period_idx]
+    }
 
     # Convert to cm and return
     wound_diameter_cm <- wound_diameter_mm / 10
@@ -388,8 +282,7 @@ calc_wound_diameter <- function(timestamps, wound_config) {
   }
 
   # -------------------------------------------------------------------------
-  # -------------------------------------------------------------------------
-  # STEP 3: Vectorised calculation with "sawtooth" pattern (OPTIMISED)
+  # STEP 3: Vectorised calculation with "sawtooth" pattern
   # -------------------------------------------------------------------------
 
   # For each timestamp, find which installation period it belongs to
@@ -397,36 +290,23 @@ calc_wound_diameter <- function(timestamps, wound_config) {
   # This creates a sawtooth pattern:
   #   - Linear growth from base_diameter after each installation
   #   - Reset to base_diameter at each reinstallation
-  #   - Growth rate can be either constant (global) or period-specific (segmented)
+  #   - Growth continues at same rate after reset
 
-  # OPTIMISATION: Use findInterval to vectorise period assignment
-  # findInterval returns index of which period each timestamp belongs to
-  # For timestamps before first install, returns 0; for after last, returns length(installation_starts)
-  period_idx <- findInterval(timestamps, installation_starts)
+  wound_diameter_mm <- numeric(length(timestamps))
 
-  # Handle edge case: timestamps before first installation get period 1
-  period_idx[period_idx == 0] <- 1
+  for (i in seq_along(timestamps)) {
+    # Find the most recent installation start date before or equal to this timestamp
+    current_installation_start <- max(installation_starts[installation_starts <= timestamps[i]])
 
-  # Create lookup vectors for installation starts and growth rates indexed by period
-  current_starts <- installation_starts[period_idx]
+    # Calculate days since this installation
+    days_since_install <- as.numeric(difftime(timestamps[i], current_installation_start, units = "days"))
 
-  # Get growth rates for each period
-  if (use_segmented_rates) {
-    # Use period-specific growth rates
-    current_rates <- period_growth_rates[period_idx]
-  } else {
-    # Use global growth rate for all periods
-    current_rates <- rep(growth_rate_mm_per_day, length(timestamps))
+    # Calculate current diameter: base diameter + linear growth
+    # Each reinstallation resets to base_diameter, then grows linearly
+    wound_diameter_mm[i] <- base_diameter_mm + (days_since_install * growth_rate_mm_per_day)
   }
 
-  # OPTIMISATION: Vectorised calculation in one pass
-  # Calculate days elapsed since installation start for each timestamp
-  days_elapsed <- as.numeric(difftime(timestamps, current_starts, units = "days"))
-
-  # Calculate wound diameter: base diameter + linear growth
-  # Each reinstallation resets to base_diameter, then grows linearly
-  wound_diameter_mm <- base_diameter_mm + (days_elapsed * current_rates)
-
+  # -------------------------------------------------------------------------
   # STEP 4: Convert to cm and return
   # -------------------------------------------------------------------------
 
@@ -474,19 +354,11 @@ calc_wound_diameter <- function(timestamps, wound_config) {
 #' @param confirm_parameters Logical. If TRUE and in interactive mode, prompts user
 #'   to confirm parameters before applying correction. Default: TRUE
 #'
-#' @param verbose Logical. If TRUE, prints progress messages and summary.
-#'   Default: TRUE
-#'
 #' @return Data frame with original columns plus:
 #'   \describe{
-#'     \item{Vh_cm_hr_raw}{Original raw velocities (preserved)}
-#'     \item{Vh_cm_hr_sc}{Spacing correction results (preserved if it existed)}
-#'     \item{Vh_cm_hr_wc}{Wound correction results (new audit column)}
-#'     \item{Vh_cm_hr}{Current best available velocity (hybrid)}
-#'     \item{Vc_cm_hr}{Alias for current best (legacy, same as Vh_cm_hr)}
+#'     \item{Vc_cm_hr}{Wound-corrected velocity (cm/hr)}
 #'     \item{wound_correction_factor}{Linear correction factor B applied}
-#'     \item{wound_diameter_cm}{Wound diameter used for correction (cm)}
-#'     \item{wound_correction_applied}{Logical flag indicating correction was applied}
+#'     \item{wound_diameter_cm}{Wound diameter used for correction}
 #'   }
 #'
 #' @details
@@ -558,8 +430,7 @@ apply_wound_correction <- function(vh_data,
                                    probe_spacing = "5mm",
                                    wood_properties = NULL,
                                    use_spacing_corrected = TRUE,
-                                   confirm_parameters = TRUE,
-                                   verbose = TRUE) {
+                                   confirm_parameters = TRUE) {
 
 
   # -------------------------------------------------------------------------
@@ -628,11 +499,13 @@ apply_wound_correction <- function(vh_data,
   }
 
   # -------------------------------------------------------------------------
-  # Get correction coefficients (VECTORIZED - single call for all diameters)
+  # Get correction coefficients for each row
   # -------------------------------------------------------------------------
 
-  # Get correction coefficient for entire wound diameter vector at once
-  B_vector <- get_wound_correction_coefficient(wound_diameter_vector, probe_spacing)
+  # Get correction coefficient for each wound diameter
+  B_vector <- sapply(wound_diameter_vector, function(wd) {
+    get_wound_correction_coefficient(wd, probe_spacing)
+  })
 
   # -------------------------------------------------------------------------
   # Interactive confirmation
@@ -642,7 +515,7 @@ apply_wound_correction <- function(vh_data,
     confirmed <- prompt_wound_correction_confirmation(
       wound_diameter = wound_diameter,
       probe_spacing = probe_spacing,
-      correction_factor = B_vector[1],  # Use first value for display (static or first temporal value)
+      correction_factor = B,
       n_rows = nrow(vh_data),
       use_spacing_corrected = use_spacing_corrected,
       has_spacing_corrected = "Vh_cm_hr_sc" %in% names(vh_data)
@@ -654,68 +527,60 @@ apply_wound_correction <- function(vh_data,
     }
   }
 
-  # =========================================================================
-  # AUDITABLE WORKFLOW: PRESERVE ALL CORRECTION STAGES
-  # =========================================================================
-  # User workflow requirement:
-  # - Vh_cm_hr_raw: Original raw values (must be preserved)
-  # - Vh_cm_hr_sc: Spacing correction results (must be preserved if exists)
-  # - Vh_cm_hr_wc: Wound correction results (new, this function creates it)
-  # - Vh_cm_hr: Current "best available" (hybrid)
-
-  # Ensure raw values are preserved
-  if (!"Vh_cm_hr_raw" %in% names(vh_data)) {
-    # If raw doesn't exist yet, save current values before modifying
-    vh_data$Vh_cm_hr_raw <- vh_data$Vh_cm_hr
-  }
+  # -------------------------------------------------------------------------
+  # Determine which velocity column to correct (hybrid workflow)
+  # -------------------------------------------------------------------------
 
   # Detect which correction was previously applied
-  has_sc <- "Vh_cm_hr_sc" %in% names(vh_data)
+  has_zf <- "Vh_cm_hr_zf" %in% names(vh_data) &&
+            any(vh_data$zero_flow_offset_applied %||% FALSE, na.rm = TRUE)
 
-  # Determine input column for wound correction
+  has_sc <- "Vh_cm_hr_sc" %in% names(vh_data) &&
+            any(vh_data$spacing_correction_applied %||% FALSE, na.rm = TRUE)
+
+  # Determine source and target columns
   if (has_sc && use_spacing_corrected) {
     input_col <- "Vh_cm_hr_sc"
+    output_col <- "Vh_cm_hr_sc_wc"
     correction_base <- "spacing"
     message("Applying wound correction to spacing-corrected velocities (Vh_cm_hr_sc)")
+  } else if (has_zf) {
+    input_col <- "Vh_cm_hr_zf"
+    output_col <- "Vh_cm_hr_zf_wc"
+    correction_base <- "zero_flow_offset"
+    message("Applying wound correction to zero-flow corrected velocities (Vh_cm_hr_zf)")
   } else if (has_sc) {
     # Has spacing but user set use_spacing_corrected = FALSE
     input_col <- "Vh_cm_hr_raw"
+    output_col <- "Vh_cm_hr_wc"
     correction_base <- "none"
-    message("Applying wound correction to raw velocities (Vh_cm_hr_raw), ignoring spacing correction")
+    message("Applying wound correction to raw velocities (Vh_cm_hr_raw)")
   } else {
-    # No prior spacing correction
+    # No prior corrections
     input_col <- "Vh_cm_hr_raw"
+    output_col <- "Vh_cm_hr_wc"
     correction_base <- "none"
     message("Applying wound correction to raw velocities (Vh_cm_hr_raw)")
   }
 
   # -------------------------------------------------------------------------
-  # Apply correction and create audit column Vh_cm_hr_wc
+  # Apply correction
   # -------------------------------------------------------------------------
 
-  # Calculate wound-corrected values
-  corrected_values <- vh_data[[input_col]] * B_vector
-
-  # Create Vh_cm_hr_wc audit column (shows what wound correction calculated)
-  vh_data$Vh_cm_hr_wc <- corrected_values
-
-  # Update Vh_cm_hr (hybrid "current best") - replace with corrected where valid
-  vh_data$Vh_cm_hr <- ifelse(is.na(corrected_values), vh_data$Vh_cm_hr, corrected_values)
-
-  # Add metadata columns
+  vh_data[[output_col]] <- vh_data[[input_col]] * B_vector
+  vh_data$Vh_cm_hr <- vh_data[[output_col]]  # Update "current" pointer
   vh_data$wound_correction_applied <- TRUE
   vh_data$wound_correction_factor <- B_vector
   vh_data$wound_diameter_cm <- wound_diameter_vector
 
   # Also keep legacy Vc_cm_hr for backward compatibility
-  # Vc_cm_hr = current best corrected velocity (same as Vh_cm_hr after wound correction)
-  vh_data$Vc_cm_hr <- vh_data$Vh_cm_hr
+  vh_data$Vc_cm_hr <- vh_data[[output_col]]
 
   # -------------------------------------------------------------------------
   # Update metadata attributes
   # -------------------------------------------------------------------------
 
-  attr(vh_data, "current_vh_column") <- "Vh_cm_hr_wc"
+  attr(vh_data, "current_vh_column") <- output_col
   attr(vh_data, "corrections_applied") <- c(
     attr(vh_data, "corrections_applied"),
     "wound"
@@ -725,57 +590,7 @@ apply_wound_correction <- function(vh_data,
   # Print summary
   # -------------------------------------------------------------------------
 
-  if (verbose) {
-    cat("\n")
-    cat(strrep("=", 67), "\n")
-    cat("  WOUND CORRECTION APPLIED\n")
-    cat(strrep("=", 67), "\n\n")
-
-    # Calculate summary statistics
-    input_mean <- mean(vh_data[[input_col]], na.rm = TRUE)
-    output_mean <- mean(vh_data$Vh_cm_hr_wc, na.rm = TRUE)
-    input_range <- range(vh_data[[input_col]], na.rm = TRUE)
-    output_range <- range(vh_data$Vh_cm_hr_wc, na.rm = TRUE)
-
-    if (use_temporal) {
-      # Temporal wound diameter
-      wound_range <- range(wound_diameter_vector, na.rm = TRUE)
-      B_range <- range(B_vector, na.rm = TRUE)
-
-      cat(sprintf("  Wound diameter:      %.2f - %.2f cm (%.1f - %.1f mm) [TEMPORAL]\n",
-                  wound_range[1], wound_range[2],
-                  wound_range[1] * 10, wound_range[2] * 10))
-      cat(sprintf("  Correction factor:   %.4f - %.4f\n", B_range[1], B_range[2]))
-    } else {
-      # Static wound diameter
-      wound_diameter <- wound_diameter_vector[1]
-      B <- B_vector[1]
-
-      cat(sprintf("  Wound diameter:      %.2f cm (%.1f mm)\n", wound_diameter, wound_diameter * 10))
-      cat(sprintf("  Correction factor:   %.4f\n", B))
-    }
-
-    cat(sprintf("  Input column:        %s\n", input_col))
-    cat(sprintf("  Output column:       Vh_cm_hr_wc\n\n"))
-
-    cat("  Velocity comparison:\n")
-    cat(sprintf("    %-20s %10s %10s\n", "", "Input", "Corrected"))
-    cat(sprintf("    %-20s %10.2f %10.2f\n", "Mean (cm/hr)", input_mean, output_mean))
-    cat(sprintf("    %-20s %10.2f %10.2f\n", "Min (cm/hr)", input_range[1], output_range[1]))
-    cat(sprintf("    %-20s %10.2f %10.2f\n", "Max (cm/hr)", input_range[2], output_range[2]))
-
-    cat("\n  Audit columns available:\n")
-    cat("    Vh_cm_hr_raw - Original raw values\n")
-    if (has_sc) {
-      cat("    Vh_cm_hr_sc - Spacing correction results\n")
-    }
-    cat("    Vh_cm_hr_wc - Wound correction results\n")
-    cat("    Vh_cm_hr - Current best available (hybrid)\n")
-    cat("    Vc_cm_hr - Alias for current best (legacy)\n")
-
-    cat("\n")
-    cat(strrep("=", 67), "\n\n")
-  }
+  print_wound_correction_summary(vh_data, wound_diameter_vector, B_vector, input_col, use_temporal)
 
   return(vh_data)
 }
@@ -803,29 +618,37 @@ get_wound_correction_coefficient <- function(wound_diameter, probe_spacing = "5m
     coef_table <- wound_coefficients_6mm
   }
 
-  # VECTORIZED: Use approx() on entire vector at once
-  # approx() handles vectors naturally and is much faster
-  B_vector <- approx(
-    x = coef_table$wound_diameter_cm,
-    y = coef_table$B_linear,
-    xout = wound_diameter,
-    rule = 2  # Use nearest value for extrapolation
-  )$y
+  # Check if exact match exists
+  exact_match <- coef_table[coef_table$wound_diameter_cm == wound_diameter, ]
+  if (nrow(exact_match) == 1) {
+    return(exact_match$B_linear)
+  }
 
-  # Warn about extrapolation if any values are outside range
-  if (any(wound_diameter < min(coef_table$wound_diameter_cm), na.rm = TRUE)) {
-    n_below <- sum(wound_diameter < min(coef_table$wound_diameter_cm), na.rm = TRUE)
-    warning(n_below, " wound diameter value(s) below table minimum (",
+  # Interpolate if between table values
+  if (wound_diameter >= min(coef_table$wound_diameter_cm) &&
+      wound_diameter <= max(coef_table$wound_diameter_cm)) {
+
+    B <- approx(
+      x = coef_table$wound_diameter_cm,
+      y = coef_table$B_linear,
+      xout = wound_diameter
+    )$y
+
+    return(B)
+  }
+
+  # Extrapolate with warning if outside range
+  if (wound_diameter < min(coef_table$wound_diameter_cm)) {
+    warning("wound_diameter ", wound_diameter, " cm is below table minimum (",
             min(coef_table$wound_diameter_cm), " cm). Using minimum coefficient.")
+    return(min(coef_table$B_linear))
   }
 
-  if (any(wound_diameter > max(coef_table$wound_diameter_cm), na.rm = TRUE)) {
-    n_above <- sum(wound_diameter > max(coef_table$wound_diameter_cm), na.rm = TRUE)
-    warning(n_above, " wound diameter value(s) above table maximum (",
+  if (wound_diameter > max(coef_table$wound_diameter_cm)) {
+    warning("wound_diameter ", wound_diameter, " cm is above table maximum (",
             max(coef_table$wound_diameter_cm), " cm). Using maximum coefficient.")
+    return(max(coef_table$B_linear))
   }
-
-  return(B_vector)
 }
 
 

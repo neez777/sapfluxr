@@ -1,0 +1,173 @@
+---
+title: "Standard Sap Flow Workflow"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Standard Sap Flow Workflow}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+# Introduction
+
+This vignette demonstrates the complete sap flow processing workflow in `sapfluxr`, from raw data import to whole-tree water use. It incorporates the modern **Selectable Dual Method Approach (sDMA)** which ensures continuous, corrected data across both low and high flow conditions.
+
+## The Standard Workflow
+
+1.  **Data Import**: Load heat pulse and weather data.
+2.  **Raw HPV Calculation**: Initial velocity calculation for multiple methods.
+3.  **Spacing Correction**: Zero-flow offset correction (e.g., using Stable VPD).
+4.  **Wound Correction**: Accounting for probe injury and expansion over time.
+5.  **Method Calibration**: Aligning high-flow methods (MHR) to corrected low-flow data (HRM).
+6.  **sDMA Switching**: Intelligent method switching based on the Peclet number.
+7.  **Flux Density Conversion**: Converting velocity ($V_h$) to sap flux density ($J_v$).
+8.  **Scaling & Totals**: Integrating to whole-tree flow ($Q$) and daily totals.
+
+```{r setup}
+library(sapfluxr)
+library(dplyr)
+library(ggplot2)
+```
+
+---
+
+# Step 1: Data Import
+
+```{r step1}
+# Import Heat Pulse Data
+data_file <- system.file("extdata", "SX01O20G.txt", package = "sapfluxr")
+if (data_file != "") {
+  raw_data <- read_heat_pulse_data(data_file)
+}
+
+# Import Weather Data (for stable VPD detection)
+weather_file <- system.file("extdata", "sample_weather.csv", package = "sapfluxr")
+if (weather_file != "") {
+  weather <- read_weather_data(weather_file)
+}
+```
+
+---
+
+# Step 2: Raw Heat Pulse Velocity
+
+Calculate velocities for all candidate methods. HRM is our low-flow reference, while MHR/Tmax are used for high flows.
+
+```{r step2}
+if (exists("raw_data")) {
+  # Load wood properties for thermal diffusivity (k)
+  wood_props <- load_wood_properties("eucalyptus")
+  
+  vh_raw <- calc_heat_pulse_velocity(
+    raw_data,
+    methods = c("HRM", "MHR", "HRMXb", "Tmax_Klu"),
+    wood_properties = wood_props
+  )
+}
+```
+
+---
+
+# Step 3: Spacing Correction (Stable VPD)
+
+Correct for probe misalignment by identifying stable zero-flow periods.
+
+```{r step3}
+if (exists("vh_raw") && exists("weather")) {
+  # Apply spacing correction using the Stable VPD method
+  # Uses pre-dawn stability to define correction segments
+  vh_sc <- apply_spacing_correction(
+    vh_data = vh_raw,
+    method = "vpd",
+    weather_data = weather,
+    min_segment_days = 21 # 21-day minimum for stability
+  )
+  
+  # Visualise before/after
+  plot_correction_comparison(vh_sc$vh_corrected, correction_stage = "spacing")
+}
+```
+
+---
+
+# Step 4: Wound Correction
+
+Apply correction for the physical wound. Wounds typically expand over time.
+
+```{r step4}
+if (exists("vh_sc")) {
+  # Update wound parameters
+  wood_props$wound_correction$drill_bit_diameter_mm <- 2.0
+  wood_props$wound_correction$final_diameter_mm <- 2.8 # Measured final wound
+  
+  # Apply correction (creates 'Vc_cm_hr')
+  vh_fully_corrected <- apply_wound_correction(
+    vh_sc$vh_corrected,
+    wood_properties = wood_props,
+    use_spacing_corrected = TRUE
+  )
+}
+```
+
+---
+
+# Step 5: Method Calibration & sDMA
+
+This is the critical step where we transfer the corrections (spacing + wound) from HRM to the high-flow methods.
+
+```{r step5}
+if (exists("vh_fully_corrected")) {
+  # 1. Calibrate MHR against the CORRECTED HRM
+  calibration <- calibrate_method_to_primary(
+    vh_corrected = vh_fully_corrected,
+    primary_method = "HRM",
+    secondary_method = "MHR",
+    sensor_position = "outer"
+  )
+  
+  # 2. Apply sDMA switching based on Peclet Number (Pe > 1)
+  # Uses corrected Peclet numbers to decide when to switch
+  vh_sdma <- apply_sdma_switching(
+    vh_data = vh_fully_corrected,
+    secondary_method = "MHR",
+    switching_mode = "peclet",
+    threshold = 1.0,
+    calibration = calibration
+  )
+  
+  # Visualise the result
+  plot_sdma_timeseries(vh_sdma, sdma_method = "sDMA:MHR")
+}
+```
+
+---
+
+# Step 6: Flux Density & Scaling
+
+Convert the hybrid velocity to tree-level water use.
+
+```{r step6}
+if (exists("vh_sdma")) {
+  # Convert to Flux Density
+  flux_density <- apply_flux_conversion(
+    vh_sdma,
+    wood_properties = wood_props,
+    velocity_col = "Vh_sdma"
+  )
+  
+  # Scale to Whole Tree (assuming DBH=25cm, Sapwood=2.5cm)
+  areas <- calc_sapwood_areas(dbh = 25, sapwood_depth = 2.5)
+  tree_flux <- calc_sap_flux(flux_density, sapwood_areas = areas)
+  
+  # Aggregate to Daily Totals
+  daily_totals <- aggregate_daily(tree_flux)
+  
+  head(daily_totals)
+}
+```

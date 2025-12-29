@@ -85,7 +85,9 @@ calculate_daily_vpd_minima <- function(weather_data,
     stop("Package 'dplyr' is required but not installed")
   }
 
+  # Filter out rows with missing dates before grouping
   daily_vpd <- weather_data %>%
+    dplyr::filter(!is.na(date)) %>%
     dplyr::group_by(date) %>%
     dplyr::summarise(
       min_vpd = min(.data[[vpd_col]], na.rm = TRUE),

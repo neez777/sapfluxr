@@ -480,6 +480,24 @@ WoodProperties <- R6::R6Class(
 
       invisible(self)
     }
+  ),
+
+  active = list(
+    #' @field thermal_diffusivity Thermal diffusivity in cm²/s (actual if available, otherwise default)
+    thermal_diffusivity = function() {
+      # Return actual calculated value if available
+      if (!is.null(self$derived_properties$thermal_diffusivity_actual_cm2_s)) {
+        return(self$derived_properties$thermal_diffusivity_actual_cm2_s)
+      }
+
+      # Otherwise return default value
+      if (!is.null(self$wood_constants$thermal_diffusivity_default_cm2_s)) {
+        return(self$wood_constants$thermal_diffusivity_default_cm2_s)
+      }
+
+      # Fallback to standard default if nothing is set
+      return(0.0025)
+    }
   )
 )
 

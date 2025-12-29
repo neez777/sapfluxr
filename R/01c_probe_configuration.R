@@ -258,6 +258,7 @@ ProbeConfiguration <- R6::R6Class(
       cat("Type:", self$config_type, "\n")
       cat("Sensors:", paste(names(self$sensor_positions), "=",
                             unlist(self$sensor_positions), "mm", collapse = ", "), "\n")
+      cat("Probe spacing:", self$probe_spacing, "cm\n")
       if (!is.null(self$heat_pulse_duration)) {
         cat("Heat pulse duration:", self$heat_pulse_duration, "seconds\n")
       }
@@ -267,6 +268,40 @@ ProbeConfiguration <- R6::R6Class(
       }
       if (!is.null(self$yaml_source)) {
         cat("Source:", basename(self$yaml_source), "\n")
+      }
+    }
+  ),
+
+  active = list(
+    #' @field probe_spacing Probe spacing in cm (distance from heater to thermistor)
+    probe_spacing = function() {
+      if (is.null(self$sensor_positions) || length(self$sensor_positions) == 0) {
+        return(NULL)
+      }
+
+      # For HRM, probe spacing is the distance from heater (position 0) to the thermistor
+      # Prefer outer sensors for HRM calculations
+      # NOTE: sensor_positions are already in cm, not mm
+
+      # Find downstream outer sensor (most common for HRM)
+      downstream_sensors <- grep("downstream", names(self$sensor_positions), ignore.case = TRUE, value = TRUE)
+      downstream_outer <- grep("outer", downstream_sensors, ignore.case = TRUE, value = TRUE)
+
+      if (length(downstream_outer) > 0) {
+        # Use downstream outer sensor position (already in cm)
+        # This is the distance from heater (0) to the sensor
+        spacing_cm <- abs(self$sensor_positions[[downstream_outer[1]]])
+        return(spacing_cm)
+      } else if (length(downstream_sensors) > 0) {
+        # Fall back to any downstream sensor
+        spacing_cm <- abs(self$sensor_positions[[downstream_sensors[1]]])
+        return(spacing_cm)
+      } else {
+        # Final fallback: use maximum distance from heater
+        # sensor_positions are already in cm
+        positions <- unlist(self$sensor_positions)
+        spacing_cm <- max(abs(positions))
+        return(spacing_cm)
       }
     }
   )
