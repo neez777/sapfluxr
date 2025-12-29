@@ -11,6 +11,7 @@ apply_sdma_processing_internal(
   n_pulses,
   n_methods,
   secondary_method,
+  peclet_threshold,
   show_progress
 )
 }

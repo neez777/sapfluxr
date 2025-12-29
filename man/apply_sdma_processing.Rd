@@ -7,6 +7,7 @@
 apply_sdma_processing(
   vh_results,
   secondary_method,
+  peclet_threshold = 1,
   skip_low_peclet = NULL,
   show_progress = TRUE
 )
@@ -20,8 +21,11 @@ and at least one secondary method. \strong{FUTURE:} Will accept corrected veloci
 Options: "MHR", "Tmax_Coh", "Tmax_Klu", "HRMXa", "HRMXb".
 Can provide multiple methods to create multiple sDMA variants.}
 
+\item{peclet_threshold}{Numeric threshold for switching between HRM and secondary
+method. Default: 1.0 (Pe < 1.0 uses HRM, Pe >= 1.0 uses secondary method).}
+
 \item{skip_low_peclet}{Logical indicating whether to automatically skip sDMA when
-all Peclet numbers are <= 1. If NULL (default), will prompt user interactively.
+all Peclet numbers are <= threshold. If NULL (default), will prompt user interactively.
 Set to TRUE to skip without prompting, FALSE to always calculate.}
 
 \item{show_progress}{Logical indicating whether to show progress bar. Default: TRUE}
@@ -83,4 +87,3 @@ flux <- calc_sap_flux_density(vh_sdma, ...)  # NOT YET IMPLEMENTED
 }
 
 }
-\keyword{internal}

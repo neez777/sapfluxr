@@ -50,8 +50,10 @@
 #' @param secondary_method Character string or vector specifying secondary method(s).
 #'   Options: "MHR", "Tmax_Coh", "Tmax_Klu", "HRMXa", "HRMXb".
 #'   Can provide multiple methods to create multiple sDMA variants.
+#' @param peclet_threshold Numeric threshold for switching between HRM and secondary
+#'   method. Default: 1.0 (Pe < 1.0 uses HRM, Pe >= 1.0 uses secondary method).
 #' @param skip_low_peclet Logical indicating whether to automatically skip sDMA when
-#'   all Peclet numbers are <= 1. If NULL (default), will prompt user interactively.
+#'   all Peclet numbers are <= threshold. If NULL (default), will prompt user interactively.
 #'   Set to TRUE to skip without prompting, FALSE to always calculate.
 #' @param show_progress Logical indicating whether to show progress bar. Default: TRUE
 #'
@@ -103,9 +105,10 @@
 #' flux <- calc_sap_flux_density(vh_sdma, ...)  # NOT YET IMPLEMENTED
 #' }
 #'
-#' @keywords internal
+#' @export
 apply_sdma_processing <- function(vh_results,
                                   secondary_method,
+                                  peclet_threshold = 1.0,
                                   skip_low_peclet = NULL,
                                   show_progress = TRUE) {
 
@@ -131,13 +134,13 @@ apply_sdma_processing <- function(vh_results,
   # Check Peclet number range to determine if sDMA is necessary
   max_peclet <- max(hrm_data$hrm_peclet_number, na.rm = TRUE)
 
-  if (!is.na(max_peclet) && max_peclet <= 1.0) {
-    # All Peclet numbers are <= 1, so sDMA would never switch to secondary method
+  if (!is.na(max_peclet) && max_peclet <= peclet_threshold) {
+    # All Peclet numbers are <= threshold, so sDMA would never switch to secondary method
     message("\n", strrep("=", 67))
     message("  sDMA PECLET NUMBER CHECK")
     message(strrep("=", 67))
     message(sprintf("\nMaximum Peclet number: %.3f", max_peclet))
-    message("\nAll Peclet numbers are <= 1.0, which means:")
+    message(sprintf("\nAll Peclet numbers are <= %.2f, which means:", peclet_threshold))
     message("  • HRM is valid for all measurements (low flow conditions)")
     message("  • sDMA would never switch to the secondary method")
     message("  • The sDMA results would be identical to HRM results")
@@ -212,7 +215,7 @@ apply_sdma_processing <- function(vh_results,
     return(progressr::with_progress({
       apply_sdma_processing_internal(
         vh_results, results_by_pulse, pulse_ids, n_pulses, n_methods,
-        secondary_method, show_progress
+        secondary_method, peclet_threshold, show_progress
       )
     }))
   }
@@ -220,7 +223,7 @@ apply_sdma_processing <- function(vh_results,
   # In Shiny or progress disabled - just run directly
   return(apply_sdma_processing_internal(
     vh_results, results_by_pulse, pulse_ids, n_pulses, n_methods,
-    secondary_method, show_progress
+    secondary_method, peclet_threshold, show_progress
   ))
 }
 
@@ -229,7 +232,7 @@ apply_sdma_processing <- function(vh_results,
 #' @keywords internal
 apply_sdma_processing_internal <- function(vh_results, results_by_pulse, pulse_ids,
                                            n_pulses, n_methods, secondary_method,
-                                           show_progress) {
+                                           peclet_threshold, show_progress) {
 
   # Progress reporting setup
   if (show_progress) {
@@ -275,44 +278,80 @@ apply_sdma_processing_internal <- function(vh_results, results_by_pulse, pulse_i
     sec_outer <- sec_outer[sec_outer$pulse_id %in% common_pulses_outer, ]
     sec_inner <- sec_inner[sec_inner$pulse_id %in% common_pulses_inner, ]
 
-    # Vectorized switching logic for outer sensor
-    use_hrm_outer <- !is.na(hrm_outer$peclet_number) & hrm_outer$peclet_number < 1.0
+    # Check if we have any data to process
+    if (nrow(hrm_outer) == 0 && nrow(hrm_inner) == 0) {
+      warning(sprintf("No matching pulses found between HRM and %s for any sensor position. Skipping %s.",
+                     sec_method, sdma_method_name))
+      next  # Skip to next secondary method
+    }
 
-    sdma_outer <- data.frame(
-      datetime = hrm_outer$datetime,
-      pulse_id = hrm_outer$pulse_id,
-      method = sdma_method_name,
-      sensor_position = "outer",
-      Vh_cm_hr = ifelse(use_hrm_outer, hrm_outer$Vh_cm_hr, sec_outer$Vh_cm_hr),
-      temp_ratio = ifelse(use_hrm_outer, hrm_outer$temp_ratio, sec_outer$temp_ratio),
-      calc_window_start_sec = ifelse(use_hrm_outer, hrm_outer$calc_window_start_sec, sec_outer$calc_window_start_sec),
-      calc_window_end_sec = ifelse(use_hrm_outer, hrm_outer$calc_window_end_sec, sec_outer$calc_window_end_sec),
-      calc_time_sec = ifelse(use_hrm_outer, hrm_outer$calc_time_sec, sec_outer$calc_time_sec),
-      peclet_number = hrm_outer$peclet_number,
-      selected_method = ifelse(use_hrm_outer, "HRM", sec_method),
-      stringsAsFactors = FALSE
-    )
+    # Process each sensor separately (only if it has data)
+    sdma_parts <- list()
 
-    # Vectorized switching logic for inner sensor
-    use_hrm_inner <- !is.na(hrm_inner$peclet_number) & hrm_inner$peclet_number < 1.0
+    # Process outer sensor if it has data
+    if (nrow(hrm_outer) > 0) {
+      # Detect Peclet column name
+      peclet_col <- if ("hrm_peclet_number" %in% names(hrm_outer)) "hrm_peclet_number" else "peclet_number"
+      use_hrm_outer <- !is.na(hrm_outer[[peclet_col]]) & hrm_outer[[peclet_col]] < peclet_threshold
 
-    sdma_inner <- data.frame(
-      datetime = hrm_inner$datetime,
-      pulse_id = hrm_inner$pulse_id,
-      method = sdma_method_name,
-      sensor_position = "inner",
-      Vh_cm_hr = ifelse(use_hrm_inner, hrm_inner$Vh_cm_hr, sec_inner$Vh_cm_hr),
-      temp_ratio = ifelse(use_hrm_inner, hrm_inner$temp_ratio, sec_inner$temp_ratio),
-      calc_window_start_sec = ifelse(use_hrm_inner, hrm_inner$calc_window_start_sec, sec_inner$calc_window_start_sec),
-      calc_window_end_sec = ifelse(use_hrm_inner, hrm_inner$calc_window_end_sec, sec_inner$calc_window_end_sec),
-      calc_time_sec = ifelse(use_hrm_inner, hrm_inner$calc_time_sec, sec_inner$calc_time_sec),
-      peclet_number = hrm_inner$peclet_number,
-      selected_method = ifelse(use_hrm_inner, "HRM", sec_method),
-      stringsAsFactors = FALSE
-    )
+      # Build data frame
+      sdma_outer <- data.frame(
+        datetime = hrm_outer$datetime,
+        pulse_id = hrm_outer$pulse_id,
+        method = sdma_method_name,
+        sensor_position = "outer",
+        Vh_cm_hr = ifelse(use_hrm_outer, hrm_outer$Vh_cm_hr, sec_outer$Vh_cm_hr),
+        stringsAsFactors = FALSE
+      )
 
-    # Combine outer and inner
-    sdma_df <- rbind(sdma_outer, sdma_inner)
+      # Add optional columns if they exist
+      if ("temp_ratio" %in% names(hrm_outer)) {
+        sdma_outer$temp_ratio <- ifelse(use_hrm_outer, hrm_outer$temp_ratio, sec_outer$temp_ratio)
+      }
+      if (peclet_col %in% names(hrm_outer)) {
+        sdma_outer[[peclet_col]] <- hrm_outer[[peclet_col]]
+      }
+
+      # Add required columns
+      sdma_outer$selected_method <- ifelse(use_hrm_outer, "HRM", sec_method)
+      sdma_outer$Vh_sdma <- sdma_outer$Vh_cm_hr
+
+      sdma_parts[["outer"]] <- sdma_outer
+    }
+
+    # Process inner sensor if it has data
+    if (nrow(hrm_inner) > 0) {
+      # Detect Peclet column name
+      peclet_col <- if ("hrm_peclet_number" %in% names(hrm_inner)) "hrm_peclet_number" else "peclet_number"
+      use_hrm_inner <- !is.na(hrm_inner[[peclet_col]]) & hrm_inner[[peclet_col]] < peclet_threshold
+
+      # Build data frame
+      sdma_inner <- data.frame(
+        datetime = hrm_inner$datetime,
+        pulse_id = hrm_inner$pulse_id,
+        method = sdma_method_name,
+        sensor_position = "inner",
+        Vh_cm_hr = ifelse(use_hrm_inner, hrm_inner$Vh_cm_hr, sec_inner$Vh_cm_hr),
+        stringsAsFactors = FALSE
+      )
+
+      # Add optional columns if they exist
+      if ("temp_ratio" %in% names(hrm_inner)) {
+        sdma_inner$temp_ratio <- ifelse(use_hrm_inner, hrm_inner$temp_ratio, sec_inner$temp_ratio)
+      }
+      if (peclet_col %in% names(hrm_inner)) {
+        sdma_inner[[peclet_col]] <- hrm_inner[[peclet_col]]
+      }
+
+      # Add required columns
+      sdma_inner$selected_method <- ifelse(use_hrm_inner, "HRM", sec_method)
+      sdma_inner$Vh_sdma <- sdma_inner$Vh_cm_hr
+
+      sdma_parts[["inner"]] <- sdma_inner
+    }
+
+    # Combine available sensors
+    sdma_df <- dplyr::bind_rows(sdma_parts)
     all_sdma_results[[sdma_method_name]] <- sdma_df
 
     # Update progress
