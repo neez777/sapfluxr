@@ -4,7 +4,14 @@
 \alias{preprocess_pulse_data_cpp}
 \title{Preprocess Pulse Data - C++ Implementation}
 \usage{
-preprocess_pulse_data_cpp(do_vec, di_vec, uo_vec, ui_vec, pre_pulse)
+preprocess_pulse_data_cpp(
+  do_vec,
+  di_vec,
+  uo_vec,
+  ui_vec,
+  pre_pulse_rows,
+  sampling_interval
+)
 }
 \arguments{
 \item{do_vec}{Numeric vector of downstream outer temperatures}
@@ -15,7 +22,9 @@ preprocess_pulse_data_cpp(do_vec, di_vec, uo_vec, ui_vec, pre_pulse)
 
 \item{ui_vec}{Numeric vector of upstream inner temperatures}
 
-\item{pre_pulse}{Integer, number of pre-pulse measurements}
+\item{pre_pulse_rows}{Integer, number of pre-pulse rows (NOT seconds)}
+
+\item{sampling_interval}{Double, seconds between consecutive measurements}
 }
 \value{
 List containing delta temps, ratios, and peak info

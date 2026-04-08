@@ -66,6 +66,40 @@ create_sample_ict_legacy <- function(file_path) {
   writeLines(content, file_path)
 }
 
+# Helper function to create sample Sap Flow Tool CSV data
+create_sample_sft_csv <- function(file_path, n_pulses = 3, rows_per_pulse = 20) {
+  # Build the 3-line header
+  header <- c(
+    "Exported from Sap Flow Tool (1.6.0) on 5/03/2026 at 8:46 PM",
+    paste0("date time,DOY,Test Tree (SFM0B419),Test Tree (SFM0B419),",
+           "Test Tree (SFM0B419),Test Tree (SFM0B419),"),
+    paste0("dd/MM/yyyy hh:mm:ss.zzz,DOY,0_OuterDownstream(DegC),",
+           "1_OuterUpstream(DegC),2_InnerDownstream(DegC),3_InnerUpstream(DegC),")
+  )
+
+  # Build data rows
+  base_time <- as.POSIXct("2013-03-26 07:00:08", tz = "UTC")
+  data_lines <- character(0)
+  doy <- 85
+
+  for (p in seq_len(n_pulses)) {
+    pulse_start <- base_time + (p - 1) * 1800  # 30 min intervals
+    for (r in seq_len(rows_per_pulse)) {
+      t <- pulse_start + (r - 1) * 0.5  # 0.5s intervals
+      dt_str <- format(t, "%d/%m/%Y %H:%M:%OS3")
+      do_val <- round(12.21 + rnorm(1, 0, 0.01), 8)
+      uo_val <- round(12.20 + rnorm(1, 0, 0.01), 8)
+      di_val <- round(12.69 + rnorm(1, 0, 0.01), 8)
+      ui_val <- round(12.64 + rnorm(1, 0, 0.01), 8)
+      data_lines <- c(data_lines,
+                       sprintf("%s,%d,%s,%s,%s,%s,",
+                               dt_str, doy, do_val, uo_val, di_val, ui_val))
+    }
+  }
+
+  writeLines(c(header, data_lines), file_path)
+}
+
 # Test format detection
 test_that("detect_format correctly identifies formats", {
 
@@ -89,6 +123,13 @@ test_that("detect_format correctly identifies formats", {
 
   create_sample_ict_legacy(temp_legacy)
   expect_equal(detect_format(temp_legacy), "ict_legacy")
+
+  # Test Sap Flow Tool CSV format
+  temp_sft <- tempfile(fileext = ".csv")
+  on.exit(unlink(temp_sft), add = TRUE)
+
+  create_sample_sft_csv(temp_sft, n_pulses = 2, rows_per_pulse = 10)
+  expect_equal(detect_format(temp_sft), "sft_csv")
 
   # Test empty file
   temp_empty <- tempfile()
@@ -127,6 +168,52 @@ test_that("read_heat_pulse_data works with CSV format", {
   expect_s3_class(result, "heat_pulse_data")
   expect_equal(result$metadata$format, "csv")
   expect_equal(nrow(result$measurements), 100)
+})
+
+test_that("read_heat_pulse_data works with Sap Flow Tool CSV format", {
+
+  temp_file <- tempfile(fileext = ".csv")
+  on.exit(unlink(temp_file))
+
+  create_sample_sft_csv(temp_file, n_pulses = 3, rows_per_pulse = 20)
+
+  result <- read_heat_pulse_data(temp_file, show_progress = FALSE, validate_data = FALSE)
+
+  expect_s3_class(result, "heat_pulse_data")
+  expect_equal(result$metadata$format, "sft_csv")
+  expect_equal(nrow(result$diagnostics), 3)
+  expect_equal(nrow(result$measurements), 60)  # 3 pulses * 20 rows each
+  expect_true(all(c("pulse_id", "datetime", "do", "di", "uo", "ui") %in%
+                    names(result$measurements)))
+  expect_true(all(c("pulse_id", "datetime") %in% names(result$diagnostics)))
+
+  # Check pulse_id assignment
+  expect_equal(length(unique(result$measurements$pulse_id)), 3)
+
+  # Check datetimes are parsed correctly
+  expect_s3_class(result$measurements$datetime, "POSIXct")
+  expect_equal(sum(is.na(result$measurements$datetime)), 0)
+})
+
+test_that("read_sft_csv_format detects sensor columns correctly", {
+
+  # Test with a file that has the sensor columns in a different order
+  # (though the standard order is OuterDown, OuterUp, InnerDown, InnerUp)
+  temp_file <- tempfile(fileext = ".csv")
+  on.exit(unlink(temp_file))
+
+  create_sample_sft_csv(temp_file, n_pulses = 1, rows_per_pulse = 5)
+
+  result <- read_sft_csv_format(temp_file, show_progress = FALSE)
+
+  # Verify the four sensor columns are present
+  expect_true(all(c("do", "uo", "di", "ui") %in% names(result$measurements)))
+
+  # Verify temperature values are reasonable (around 12 degrees for our test data)
+  expect_true(all(result$measurements$do > 10 & result$measurements$do < 15))
+  expect_true(all(result$measurements$uo > 10 & result$measurements$uo < 15))
+  expect_true(all(result$measurements$di > 10 & result$measurements$di < 15))
+  expect_true(all(result$measurements$ui > 10 & result$measurements$ui < 15))
 })
 
 test_that("read_heat_pulse_data handles non-existent files", {

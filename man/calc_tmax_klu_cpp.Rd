@@ -10,7 +10,8 @@ calc_tmax_klu_cpp(
   diffusivity,
   probe_spacing,
   tp_1,
-  pre_pulse
+  pre_pulse_rows,
+  sampling_interval
 )
 }
 \arguments{
@@ -24,7 +25,9 @@ calc_tmax_klu_cpp(
 
 \item{tp_1}{Heat pulse duration (seconds)}
 
-\item{pre_pulse}{Pre-pulse period (seconds)}
+\item{pre_pulse_rows}{Number of pre-pulse rows}
+
+\item{sampling_interval}{Sampling interval in seconds (e.g. 1.0 for 1Hz, 0.5 for 2Hz)}
 }
 \value{
 List containing Tmax_Klu results

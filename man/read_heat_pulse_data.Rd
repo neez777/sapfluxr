@@ -17,7 +17,7 @@ read_heat_pulse_data(
 \arguments{
 \item{file_path}{Character string specifying the path to the data file}
 
-\item{format}{Character string specifying format. Auto-detected if NULL. Currently ict_current, ict_legacy & csv.}
+\item{format}{Character string specifying format. Auto-detected if NULL. Currently ict_current, ict_legacy, csv & sft_csv (Sap Flow Tool export).}
 
 \item{validate_data}{Logical indicating whether to validate imported data (default: TRUE)}
 

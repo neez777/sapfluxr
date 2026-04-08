@@ -402,3 +402,185 @@ test_that("calc_vpd errors on missing columns", {
     "not found in data"
   )
 })
+
+
+# ============================================================================
+# SILO Data Tests
+# ============================================================================
+
+# Helper to create a sample SILO CSV file
+create_sample_silo_csv <- function(file_path, n_days = 30,
+                                    start_date = "2013-03-26",
+                                    include_extra_cols = FALSE) {
+  dates <- seq(as.Date(start_date), by = "day", length.out = n_days)
+
+  # Generate rainfall: mostly 0, some rain events
+  set.seed(42)
+  rainfall <- ifelse(runif(n_days) > 0.7, round(runif(n_days, 0.1, 30), 1), 0)
+
+  # Build metadata column: first 5 rows have metadata, rest empty
+  metadata <- rep('""', n_days)
+  metadata[1] <- '"elevation=  24.2 m"'
+  metadata[2] <- '"reference=r"'
+  metadata[3] <- '"extracted=20260312"'
+  metadata[4] <- '"dataset=BoM Only"'
+  metadata[5] <- '"Please read our web site for information"'
+
+  lines <- character(n_days + 1)
+
+  if (include_extra_cols) {
+    lines[1] <- "latitude,longitude,YYYY-MM-DD,daily_rain,daily_rain_source,max_temp,max_temp_source,min_temp,min_temp_source,metadata"
+    for (i in seq_len(n_days)) {
+      max_t <- round(runif(1, 15, 35), 1)
+      min_t <- round(max_t - runif(1, 5, 15), 1)
+      lines[i + 1] <- sprintf(" -32.0500, 115.8500,%s,%8.1f,25,%8.1f,25,%8.1f,25,%s",
+                               format(dates[i]), rainfall[i], max_t, min_t, metadata[i])
+    }
+  } else {
+    lines[1] <- "latitude,longitude,YYYY-MM-DD,daily_rain,daily_rain_source,metadata"
+    for (i in seq_len(n_days)) {
+      lines[i + 1] <- sprintf(" -32.0500, 115.8500,%s,%8.1f,25,%s",
+                               format(dates[i]), rainfall[i], metadata[i])
+    }
+  }
+
+  writeLines(lines, file_path)
+}
+
+
+test_that("read_silo_data reads standard SILO CSV correctly", {
+  temp_file <- tempfile(fileext = ".csv")
+  on.exit(unlink(temp_file))
+
+  create_sample_silo_csv(temp_file, n_days = 30)
+
+  silo <- read_silo_data(temp_file)
+
+  expect_s3_class(silo, "silo_data")
+  expect_equal(nrow(silo), 30)
+  expect_true(all(c("date", "daily_rain", "rain_3d", "rain_7d") %in% names(silo)))
+  expect_s3_class(silo$date, "Date")
+  expect_true(is.numeric(silo$daily_rain))
+})
+
+
+test_that("read_silo_data extracts site metadata", {
+  temp_file <- tempfile(fileext = ".csv")
+  on.exit(unlink(temp_file))
+
+  create_sample_silo_csv(temp_file)
+
+  silo <- read_silo_data(temp_file)
+
+  expect_equal(attr(silo, "latitude"), -32.05)
+  expect_equal(attr(silo, "longitude"), 115.85)
+  expect_equal(attr(silo, "silo_elevation"), "24.2 m")
+  expect_equal(attr(silo, "silo_dataset"), "BoM Only")
+  expect_equal(attr(silo, "silo_extracted"), "20260312")
+})
+
+
+test_that("read_silo_data calculates rolling accumulations correctly", {
+  temp_file <- tempfile(fileext = ".csv")
+  on.exit(unlink(temp_file))
+
+  # Create minimal data with known rainfall
+  dates <- seq(as.Date("2013-01-01"), by = "day", length.out = 7)
+  lines <- c(
+    "latitude,longitude,YYYY-MM-DD,daily_rain,daily_rain_source,metadata",
+    sprintf(' -32.0500, 115.8500,%s,%8.1f,25,""',
+            format(dates), c(0, 0, 10, 5, 0, 20, 0))
+  )
+  writeLines(lines, temp_file)
+
+  silo <- read_silo_data(temp_file)
+
+  # rain_3d: sum of current + 2 preceding days
+  # Day 1: 0
+  # Day 2: 0+0 = 0
+  # Day 3: 0+0+10 = 10
+  # Day 4: 0+10+5 = 15
+  # Day 5: 10+5+0 = 15
+  # Day 6: 5+0+20 = 25
+  # Day 7: 0+20+0 = 20
+  expect_equal(silo$rain_3d, c(0, 0, 10, 15, 15, 25, 20))
+
+  # rain_7d: sum of current + 6 preceding days
+  # Day 7: 0+0+10+5+0+20+0 = 35
+  expect_equal(silo$rain_7d[7], 35)
+})
+
+
+test_that("read_silo_data subsets by date range", {
+  temp_file <- tempfile(fileext = ".csv")
+  on.exit(unlink(temp_file))
+
+  create_sample_silo_csv(temp_file, n_days = 30, start_date = "2013-03-26")
+
+  silo <- read_silo_data(temp_file,
+                          start_date = "2013-04-01",
+                          end_date = "2013-04-10")
+
+  expect_equal(nrow(silo), 10)
+  expect_equal(min(silo$date), as.Date("2013-04-01"))
+  expect_equal(max(silo$date), as.Date("2013-04-10"))
+})
+
+
+test_that("read_silo_data handles extra SILO columns", {
+  temp_file <- tempfile(fileext = ".csv")
+  on.exit(unlink(temp_file))
+
+  create_sample_silo_csv(temp_file, n_days = 10, include_extra_cols = TRUE)
+
+  silo <- read_silo_data(temp_file)
+
+  # Should have the extra columns without the source columns
+  expect_true("max_temp" %in% names(silo))
+  expect_true("min_temp" %in% names(silo))
+  expect_false("daily_rain_source" %in% names(silo))
+  expect_false("max_temp_source" %in% names(silo))
+})
+
+
+test_that("read_silo_data errors on non-SILO files", {
+  temp_file <- tempfile(fileext = ".csv")
+  on.exit(unlink(temp_file))
+
+  writeLines("col1,col2,col3\n1,2,3", temp_file)
+
+  expect_error(read_silo_data(temp_file), "does not appear to be a SILO CSV")
+})
+
+
+test_that("read_silo_data errors on missing file", {
+  expect_error(read_silo_data("nonexistent.csv"), "File not found")
+})
+
+
+test_that("compute_rolling_sum handles edge cases", {
+  # Simple case
+  expect_equal(compute_rolling_sum(c(1, 2, 3, 4, 5), window = 3),
+               c(1, 3, 6, 9, 12))
+
+  # Window larger than data
+  expect_equal(compute_rolling_sum(c(1, 2), window = 5),
+               c(1, 3))
+
+  # Single value
+  expect_equal(compute_rolling_sum(5, window = 3), 5)
+})
+
+
+test_that("print.silo_data produces output", {
+  temp_file <- tempfile(fileext = ".csv")
+  on.exit(unlink(temp_file))
+
+  create_sample_silo_csv(temp_file, n_days = 10)
+  silo <- read_silo_data(temp_file)
+
+  output <- capture.output(print(silo))
+  expect_true(any(grepl("SILO Daily Weather Data", output)))
+  expect_true(any(grepl("Location:", output)))
+  expect_true(any(grepl("Rainfall:", output)))
+})

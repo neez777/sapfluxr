@@ -167,7 +167,8 @@ List calc_hrm_cpp(NumericVector dTratio_douo,
 //' @param deltaT_ui Numeric vector of delta temperatures (upstream inner)
 //' @param diffusivity Thermal diffusivity (cm²/s)
 //' @param probe_spacing Probe spacing (cm)
-//' @param pre_pulse Pre-pulse period (seconds)
+//' @param pre_pulse_rows Integer, number of pre-pulse rows (NOT seconds)
+//' @param sampling_interval Double, seconds between consecutive measurements
 //'
 //' @return List containing MHR results for outer and inner sensors
 //'
@@ -180,7 +181,8 @@ List calc_mhr_cpp(NumericVector deltaT_do,
                   NumericVector deltaT_ui,
                   double diffusivity,
                   double probe_spacing,
-                  int pre_pulse) {
+                  int pre_pulse_rows,
+                  double sampling_interval) {
 
   // Find maximum values and their indices
   double dTdo_max, dTdi_max, dTuo_max, dTui_max;
@@ -191,11 +193,11 @@ List calc_mhr_cpp(NumericVector deltaT_do,
   find_max_and_idx(deltaT_uo, dTuo_max, idx_uo);
   find_max_and_idx(deltaT_ui, dTui_max, idx_ui);
 
-  // Calculate peak times relative to pulse injection
-  double time_do = idx_do - pre_pulse;
-  double time_di = idx_di - pre_pulse;
-  double time_uo = idx_uo - pre_pulse;
-  double time_ui = idx_ui - pre_pulse;
+  // Calculate peak times relative to pulse injection (in seconds)
+  double time_do = (idx_do - pre_pulse_rows) * sampling_interval;
+  double time_di = (idx_di - pre_pulse_rows) * sampling_interval;
+  double time_uo = (idx_uo - pre_pulse_rows) * sampling_interval;
+  double time_ui = (idx_ui - pre_pulse_rows) * sampling_interval;
 
   // Check for valid maximums
   if (dTdo_max <= 0 || dTdi_max <= 0 || dTuo_max <= 0 || dTui_max <= 0 ||
@@ -256,7 +258,8 @@ List calc_mhr_cpp(NumericVector deltaT_do,
 //' @param di_vec Numeric vector of downstream inner temperatures
 //' @param uo_vec Numeric vector of upstream outer temperatures
 //' @param ui_vec Numeric vector of upstream inner temperatures
-//' @param pre_pulse Integer, number of pre-pulse measurements
+//' @param pre_pulse_rows Integer, number of pre-pulse rows (NOT seconds)
+//' @param sampling_interval Double, seconds between consecutive measurements
 //'
 //' @return List containing delta temps, ratios, and peak info
 //'
@@ -267,7 +270,8 @@ List preprocess_pulse_data_cpp(NumericVector do_vec,
                                 NumericVector di_vec,
                                 NumericVector uo_vec,
                                 NumericVector ui_vec,
-                                int pre_pulse) {
+                                int pre_pulse_rows,
+                                double sampling_interval) {
 
   int n = do_vec.size();
 
@@ -275,7 +279,7 @@ List preprocess_pulse_data_cpp(NumericVector do_vec,
   double do_mu_pre = 0.0, di_mu_pre = 0.0, uo_mu_pre = 0.0, ui_mu_pre = 0.0;
   int count = 0;
 
-  int pre_pulse_end = std::min(pre_pulse, n);
+  int pre_pulse_end = std::min(pre_pulse_rows, n);
   for (int i = 0; i < pre_pulse_end; i++) {
     if (!NumericVector::is_na(do_vec[i])) {
       do_mu_pre += do_vec[i];
@@ -306,7 +310,7 @@ List preprocess_pulse_data_cpp(NumericVector do_vec,
   NumericVector deltaT_ui(n);
 
   for (int i = 0; i < n; i++) {
-    if (i < pre_pulse) {
+    if (i < pre_pulse_rows) {
       deltaT_do[i] = NA_REAL;
       deltaT_di[i] = NA_REAL;
       deltaT_uo[i] = NA_REAL;
@@ -335,11 +339,11 @@ List preprocess_pulse_data_cpp(NumericVector do_vec,
   find_max_and_idx(deltaT_uo, peak_info.dTuo_max, peak_info.idx_uo);
   find_max_and_idx(deltaT_ui, peak_info.dTui_max, peak_info.idx_ui);
 
-  // Calculate peak times relative to pulse injection
-  peak_info.time_do = peak_info.idx_do - pre_pulse;
-  peak_info.time_di = peak_info.idx_di - pre_pulse;
-  peak_info.time_uo = peak_info.idx_uo - pre_pulse;
-  peak_info.time_ui = peak_info.idx_ui - pre_pulse;
+  // Calculate peak times relative to pulse injection (in seconds)
+  peak_info.time_do = (peak_info.idx_do - pre_pulse_rows) * sampling_interval;
+  peak_info.time_di = (peak_info.idx_di - pre_pulse_rows) * sampling_interval;
+  peak_info.time_uo = (peak_info.idx_uo - pre_pulse_rows) * sampling_interval;
+  peak_info.time_ui = (peak_info.idx_ui - pre_pulse_rows) * sampling_interval;
 
   return List::create(
     Named("deltaT_do") = deltaT_do,
@@ -372,7 +376,8 @@ List preprocess_pulse_data_cpp(NumericVector do_vec,
 //' @param deltaT_di Numeric vector of delta temperatures (downstream inner)
 //' @param diffusivity Thermal diffusivity (cm²/s)
 //' @param probe_spacing Probe spacing (cm)
-//' @param pre_pulse Pre-pulse period (seconds)
+//' @param pre_pulse_rows Number of pre-pulse rows
+//' @param sampling_interval Sampling interval in seconds (e.g. 1.0 for 1Hz, 0.5 for 2Hz)
 //'
 //' @return List containing Tmax_Coh results
 //'
@@ -383,7 +388,8 @@ List calc_tmax_coh_cpp(NumericVector deltaT_do,
                        NumericVector deltaT_di,
                        double diffusivity,
                        double probe_spacing,
-                       int pre_pulse) {
+                       int pre_pulse_rows,
+                       double sampling_interval) {
 
   // Find maximum values and their indices
   double dTdo_max, dTdi_max;
@@ -392,9 +398,9 @@ List calc_tmax_coh_cpp(NumericVector deltaT_do,
   find_max_and_idx(deltaT_do, dTdo_max, idx_do);
   find_max_and_idx(deltaT_di, dTdi_max, idx_di);
 
-  // Calculate peak times relative to pulse injection
-  double tmo = idx_do - pre_pulse;
-  double tmi = idx_di - pre_pulse;
+  // Calculate peak times in seconds relative to pulse injection
+  double tmo = (idx_do - pre_pulse_rows) * sampling_interval;
+  double tmi = (idx_di - pre_pulse_rows) * sampling_interval;
 
   // Initialize results
   double Vho_Tmax_Coh = NA_REAL;
@@ -444,7 +450,8 @@ List calc_tmax_coh_cpp(NumericVector deltaT_do,
 //' @param diffusivity Thermal diffusivity (cm²/s)
 //' @param probe_spacing Probe spacing (cm)
 //' @param tp_1 Heat pulse duration (seconds)
-//' @param pre_pulse Pre-pulse period (seconds)
+//' @param pre_pulse_rows Number of pre-pulse rows
+//' @param sampling_interval Sampling interval in seconds (e.g. 1.0 for 1Hz, 0.5 for 2Hz)
 //'
 //' @return List containing Tmax_Klu results
 //'
@@ -456,7 +463,8 @@ List calc_tmax_klu_cpp(NumericVector deltaT_do,
                        double diffusivity,
                        double probe_spacing,
                        double tp_1,
-                       int pre_pulse) {
+                       int pre_pulse_rows,
+                       double sampling_interval) {
 
   // Find maximum values and their indices
   double dTdo_max, dTdi_max;
@@ -465,9 +473,9 @@ List calc_tmax_klu_cpp(NumericVector deltaT_do,
   find_max_and_idx(deltaT_do, dTdo_max, idx_do);
   find_max_and_idx(deltaT_di, dTdi_max, idx_di);
 
-  // Calculate peak times relative to pulse injection
-  double tmo = idx_do - pre_pulse;
-  double tmi = idx_di - pre_pulse;
+  // Calculate peak times in seconds relative to pulse injection
+  double tmo = (idx_do - pre_pulse_rows) * sampling_interval;
+  double tmi = (idx_di - pre_pulse_rows) * sampling_interval;
 
   // Initialize results
   double Vho_Tmax_Klu = NA_REAL;

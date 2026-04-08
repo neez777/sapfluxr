@@ -8,54 +8,74 @@
 
 ## Overview
 
-**sapfluxr** is a comprehensive R package for importing, processing, and analysing sap flow data from ICT SFM1x sensors. It provides robust tools for handling multiple data formats, automatic format detection, data validation, and calculating heat pulse velocities using various established methods.
+**sapfluxr** is a comprehensive R package for importing, processing, and analysing sap flow data from ICT SFM1x sensors. It provides a robust, non-destructive, and transparent 10-step pipeline from raw sensor measurements to tree-level water use estimates.
 
-## Modern sDMA Workflow ✨
+## The 10-Step Pipeline
 
-`sapfluxr` now implements a **Selectable Dual Method Approach (sDMA)** that ensures data continuity and physical accuracy across all flow ranges.
+`sapfluxr` implements a physically grounded processing pipeline designed for scientific rigour and reproducibility:
 
-**Key features**:
-- **Correction Transfer**: Calibrates high-flow methods (MHR) against *corrected* low-flow data (HRM), transferring spacing and wound corrections mathematically.
-- **Physics-Led Switching**: Automatically switches between methods based on the **Peclet Number (Pe)** threshold (typically Pe = 1.0).
-- **Smooth Transitions**: Prevents "volcano" discontinuities (velocity drops at peak flow) by aligning method scales before switching.
+1. **Data Import**: Automated multi-format detection (JSON, CSV, Legacy).
+2. **Wood Property Estimation**: Fresh weight/volume or Dual-Density characterisation.
+3. **HPV Calculation**: Multi-method engine (HRM, MHR, T-max Cohen & Kluitenberg).
+4. **Zero-Flow Identification**: Manual, PELT (statistical), or Dual-Stable (physiological) detection.
+5. **Baseline Correction**: Segmented Flat or Burgess Spacing models.
+6. **Wound Correction**: Linear or polynomial scaling with temporal tracking.
+7. **Method Calibration**: Aligning secondary methods to the corrected HRM scale.
+8. **Dual Method Switching (sDMA)**: PÃ©clet-based switching for full diurnal coverage.
+9. **Flux Density & Radial Integration**: Hatton (1990) two-annulus scaling.
+10. **Daily Aggregation**: Integration to daily L/day with completeness tracking.
+
+## Quick Start Example
 
 ```r
-# 1. Calculate raw velocities
-vh <- calc_heat_pulse_velocity(data, methods = c("HRM", "MHR"), wood_properties = "eucalyptus")
+library(sapfluxr)
 
-# 2. Apply corrections to HRM (Spacing + Wound)
-vh_corrected <- vh %>% 
-  apply_spacing_correction(method = "vpd", weather_data = weather) %>%
-  apply_wound_correction(wood_properties = wood)
+# 1. Import raw data
+hp_data <- read_heat_pulse_data("data.txt")
 
-# 3. Apply sDMA: Calibrate MHR to corrected HRM and switch at Pe > 1.0
-calib <- calibrate_method_to_primary(vh_corrected, primary="HRM", secondary="MHR")
-vh_sdma <- apply_sdma_switching(vh_corrected, secondary="MHR", mode="peclet", calibration=calib)
+# 2. Load wood properties (e.g., Eucalyptus)
+wood <- load_wood_properties("eucalyptus")
 
-# 4. Visualise results
-plot_sdma_timeseries(vh_sdma, sdma_method = "sDMA:MHR")
+# 3. Calculate velocities
+vh <- calc_heat_pulse_velocity(hp_data, methods = c("HRM", "MHR"), wood_properties = wood)
+
+# 4. Detect baseline shifts
+vh <- detect_changepoints(vh, method = "pelt")
+
+# 5. Apply zero-flow correction
+vh <- apply_zero_flow_offset(vh, correction_model = "flat")
+
+# 6. Apply wound correction
+vh <- apply_wound_correction(vh, wound_diameter = 2.0)
+
+# 7 & 8. Calibrate and switch (sDMA)
+vh <- calibrate_secondary_method(vh, primary = "HRM", secondary = "MHR")
+vh <- apply_sdma_switching(vh, primary = "HRM", secondary = "MHR", mode = "peclet")
+
+# 9. Scale to tree-level flux (Q)
+sap_flux <- calc_sap_flux(vh, wood_properties = wood, dbh = 35, sapwood_depth_mm = 40)
+
+# 10. Aggregate to daily totals
+daily <- aggregate_daily(sap_flux)
 ```
+
+## Documentation
+
+For detailed guides on each step of the pipeline, see the package vignettes:
+
+* [**Quick Start Guide**](vignettes/sapfluxr-quickstart.Rmd): A high-level overview of the 10-step pipeline.
+* [**01. Data Import & Configuration**](vignettes/vignette-01-import-and-config.Rmd): Getting data in and setting up physical properties.
+* [**02. HPV Calculation Methods**](vignettes/vignette-02-hpv-calculation.Rmd): The physics of HRM, MHR, and T-max.
+* [**03. Baseline & Zero-Flow Correction**](vignettes/vignette-03-baseline-and-zero-flow.Rmd): Addressing probe drift and misalignment.
+* [**04. Advanced Corrections & Switching**](vignettes/vignette-04-wound-and-method-correction.Rmd): Wound correction, calibration, and sDMA.
+* [**05. Flux Scaling & Daily Totals**](vignettes/vignette-05-flux-scaling-and-aggregation.Rmd): From velocity to L/day.
 
 ## Key Features
 
-### Data Import & Preprocessing
-- **Multi-format Import**: Supports current JSON-like format and legacy formats from ICT SFM1x sensors.
-- **Automatic Format Detection**: Intelligently detects data format without user specification.
-- **Clock Drift Correction**: Fix device clock drift with linear interpolation.
-
-### Heat Pulse Velocity Calculations
-- **Multiple Methods**: HRM, MHR, HRMXa/b, T-max (Cohen, Kluitenberg).
-- **Optimised Performance**: Core calculations implemented in C++ for 50-100x speedup.
-
-### Zero-Flow Correction (Spacing)
-- **Stable VPD Method**: ✨ (NEW) Uses pre-dawn environmental stability to detect baseline shifts automatically.
-- **Heartwood Reference**: Uses inner sensor in heartwood as continuous zero reference.
-- **Changepoint-Based**: Detects alignment shifts using the PELT algorithm.
-
-### Wood Properties & Scaling
-- **Dual Density Method**: Back-calculate moisture content from dry/fresh density (Recommended).
-- **Temporal Wound Tracking**: Models linear wound expansion over the duration of deployment.
-- **Radial Integration**: Weighted average integration (Hatton et al., 1990) for whole-tree scaling.
+* **Non-Destructive Architecture**: Original measurements are preserved; each correction creates a new tracked column.
+* **Physics-Led Switching**: Automatically selects the most accurate method based on the **PÃ©clet Number (Pe)**.
+* **Optimised Performance**: Core calculation engines implemented in C++ for handling large, multi-year datasets.
+* **Reproducible Design**: All parameters and correction histories are tracked in metadata attributes.
 
 ## Installation
 
@@ -72,6 +92,6 @@ This project is licensed under the GPL-3 License.
 
 ---
 
-**Authors**: Grant Joyce  
-**Maintainer**: Grant Joyce, neez1977@gmail.com  
+**Authors**: Grant Joyce, Gavan McGrath, Tim Bleby
+**Maintainer**: Grant Joyce, <neez1977@gmail.com>
 **Version**: 0.5.0 (Experimental)

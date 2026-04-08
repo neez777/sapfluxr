@@ -11,7 +11,8 @@ calc_mhr_cpp(
   deltaT_ui,
   diffusivity,
   probe_spacing,
-  pre_pulse
+  pre_pulse_rows,
+  sampling_interval
 )
 }
 \arguments{
@@ -27,7 +28,9 @@ calc_mhr_cpp(
 
 \item{probe_spacing}{Probe spacing (cm)}
 
-\item{pre_pulse}{Pre-pulse period (seconds)}
+\item{pre_pulse_rows}{Integer, number of pre-pulse rows (NOT seconds)}
+
+\item{sampling_interval}{Double, seconds between consecutive measurements}
 }
 \value{
 List containing MHR results for outer and inner sensors

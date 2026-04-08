@@ -91,6 +91,7 @@ of saturation vapor pressure. Journal of Applied Meteorology, 35(4), 601-609.
 }
 \seealso{
 Other weather data functions: 
+\code{\link{read_silo_data}()},
 \code{\link{read_weather_data}()}
 }
 \concept{weather data functions}

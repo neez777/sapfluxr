@@ -70,6 +70,7 @@ weather <- read_weather_data(
 }
 \seealso{
 Other weather data functions: 
-\code{\link{calc_vpd}()}
+\code{\link{calc_vpd}()},
+\code{\link{read_silo_data}()}
 }
 \concept{weather data functions}

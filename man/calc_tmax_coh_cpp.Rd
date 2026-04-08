@@ -4,7 +4,14 @@
 \alias{calc_tmax_coh_cpp}
 \title{Calculate Tmax Cohen - C++ Implementation}
 \usage{
-calc_tmax_coh_cpp(deltaT_do, deltaT_di, diffusivity, probe_spacing, pre_pulse)
+calc_tmax_coh_cpp(
+  deltaT_do,
+  deltaT_di,
+  diffusivity,
+  probe_spacing,
+  pre_pulse_rows,
+  sampling_interval
+)
 }
 \arguments{
 \item{deltaT_do}{Numeric vector of delta temperatures (downstream outer)}
@@ -15,7 +22,9 @@ calc_tmax_coh_cpp(deltaT_do, deltaT_di, diffusivity, probe_spacing, pre_pulse)
 
 \item{probe_spacing}{Probe spacing (cm)}
 
-\item{pre_pulse}{Pre-pulse period (seconds)}
+\item{pre_pulse_rows}{Number of pre-pulse rows}
+
+\item{sampling_interval}{Sampling interval in seconds (e.g. 1.0 for 1Hz, 0.5 for 2Hz)}
 }
 \value{
 List containing Tmax_Coh results
