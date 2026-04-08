@@ -178,7 +178,7 @@ trim_incomplete_days <- function(measurements, diagnostics, verbose = TRUE) {
 #' \code{progressr::with_progress({})}.
 #'
 #' @param file_path Character string specifying the path to the data file
-#' @param format Character string specifying format. Auto-detected if NULL. Currently ict_current, ict_legacy & csv.
+#' @param format Character string specifying format. Auto-detected if NULL. Currently ict_current, ict_legacy, csv & sft_csv (Sap Flow Tool export).
 #' @param validate_data Logical indicating whether to validate imported data (default: TRUE)
 #' @param trim_incomplete_days Logical indicating whether to remove first/last days if incomplete (default: FALSE)
 #' @param chunk_size Integer specifying characters per chunk (default: auto-sized)
@@ -277,6 +277,7 @@ read_heat_pulse_data <- function(file_path,
                    "ict_current" = read_ict_current(file_path, chunk_size, show_progress, ...),
                    "ict_legacy" = read_ict_legacy(file_path, chunk_size, show_progress, ...),
                    "csv" = read_csv_format(file_path, show_progress, ...),
+                   "sft_csv" = read_sft_csv_format(file_path, show_progress, ...),
                    stop("Unsupported format: ", format)
   )
 
@@ -435,8 +436,19 @@ detect_format <- function(file_path) {
     stop("File appears to be empty")
   }
 
-  # Check for CSV format (tab or comma delimited with headers)
+  # Check for Sap Flow Tool CSV export format
+  # Identified by "Exported from Sap Flow Tool" header or column names containing
+  # OuterDownstream/OuterUpstream/InnerDownstream/InnerUpstream
   first_lines <- strsplit(sample_text, "\n")[[1]][1:5]
+  if (length(first_lines) > 2) {
+    if (grepl("Exported from Sap Flow Tool", first_lines[1], ignore.case = TRUE) ||
+        (grepl("OuterDownstream", first_lines[3], ignore.case = TRUE) &&
+         grepl("InnerUpstream", first_lines[3], ignore.case = TRUE))) {
+      return("sft_csv")
+    }
+  }
+
+  # Check for CSV format (tab or comma delimited with headers)
   if (length(first_lines) > 1) {
     header <- first_lines[1]
     if (grepl("Date.*Time.*Pulse_ID.*DO.*DI.*UO.*UI", header, ignore.case = TRUE) ||
@@ -866,6 +878,171 @@ read_csv_format <- function(file_path, show_progress, ...) {
   # Create measurements
   measurements <- data %>%
     dplyr::select(dplyr::all_of(measurement_cols))
+
+  return(list(
+    diagnostics = as.data.frame(diagnostics),
+    measurements = as.data.frame(measurements)
+  ))
+}
+
+#' Read Sap Flow Tool CSV export format
+#'
+#' Imports temperature signal data exported from ICT International's Sap Flow
+#' Tool software. This format is produced when users export raw signal data
+#' from BIN files recorded by SFM1x sensors.
+#'
+#' The Sap Flow Tool CSV has a 3-line header:
+#' \itemize{
+#'   \item Line 1: Export metadata (software version, export date)
+#'   \item Line 2: Device name repeated for each column
+#'   \item Line 3: Column descriptions with sensor positions and units
+#' }
+#'
+#' Data is recorded at 0.5-second intervals with columns for OuterDownstream,
+#' OuterUpstream, InnerDownstream, and InnerUpstream temperature readings.
+#' Pulses are identified by time gaps between measurement blocks.
+#'
+#' @param file_path Path to data file
+#' @param show_progress Show progress updates
+#' @param ... Additional arguments (currently unused)
+#' @return A list with diagnostics and measurements data frames
+#' @keywords internal
+read_sft_csv_format <- function(file_path, show_progress, ...) {
+
+  if (show_progress) {
+    show_message("Reading Sap Flow Tool CSV export...\n")
+  }
+
+
+  # --- Parse the 3-line header ---
+  header_lines <- readLines(file_path, n = 3, warn = FALSE)
+
+  # Line 1: "Exported from Sap Flow Tool (1.6.0) on 5/03/2026 at 8:46 PM"
+  sft_version <- NULL
+  if (grepl("Sap Flow Tool", header_lines[1])) {
+    version_match <- regmatches(header_lines[1],
+                                regexpr("\\([0-9.]+\\)", header_lines[1]))
+    if (length(version_match) > 0) {
+      sft_version <- gsub("[()]", "", version_match)
+    }
+  }
+
+  # Line 3: column descriptions e.g. "dd/MM/yyyy hh:mm:ss.zzz,DOY,0_OuterDownstream(DegC),..."
+  col_desc_line <- header_lines[3]
+  col_descriptions <- strsplit(col_desc_line, ",")[[1]]
+  # Remove trailing empty element from trailing comma
+  col_descriptions <- col_descriptions[nzchar(trimws(col_descriptions))]
+
+  # Map Sap Flow Tool column names to standard names
+  # Expected pattern: 0_OuterDownstream(DegC), 1_OuterUpstream(DegC),
+  #                   2_InnerDownstream(DegC), 3_InnerUpstream(DegC)
+  n_data_cols <- length(col_descriptions)
+  col_names <- character(n_data_cols)
+  col_names[1] <- "datetime"
+  col_names[2] <- "doy"
+
+  # Map sensor position columns
+  for (i in seq_along(col_descriptions)) {
+    desc <- tolower(col_descriptions[i])
+    if (grepl("outerdownstream", desc)) {
+      col_names[i] <- "do"
+    } else if (grepl("outerupstream", desc)) {
+      col_names[i] <- "uo"
+    } else if (grepl("innerdownstream", desc)) {
+      col_names[i] <- "di"
+    } else if (grepl("innerupstream", desc)) {
+      col_names[i] <- "ui"
+    }
+  }
+
+  # Check all four sensor columns were found
+  required <- c("do", "uo", "di", "ui")
+  missing <- setdiff(required, col_names)
+  if (length(missing) > 0) {
+    stop("Could not identify sensor columns in Sap Flow Tool CSV. ",
+         "Missing: ", paste(missing, collapse = ", "), ". ",
+         "Column descriptions found: ", paste(col_descriptions, collapse = ", "))
+  }
+
+  if (show_progress) {
+    show_message(sprintf("  Sap Flow Tool version: %s\n",
+                          if (!is.null(sft_version)) sft_version else "unknown"))
+    show_message(sprintf("  Sensor columns: %s\n",
+                          paste(col_descriptions[col_names %in% required],
+                                collapse = ", ")))
+  }
+
+  # --- Read the data ---
+  # Skip 3 header lines, read as CSV
+  # Sap Flow Tool CSV lines have a trailing comma, creating an extra empty column.
+  # We must provide a name for it or readr/read.csv will segfault or error.
+  read_col_names <- c(col_names, "sft_trailing")
+
+  data <- readr::read_csv(
+    file_path,
+    skip = 3,
+    col_names = read_col_names,
+    col_types = readr::cols(
+      datetime = readr::col_character(),
+      doy = readr::col_double(),
+      sft_trailing = readr::col_skip(),
+      .default = readr::col_double()
+    ),
+    show_col_types = FALSE,
+    progress = show_progress
+  )
+
+  if (show_progress) {
+    show_message(sprintf("  Read %s rows\n", format(nrow(data), big.mark = ",")))
+  }
+
+  # --- Parse datetime ---
+  # Format: dd/MM/yyyy HH:mm:ss.fff
+  data$datetime <- as.POSIXct(data$datetime, format = "%d/%m/%Y %H:%M:%OS")
+
+  n_na_times <- sum(is.na(data$datetime))
+  if (n_na_times > 0) {
+    warning(sprintf("%d datetime values could not be parsed", n_na_times))
+  }
+
+  # Remove rows with NA datetimes
+  if (n_na_times > 0) {
+    data <- data[!is.na(data$datetime), ]
+  }
+
+  # --- Identify pulses ---
+  # Pulses are groups of continuous 0.5s readings separated by large time gaps
+  # Typical pattern: ~5-6 min of data at 0.5s, then ~25 min gap, repeating every 30 min
+  time_diffs <- c(0, diff(as.numeric(data$datetime)))
+
+  # A new pulse starts when the time gap exceeds a threshold
+
+  # Use median of non-zero diffs to find the recording interval (0.5s),
+  # then define a gap as anything much larger than that
+  recording_interval <- stats::median(time_diffs[time_diffs > 0 & time_diffs < 10])
+  gap_threshold <- max(recording_interval * 10, 30)  # At least 30 seconds
+
+  data$pulse_id <- cumsum(time_diffs > gap_threshold) + 1L
+
+  n_pulses <- max(data$pulse_id)
+
+  if (show_progress) {
+    show_message(sprintf("  Identified %s pulses (recording interval: %.1fs, gap threshold: %.0fs)\n",
+                          format(n_pulses, big.mark = ","),
+                          recording_interval, gap_threshold))
+  }
+
+  # --- Create diagnostics (one row per pulse, minimal since SFT has no battery data) ---
+  diagnostics <- data %>%
+    dplyr::group_by(pulse_id) %>%
+    dplyr::summarise(
+      datetime = dplyr::first(datetime),
+      .groups = "drop"
+    )
+
+  # --- Create measurements ---
+  measurements <- data %>%
+    dplyr::select(dplyr::all_of(c("pulse_id", "datetime", "do", "di", "uo", "ui")))
 
   return(list(
     diagnostics = as.data.frame(diagnostics),

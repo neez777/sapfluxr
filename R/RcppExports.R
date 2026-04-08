@@ -80,14 +80,15 @@ calc_hrm_cpp <- function(dTratio_douo, dTratio_diui, HRM_period, tp, diffusivity
 #' @param deltaT_ui Numeric vector of delta temperatures (upstream inner)
 #' @param diffusivity Thermal diffusivity (cm²/s)
 #' @param probe_spacing Probe spacing (cm)
-#' @param pre_pulse Pre-pulse period (seconds)
+#' @param pre_pulse_rows Integer, number of pre-pulse rows (NOT seconds)
+#' @param sampling_interval Double, seconds between consecutive measurements
 #'
 #' @return List containing MHR results for outer and inner sensors
 #'
 #' @keywords internal
 #' @export
-calc_mhr_cpp <- function(deltaT_do, deltaT_di, deltaT_uo, deltaT_ui, diffusivity, probe_spacing, pre_pulse) {
-    .Call(`_sapfluxr_calc_mhr_cpp`, deltaT_do, deltaT_di, deltaT_uo, deltaT_ui, diffusivity, probe_spacing, pre_pulse)
+calc_mhr_cpp <- function(deltaT_do, deltaT_di, deltaT_uo, deltaT_ui, diffusivity, probe_spacing, pre_pulse_rows, sampling_interval) {
+    .Call(`_sapfluxr_calc_mhr_cpp`, deltaT_do, deltaT_di, deltaT_uo, deltaT_ui, diffusivity, probe_spacing, pre_pulse_rows, sampling_interval)
 }
 
 #' Preprocess Pulse Data - C++ Implementation
@@ -100,14 +101,15 @@ calc_mhr_cpp <- function(deltaT_do, deltaT_di, deltaT_uo, deltaT_ui, diffusivity
 #' @param di_vec Numeric vector of downstream inner temperatures
 #' @param uo_vec Numeric vector of upstream outer temperatures
 #' @param ui_vec Numeric vector of upstream inner temperatures
-#' @param pre_pulse Integer, number of pre-pulse measurements
+#' @param pre_pulse_rows Integer, number of pre-pulse rows (NOT seconds)
+#' @param sampling_interval Double, seconds between consecutive measurements
 #'
 #' @return List containing delta temps, ratios, and peak info
 #'
 #' @keywords internal
 #' @export
-preprocess_pulse_data_cpp <- function(do_vec, di_vec, uo_vec, ui_vec, pre_pulse) {
-    .Call(`_sapfluxr_preprocess_pulse_data_cpp`, do_vec, di_vec, uo_vec, ui_vec, pre_pulse)
+preprocess_pulse_data_cpp <- function(do_vec, di_vec, uo_vec, ui_vec, pre_pulse_rows, sampling_interval) {
+    .Call(`_sapfluxr_preprocess_pulse_data_cpp`, do_vec, di_vec, uo_vec, ui_vec, pre_pulse_rows, sampling_interval)
 }
 
 #' Calculate Tmax Cohen - C++ Implementation
@@ -116,14 +118,15 @@ preprocess_pulse_data_cpp <- function(do_vec, di_vec, uo_vec, ui_vec, pre_pulse)
 #' @param deltaT_di Numeric vector of delta temperatures (downstream inner)
 #' @param diffusivity Thermal diffusivity (cm²/s)
 #' @param probe_spacing Probe spacing (cm)
-#' @param pre_pulse Pre-pulse period (seconds)
+#' @param pre_pulse_rows Number of pre-pulse rows
+#' @param sampling_interval Sampling interval in seconds (e.g. 1.0 for 1Hz, 0.5 for 2Hz)
 #'
 #' @return List containing Tmax_Coh results
 #'
 #' @keywords internal
 #' @export
-calc_tmax_coh_cpp <- function(deltaT_do, deltaT_di, diffusivity, probe_spacing, pre_pulse) {
-    .Call(`_sapfluxr_calc_tmax_coh_cpp`, deltaT_do, deltaT_di, diffusivity, probe_spacing, pre_pulse)
+calc_tmax_coh_cpp <- function(deltaT_do, deltaT_di, diffusivity, probe_spacing, pre_pulse_rows, sampling_interval) {
+    .Call(`_sapfluxr_calc_tmax_coh_cpp`, deltaT_do, deltaT_di, diffusivity, probe_spacing, pre_pulse_rows, sampling_interval)
 }
 
 #' Calculate Tmax Kluitenberg - C++ Implementation
@@ -133,14 +136,15 @@ calc_tmax_coh_cpp <- function(deltaT_do, deltaT_di, diffusivity, probe_spacing, 
 #' @param diffusivity Thermal diffusivity (cm²/s)
 #' @param probe_spacing Probe spacing (cm)
 #' @param tp_1 Heat pulse duration (seconds)
-#' @param pre_pulse Pre-pulse period (seconds)
+#' @param pre_pulse_rows Number of pre-pulse rows
+#' @param sampling_interval Sampling interval in seconds (e.g. 1.0 for 1Hz, 0.5 for 2Hz)
 #'
 #' @return List containing Tmax_Klu results
 #'
 #' @keywords internal
 #' @export
-calc_tmax_klu_cpp <- function(deltaT_do, deltaT_di, diffusivity, probe_spacing, tp_1, pre_pulse) {
-    .Call(`_sapfluxr_calc_tmax_klu_cpp`, deltaT_do, deltaT_di, diffusivity, probe_spacing, tp_1, pre_pulse)
+calc_tmax_klu_cpp <- function(deltaT_do, deltaT_di, diffusivity, probe_spacing, tp_1, pre_pulse_rows, sampling_interval) {
+    .Call(`_sapfluxr_calc_tmax_klu_cpp`, deltaT_do, deltaT_di, diffusivity, probe_spacing, tp_1, pre_pulse_rows, sampling_interval)
 }
 
 #' Calculate HRMX (Modified Heat Ratio) - C++ Implementation

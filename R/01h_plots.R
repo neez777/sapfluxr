@@ -136,11 +136,26 @@ plot_heat_pulse_trace <- function(heat_pulse_data,
     stop("Pulse ID ", pulse_id, " not found in heat_pulse_data")
   }
 
+  # Detect sampling interval from timestamps
+  sampling_interval <- 1.0
+  if (nrow(pulse_data) >= 2 && "datetime" %in% names(pulse_data)) {
+    time_diffs <- as.numeric(difftime(pulse_data$datetime[2:min(5, nrow(pulse_data))],
+                                       pulse_data$datetime[1:(min(5, nrow(pulse_data)) - 1)],
+                                       units = "secs"))
+    median_diff <- stats::median(time_diffs)
+    if (!is.na(median_diff) && median_diff > 0) {
+      sampling_interval <- median_diff
+    }
+  }
+
+  # Convert pre_pulse (seconds) to row count
+  pre_pulse_rows <- round(pre_pulse / sampling_interval)
+
   # Calculate time relative to pulse (seconds)
-  pulse_data$time_sec <- seq_len(nrow(pulse_data)) - pre_pulse
+  pulse_data$time_sec <- (seq_len(nrow(pulse_data)) - pre_pulse_rows) * sampling_interval
 
   # Calculate baseline temperatures
-  pre_pulse_period <- 1:min(pre_pulse, nrow(pulse_data))
+  pre_pulse_period <- 1:min(pre_pulse_rows, nrow(pulse_data))
   do_baseline <- mean(pulse_data$do[pre_pulse_period], na.rm = TRUE)
   di_baseline <- mean(pulse_data$di[pre_pulse_period], na.rm = TRUE)
   uo_baseline <- mean(pulse_data$uo[pre_pulse_period], na.rm = TRUE)

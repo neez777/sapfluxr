@@ -1,0 +1,92 @@
+---
+title: "02. HPV Calculation Methods"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{02. HPV Calculation Methods}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+The third step of the **sapfluxr** pipeline is the calculation of heat pulse velocity ($V_h$) from raw temperature measurements. Because no single method accurately captures the full range of sap velocities, `sapfluxr` implements a suite of complementary algorithms.
+
+# The Unified Interface: `calc_heat_pulse_velocity()`
+
+All calculation methods are accessed through a single, consistent interface. This design allows you to calculate multiple methods simultaneously, facilitating comparison and enabling the Dual Method Approach (sDMA) downstream.
+
+```{r example, eval=FALSE}
+library(sapfluxr)
+
+# Calculate velocities using HRM, MHR, and T-max Kluitenberg
+vh_results <- calc_heat_pulse_velocity(
+  hp_data,
+  methods = c("HRM", "MHR", "Tmax_Klu"),
+  wood_properties = "eucalyptus"
+)
+```
+
+---
+
+# Implemented Methods
+
+## 1. Heat Ratio Method (HRM)
+The standard for low and reverse flows. It calculates velocity from the logarithmic ratio of downstream to upstream temperature increases within a fixed time window (typically 60–100 seconds post-pulse).
+
+*   **Bidirectional**: Yes (detects reverse flow).
+*   **Reliable Range**: $\pm$ 18 cm h⁻¹.
+*   **Theoretical Limit**: $\pm$ 54 cm h⁻¹.
+*   **Key Reference**: Burgess et al. (2001).
+
+## 2. Maximum Heat Ratio (MHR)
+An extension of HRM that uses the peak temperature increases rather than a fixed window average. This allows it to capture higher flow rates before the signal dissipates at the upstream sensor.
+
+*   **Bidirectional**: Yes.
+*   **Reliable Range**: Up to ~130 cm³ cm⁻² h⁻¹ (sap flux density).
+*   **Key Reference**: Lopez-Bernal et al. (2021).
+
+## 3. T-max Methods (Cohen & Kluitenberg)
+These methods calculate velocity from the **time-to-peak** temperature at the downstream sensor. They are highly accurate at high flows but cannot detect reverse flow and are unreliable at low flows where peaks are broad and poorly resolved.
+
+*   **Cohen formulation**: Assumes an instantaneous heat pulse.
+*   **Kluitenberg formulation**: Accounts for finite pulse duration (e.g., a 2-second pulse), correcting a systematic 5–15% underestimation at high flows.
+*   **Bidirectional**: No.
+*   **Reliable Range**: ~20 to >100 cm h⁻¹.
+*   **Key References**: Cohen et al. (1981); Kluitenberg and Ham (2004).
+
+## 4. Modified HRM (HRMXa/b)
+Variants of HRM that use dynamic sampling windows based on a proportion of the peak temperature increase, designed to optimize the signal-to-noise ratio in specific environments.
+
+---
+
+# The Péclet Number (Pe)
+
+For every pulse, `sapfluxr` calculates the dimensionless **Péclet number**:
+
+$$Pe = \frac{V_h \cdot x}{k}$$
+
+Where $x$ is probe spacing and $k$ is thermal diffusivity. The Péclet number quantifies the ratio of advective (convection) to diffusive (conduction) heat transport:
+*   **Pe ≤ 1**: Conduction dominates. HRM is the most reliable method.
+*   **Pe > 1**: Convection dominates. Secondary methods (MHR, T-max) are preferred.
+
+This physical criterion forms the basis for the **Selectable Dual Method Approach (sDMA)** described in Step 8.
+
+---
+
+# Method Comparison
+
+The `Vh_cm_hr_raw` column in the output allows you to directly compare the performance of different methods on your dataset before any corrections are applied.
+
+```{r comparison, eval=FALSE}
+# Compare HRM and MHR outputs
+# ggplot(vh_results, aes(x = datetime, y = Vh_cm_hr, color = method)) +
+#   geom_line() +
+#   facet_wrap(~sensor_position)
+```
+
+With raw velocities calculated, the next step is to address probe drift and misalignment in **Step 4: Changepoint & Zero-Flow Identification**.

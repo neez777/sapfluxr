@@ -568,3 +568,258 @@ print.weather_data <- function(x, ...) {
   cat("\n")
   NextMethod()
 }
+
+
+# ============================================================================
+# SILO Daily Weather Data
+# ============================================================================
+
+#' Read SILO daily weather data
+#'
+#' Imports daily weather data downloaded from the Australian SILO climate
+#' database (\url{https://www.longpaddock.qld.gov.au/silo/}). SILO provides
+#' gridded daily climate data for all of Australia, including rainfall,
+#' temperature, evaporation, radiation, and humidity variables.
+#'
+#' The function handles the standard SILO CSV export format, which embeds
+#' site metadata (elevation, reference, extraction date, dataset) in the
+#' \code{metadata} column of the first few data rows.
+#'
+#' Rolling rainfall accumulations (\code{rain_3d}, \code{rain_7d}) are
+#' calculated automatically. These are useful for identifying periods of
+#' sustained soil saturation, which affects sap flow baselines.
+#'
+#' @param file_path Character string. Path to the SILO CSV file.
+#' @param start_date Date or character string (YYYY-MM-DD). Optional start date
+#'   to subset the data. If NULL (default), all data is returned.
+#' @param end_date Date or character string (YYYY-MM-DD). Optional end date
+#'   to subset the data. If NULL (default), all data is returned.
+#'
+#' @return A tibble with class \code{"silo_data"} containing:
+#'   \item{date}{Date (Date class)}
+#'   \item{daily_rain}{Daily rainfall in mm}
+#'   \item{rain_3d}{Rolling 3-day cumulative rainfall (mm)}
+#'   \item{rain_7d}{Rolling 7-day cumulative rainfall (mm)}
+#'   Plus any additional SILO variables present in the download (e.g.
+#'   \code{max_temp}, \code{min_temp}, \code{vp_deficit}, \code{evap_pan},
+#'   \code{radiation}, etc.). Source code columns (e.g. \code{daily_rain_source})
+#'   are removed.
+#'
+#'   Site metadata is stored as attributes:
+#'   \itemize{
+#'     \item \code{latitude}, \code{longitude} — site coordinates
+#'     \item \code{elevation} — site elevation (if present in metadata)
+#'     \item \code{silo_dataset} — SILO dataset name
+#'     \item \code{silo_extracted} — extraction date
+#'   }
+#'
+#' @examples
+#' \dontrun{
+#' # Read full SILO download
+#' silo <- read_silo_data("site_rainfall.csv")
+#'
+#' # Subset to match sap flow measurement period
+#' silo <- read_silo_data("site_rainfall.csv",
+#'                        start_date = "2013-03-26",
+#'                        end_date = "2013-07-29")
+#'
+#' # Access site metadata
+#' attr(silo, "latitude")
+#' attr(silo, "longitude")
+#'
+#' # Check rolling accumulations
+#' silo[silo$rain_7d > 20, ]
+#' }
+#'
+#' @family weather data functions
+#' @export
+read_silo_data <- function(file_path,
+                           start_date = NULL,
+                           end_date = NULL) {
+
+  if (!file.exists(file_path)) {
+    stop("File not found: ", file_path)
+  }
+
+  # --- Read the CSV ---
+  raw_data <- readr::read_csv(file_path, show_col_types = FALSE,
+                               col_types = readr::cols(.default = readr::col_character()))
+
+  if (nrow(raw_data) == 0) {
+    stop("The SILO data file is empty")
+  }
+
+  # --- Validate this is a SILO file ---
+  expected_cols <- c("latitude", "longitude", "YYYY-MM-DD")
+  col_names <- names(raw_data)
+
+  if (!all(expected_cols %in% col_names)) {
+    stop("File does not appear to be a SILO CSV export. ",
+         "Expected columns: ", paste(expected_cols, collapse = ", "),
+         ". Found: ", paste(col_names, collapse = ", "))
+  }
+
+  # --- Extract site metadata from the metadata column ---
+  site_meta <- list()
+
+  if ("metadata" %in% col_names) {
+    meta_values <- trimws(raw_data$metadata)
+    for (mv in meta_values) {
+      if (nchar(mv) == 0 || is.na(mv)) next
+      if (grepl("^elevation=", mv)) {
+        site_meta$elevation <- trimws(sub("^elevation=", "", mv))
+      } else if (grepl("^reference=", mv)) {
+        site_meta$reference <- trimws(sub("^reference=", "", mv))
+      } else if (grepl("^extracted=", mv)) {
+        site_meta$extracted <- trimws(sub("^extracted=", "", mv))
+      } else if (grepl("^dataset=", mv)) {
+        site_meta$dataset <- trimws(sub("^dataset=", "", mv))
+      }
+    }
+  }
+
+  # --- Extract coordinates ---
+  latitude <- as.numeric(trimws(raw_data$latitude[1]))
+  longitude <- as.numeric(trimws(raw_data$longitude[1]))
+
+  # --- Parse date ---
+  raw_data$date <- as.Date(trimws(raw_data$`YYYY-MM-DD`))
+
+  n_na_dates <- sum(is.na(raw_data$date))
+  if (n_na_dates > 0) {
+    warning(sprintf("%d date values could not be parsed", n_na_dates))
+    raw_data <- raw_data[!is.na(raw_data$date), ]
+  }
+
+  # --- Identify and convert SILO data columns ---
+  # SILO data columns are the ones that aren't coordinates, date, source codes, or metadata
+  source_cols <- grep("_source$", col_names, value = TRUE)
+  drop_cols <- c("latitude", "longitude", "YYYY-MM-DD", "metadata", source_cols)
+  data_cols <- setdiff(col_names, drop_cols)
+
+  # Build the result tibble starting with date
+  result <- tibble::tibble(date = raw_data$date)
+
+  # Convert each data column to numeric
+  for (col in data_cols) {
+    result[[col]] <- as.numeric(trimws(raw_data[[col]]))
+  }
+
+  # --- Ensure daily_rain exists ---
+  if (!"daily_rain" %in% names(result)) {
+    stop("No 'daily_rain' column found in SILO data. ",
+         "Please download data with at least the daily rainfall variable.")
+  }
+
+  # --- Calculate rolling rainfall accumulations ---
+  n <- nrow(result)
+  result$rain_3d <- compute_rolling_sum(result$daily_rain, window = 3)
+  result$rain_7d <- compute_rolling_sum(result$daily_rain, window = 7)
+
+  # --- Subset by date range if requested ---
+  if (!is.null(start_date)) {
+    start_date <- as.Date(start_date)
+    result <- result[result$date >= start_date, ]
+  }
+
+  if (!is.null(end_date)) {
+    end_date <- as.Date(end_date)
+    result <- result[result$date <= end_date, ]
+  }
+
+  if (nrow(result) == 0) {
+    warning("No data remaining after date subsetting")
+  }
+
+  # --- Attach metadata as attributes ---
+  attr(result, "source_file") <- file_path
+  attr(result, "import_time") <- Sys.time()
+  attr(result, "latitude") <- latitude
+  attr(result, "longitude") <- longitude
+  attr(result, "silo_elevation") <- site_meta$elevation
+  attr(result, "silo_dataset") <- site_meta$dataset
+  attr(result, "silo_extracted") <- site_meta$extracted
+  attr(result, "silo_reference") <- site_meta$reference
+
+  class(result) <- c("silo_data", class(result))
+
+  return(result)
+}
+
+
+#' Compute rolling sum over a vector
+#'
+#' Calculates the sum of the current value and the preceding (window - 1)
+#' values. The first (window - 1) values use partial windows (sum of
+#' available values).
+#'
+#' @param x Numeric vector
+#' @param window Integer. Window size in days (including current day)
+#' @return Numeric vector of rolling sums
+#' @keywords internal
+compute_rolling_sum <- function(x, window) {
+  n <- length(x)
+  result <- numeric(n)
+  cumx <- cumsum(ifelse(is.na(x), 0, x))
+
+  for (i in seq_len(n)) {
+    start_idx <- max(1L, i - window + 1L)
+    if (start_idx == 1L) {
+      result[i] <- cumx[i]
+    } else {
+      result[i] <- cumx[i] - cumx[start_idx - 1L]
+    }
+  }
+
+  return(result)
+}
+
+
+#' Print method for silo_data objects
+#'
+#' @param x A silo_data object
+#' @param ... Additional arguments (not used)
+#' @export
+print.silo_data <- function(x, ...) {
+  cat("SILO Daily Weather Data\n")
+  cat("=======================\n\n")
+
+  lat <- attr(x, "latitude")
+  lon <- attr(x, "longitude")
+  if (!is.null(lat) && !is.null(lon)) {
+    cat(sprintf("Location: %.4f, %.4f\n", lat, lon))
+  }
+
+  elev <- attr(x, "silo_elevation")
+  if (!is.null(elev)) {
+    cat("Elevation:", elev, "\n")
+  }
+
+  dataset <- attr(x, "silo_dataset")
+  if (!is.null(dataset)) {
+    cat("Dataset:", dataset, "\n")
+  }
+
+  source_file <- attr(x, "source_file")
+  if (!is.null(source_file)) {
+    cat("Source:", basename(source_file), "\n")
+  }
+
+  cat("Records:", nrow(x), "\n")
+
+  if (nrow(x) > 0) {
+    cat("Date range:", format(min(x$date)), "to", format(max(x$date)), "\n")
+
+    if ("daily_rain" %in% names(x)) {
+      total_rain <- sum(x$daily_rain, na.rm = TRUE)
+      rain_days <- sum(x$daily_rain > 0, na.rm = TRUE)
+      max_rain <- max(x$daily_rain, na.rm = TRUE)
+      cat(sprintf("Rainfall: %.1f mm total, %d rain days, %.1f mm max daily\n",
+                  total_rain, rain_days, max_rain))
+    }
+  }
+
+  cat("\nColumns:", paste(names(x), collapse = ", "), "\n\n")
+
+  NextMethod()
+}

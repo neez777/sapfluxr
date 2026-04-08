@@ -1,0 +1,98 @@
+---
+title: "03. Baseline & Zero-Flow Correction"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{03. Baseline & Zero-Flow Correction}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+Baseline correction is the most critical per-sensor processing decision in the sap flow pipeline. Even minor probe misalignments (e.g., 1–2 mm) can cause 100% error in velocity estimates. `sapfluxr` provides a segmented, non-destructive approach to identify and correct these offsets.
+
+# Step 4: Identification of Zero-Flow Periods
+
+The first task is to determine *when* and *where* the zero-flow baseline has shifted due to growth, probe settling, or physical disturbance. `sapfluxr` offers three approaches:
+
+## 1. Manual & PELT (Statistical)
+If weather data is unavailable, you can use the **PELT (Pruned Exact Linear Time)** algorithm to find structural breaks in the daily minimum velocities.
+
+```{r pelt, eval=FALSE}
+library(sapfluxr)
+
+# Detect structural shifts in daily minima (outer sensor)
+vh_results <- detect_changepoints(
+  vh_results,
+  method = "pelt",
+  penalty = "MBIC"
+)
+```
+
+## 2. Dual-Stable (Physiological & Atmospheric)
+When meteorological data is available, the preferred approach is **Dual-Stable detection**. This requires both atmospheric demand (VPD) and the sap flow signal to be low and stable simultaneously, providing the highest standard of evidence for genuine zero-flow.
+
+```{r dual_stable, eval=FALSE}
+# 1. Identify periods where VPD < 0.1 kPa and stable
+stable_vpd <- detect_stable_vpd_periods(weather_data, threshold = 0.1)
+
+# 2. Combine with stable sap flow periods
+dual_stable <- find_dual_stable_periods(vh_results, stable_vpd)
+```
+
+---
+
+# Step 5: Baseline Correction Models
+
+Once temporal segments are identified, you must decide *how* to calculate the offset and *which* physical model to apply.
+
+## Offset Calculation: Flat vs. Gradient
+*   **Flat (Step-wise)**: Uses the minimum velocity within a segment as a constant offset. Best for sudden shifts (e.g., physical disturbance).
+*   **Gradient (Linear Ramp)**: Interpolates a temporal ramp between calibration points. Best for slow, monotonic drift (e.g., radial growth).
+
+```{r gradient, eval=FALSE}
+# Apply a linear temporal ramp between dual-stable points
+vh_results <- apply_gradient_offset_correction(vh_results, dual_stable)
+```
+
+## Physical Correction Models
+
+### 1. Flat Offset Subtraction
+The simplest and most transparent approach: subtract the detected offset from all measurements. Applicable to all HPV methods (HRM, MHR, T-max).
+
+```{r flat, eval=FALSE}
+vh_results <- apply_zero_flow_offset(
+  vh_results,
+  correction_model = "flat"
+)
+```
+
+### 2. Burgess Spacing Correction (HRM Only)
+A physics-based model that derives the implied probe misalignment from the HRM equation and calculates both a **sensitivity correction** (slope) and a **geometric intercept correction**.
+
+```{r burgess, eval=FALSE}
+# Apply the Burgess (2001) spacing correction to HRM data
+vh_results <- burgess_correction(vh_results)
+```
+
+---
+
+# The Non-Destructive Architecture
+
+`sapfluxr` never overwrites your raw data. Each correction creates a new column, allowing you to compare the impact of different strategies:
+
+| Column | Correction Applied |
+| :--- | :--- |
+| `Vh_cm_hr_raw` | Uncorrected |
+| `Vh_cm_hr_zf` | Zero-flow offset (Flat) |
+| `Vh_cm_hr_sc` | Spacing corrected (Burgess) |
+| `Vh_cm_hr` | **Current Best Estimate** (pointer column) |
+
+By inspecting these columns, you can audit exactly how your raw measurements were transformed into final estimates.
+
+With a stable baseline established, the next step is **Step 6: Wound Correction**.

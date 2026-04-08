@@ -1,0 +1,137 @@
+---
+title: "01. Data Import & Configuration"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{01. Data Import & Configuration}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+The first two steps of the **sapfluxr** pipeline focus on bringing raw sensor data into R and establishing the physical context (probe and wood properties) required for accurate heat pulse velocity calculations.
+
+# Step 1: Data Import
+
+`sapfluxr` is designed to work seamlessly with ICT International SFM1 and SFM1x sensors. The `read_heat_pulse_data()` function is the primary entry point, providing automatic format detection and validation.
+
+## Supported Formats
+
+The function automatically detects three primary data formats:
+1.  **ICT Current (JSON/TXT)**: The modern format for SFM1x loggers, containing nested arrays of temperature and diagnostic data.
+2.  **ICT Legacy**: Tab-delimited or fixed-width legacy formats.
+3.  **CSV**: Standard CSV exports from ICT's Sap Flow Tool.
+
+```{r import, eval=FALSE}
+library(sapfluxr)
+
+# Import and auto-detect format
+hp_data <- read_heat_pulse_data("path/to/sfm_data.txt")
+
+# The output is a list containing:
+# - measurements: The raw temperature records (do, di, uo, ui)
+# - diagnostics: Battery, voltage, and sensor temperature
+# - metadata: File info and detected format
+# - validation: Results of quality checks
+```
+
+## Data Validation & Cleaning
+
+During import, `sapfluxr` performs several automated checks:
+*   **Timestamp Continuity**: Detects and fills gaps in the measurement sequence.
+*   **Incomplete Days**: Optionally removes partial days at the start/end of a file, which can bias daily minima calculations.
+*   **Outlier Detection**: Flags illogical temperature values (e.g., >100°C or < -20°C).
+
+```{r cleaning, eval=FALSE}
+# Trim incomplete days (less than 23h of data)
+hp_data <- read_heat_pulse_data(
+  "path/to/sfm_data.txt",
+  trim_incomplete_days = TRUE
+)
+```
+
+## Clock Drift Correction
+
+Logger clocks can drift over long deployments. `fix_clock_drift()` allows you to linearly stretch or compress the timeline based on observed device time versus actual time.
+
+```{r clock, eval=FALSE}
+fixed_data <- fix_clock_drift(
+  hp_data,
+  observed_device_time = "2024-12-01 10:05:00",
+  observed_actual_time = "2024-12-01 10:00:00"
+)
+```
+
+---
+
+# Step 2: Wood Property Estimation
+
+Heat pulse velocity depends directly on the thermal properties of the sapwood. `sapfluxr` provides a structured way to manage these properties.
+
+## The Configuration System
+
+Configurations are managed via YAML files, ensuring that your analysis is reproducible and your parameters are explicitly documented.
+
+### Loading Pre-defined Properties
+The package includes several built-in configurations for common species/wood types:
+
+```{r load_config}
+# Load built-in eucalyptus properties
+wood_props <- load_wood_properties("eucalyptus")
+
+# View the configuration
+# print(wood_props)
+```
+
+### Creating Custom Configurations
+You can create your own YAML files or specify properties as a list.
+
+```{r custom_config, eval=FALSE}
+custom_wood <- create_custom_wood_properties(
+  config_name = "My_Tree_01",
+  dry_density = 450,
+  fresh_density = 520,
+  moisture_content = 35
+)
+```
+
+## Calculating Properties from Measurements
+
+If you have measurements from wood core samples, you can calculate the required thermal parameters (diffusivity $k$, and the $Y$ and $Z$ factors) using two equivalent workflows.
+
+### Workflow A: Fresh Weight & Volume
+The standard approach requiring fresh weight, dry weight, and fresh volume.
+
+```{r weight_vol, eval=FALSE}
+my_wood <- calculate_wood_properties(
+  fresh_weight = 12.5,
+  dry_weight = 8.2,
+  fresh_volume = 15.1
+)
+```
+
+### Workflow B: Dual-Density
+An optimized approach requiring only fresh and dry density (volume cancels out).
+
+```{r dual_density, eval=FALSE}
+my_wood <- calculate_wood_properties(
+  fresh_density = 0.82,
+  dry_density = 0.54
+)
+```
+
+## Probe Configuration
+
+Finally, you must specify the physical geometry of your probes (e.g., spacing). Most ICT SFM1x sensors use the symmetrical configuration ($x = 0.5$ cm).
+
+```{r probe}
+# Load default symmetrical probe (0.5 cm spacing)
+probe_cfg <- load_probe_config("symmetrical")
+```
+
+With data imported and physical properties defined, you are ready for **Step 3: HPV Calculation**.

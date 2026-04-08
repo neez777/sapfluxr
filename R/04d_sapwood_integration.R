@@ -350,9 +350,14 @@ calc_sap_flux <- function(flux_data,
   sapwood_depth <- sapwood_areas$tree_dimensions$sapwood_depth_cm
   rings <- sapwood_areas$rings
 
-  # Process each timestamp
+  # Detect additional grouping columns (method, method_label, pulse_id)
+  # These need to be preserved so each method gets its own integration
+  potential_group_cols <- c("method", "method_label", "pulse_id")
+  group_cols <- c("datetime", intersect(potential_group_cols, names(flux_data)))
+
+  # Process each unique combination of grouping columns
   results <- flux_data %>%
-    dplyr::group_by(datetime) %>%
+    dplyr::group_by(dplyr::across(dplyr::all_of(group_cols))) %>%
     dplyr::summarise(
       Q_cm3_hr = calc_flux_single_timestamp(
         sensor_positions = sensor_position,
@@ -368,8 +373,8 @@ calc_sap_flux <- function(flux_data,
   results$Q_L_hr <- results$Q_cm3_hr / 1000
   results$Q_L_day <- results$Q_L_hr * 24
 
-  # Merge back with original data
-  flux_data <- dplyr::left_join(flux_data, results, by = "datetime")
+  # Merge back with original data using all grouping columns
+  flux_data <- dplyr::left_join(flux_data, results, by = group_cols)
 
   return(flux_data)
 }

@@ -1,102 +1,192 @@
 ---
-title: "Quick Start Guide"
+title: "Quick Start Guide: The sapfluxr Pipeline"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Quick Start Guide}
-  %%\VignetteEngine{knitr::rmarkdown}
-  %%\VignetteEncoding{UTF-8}
+  %\VignetteIndexEntry{Quick Start Guide: The sapfluxr Pipeline}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
 ---
 
 ```{r, include = FALSE}
-knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.path = "man/figures/vignette-",
+  out.width = "100%"
+)
 ```
 
-# Fast Track Workflow
+# Introduction
 
-This guide demonstrates the standard `sapfluxr` pipeline from raw data to daily water use.
+**sapfluxr** is an open-source R package designed for processing heat pulse velocity (HPV) data from sensors like the ICT International SFM1 and SFM1x. Its core design philosophy is built on **transparency**, **non-destructive corrections**, and **reproducible research**.
+
+This guide walks you through the 10-step processing pipeline implemented in the package, from importing raw sensor data to calculating daily tree-level water use.
+
+## The 10-Step Pipeline
+
+The processing pipeline follows a sequence of physically grounded steps:
+
+1.  **Data Import**: Standardizing raw measurements into a validated structure.
+2.  **Wood Property Estimation**: Characterizing the thermal and physical properties of sapwood.
+3.  **Heat Pulse Velocity (HPV) Calculation**: Applying multi-method physical equations (e.g., HRM, MHR, T-max).
+4.  **Changepoint & Zero-Flow Identification**: Determining temporal calibration periods where flow is minimal.
+5.  **Baseline Correction**: Removing zero-flow offsets using segmented, non-destructive models.
+6.  **Wound Correction**: Scaling velocity to account for probe insertion damage.
+7.  **Secondary Method Calibration**: Aligning methods to ensure a smooth transition across flow regimes.
+8.  **Dual Method Switching (sDMA)**: Dynamically selecting the most accurate method for current flow.
+9.  **Flux Density & Radial Integration**: Converting velocity to sap flux and scaling to tree-level.
+10. **Daily Aggregation**: Integrating sub-daily data into daily totals (L day⁻¹).
+
+------------------------------------------------------------------------
+
+# A Minimal Pipeline Example
 
 ```{r setup}
 library(sapfluxr)
 ```
 
-## 1. Import Data
+## Step 1: Data Import
 
-```{r import, eval=FALSE}
-# Import Heat Pulse Data (auto-detects format)
-sapdata <- read_heat_pulse_data("path/to/data.txt", show_progress = TRUE)
+First, we import the raw data. `sapfluxr` automatically detects the sensor format (CSV, JSON/TXT, or SFT).
 
-# Import Weather Data (for VPD)
-weather <- read_weather_data("path/to/weather.csv")
-weather <- calc_vpd(weather)
+```{r import}
+# Use a sample file included in the package
+sample_file <- system.file("extdata", "sample_ict_current.txt", package = "sapfluxr")
+hp_data <- read_heat_pulse_data(sample_file)
+
+# Inspect the structure
+hp_data$measurements
 ```
 
-## 2. Calculate Velocity
+For more details on supported formats and validation, see [Data Import & Configuration](vignette-01-import-and-config.html).
 
-Calculate raw velocities for all candidate methods.
+## Step 2: Wood Property Estimation
 
-```{r calc, eval=FALSE}
-vh_raw <- calc_heat_pulse_velocity(
-  sapdata,
-  methods = c("HRM", "MHR", "HRMXb"),
-  wood_properties = "eucalyptus"
-)
-```
+Accurate thermal properties are critical. You can load pre-defined configurations or calculate them from core sample measurements.
 
-## 3. Apply Corrections
-
-**Spacing Correction:** Use stable VPD (pre-dawn) periods to zero the data.
-
-```{r spacing, eval=FALSE}
-vh_sc <- apply_spacing_correction(
-  vh_raw,
-  method = "vpd",
-  weather_data = weather,
-  min_segment_days = 21
-)
-```
-
-**Wound Correction:** Account for probe injury.
-
-```{r wound, eval=FALSE}
+```{r wood}
+# Load a configuration for Eucalyptus
 wood_props <- load_wood_properties("eucalyptus")
-wood_props$wound_correction$final_diameter_mm <- 2.8
 
-vh_final <- apply_wound_correction(
-  vh_sc$vh_corrected,
+# View the derived thermal diffusivity (k) used in HPV equations
+wood_props$thermal_properties$axial_diffusivity
+```
+
+## Step 3: HPV Calculation
+
+`sapfluxr` supports multiple HPV methods. Here we calculate both the **Heat Ratio Method (HRM)** for low flows and **Maximum Heat Ratio (MHR)** for higher flows.
+
+```{r hpv}
+# Calculate velocities for multiple methods
+vh_results <- calc_heat_pulse_velocity(
+  hp_data,
+  methods = c("HRM", "MHR"),
   wood_properties = wood_props
 )
+
+# View the results (note the Vh_cm_hr_raw column)
+head(vh_results)
 ```
 
-## 4. sDMA Method Switching
+For more details on HPV physics and method selection, see [HPV Calculation Methods](vignette-02-hpv-calculation.html).
 
-Combine low-flow accuracy (HRM) with high-flow range (MHR).
+## Step 4: Changepoint & Zero-Flow Identification
 
-```{r sdma, eval=FALSE}
-# 1. Find optimal breakpoint (Segmented Regression)
-seg_res <- compare_methods_segmented(vh_final, "HRM", "MHR")
+Probes drift over time. We need to identify periods where sap flow is at a genuine zero-flow baseline. We can use the **PELT** algorithm to find structural breaks in the daily minima.
 
-# 2. Calibrate MHR to match HRM at the breakpoint
-calib <- calibrate_method_to_primary(
-  vh_final,
-  primary = "HRM", secondary = "MHR",
-  threshold_velocity = seg_res$breakpoint
+```{r changepoints}
+# Detect changepoints in the zero-flow baseline
+vh_results <- detect_changepoints(
+  vh_results,
+  method = "pelt",
+  penalty = "MBIC"
+)
+```
+
+## Step 5: Baseline Correction
+
+Once changepoints are identified, we subtract the zero-flow offset. `sapfluxr` uses a **non-destructive architecture**, creating new columns for each correction stage.
+
+```{r baseline}
+# Apply flat offset subtraction per segment
+vh_results <- apply_zero_flow_offset(
+  vh_results,
+  correction_model = "flat"
 )
 
-# 3. Switch based on Peclet > 1.0
-vh_sdma <- apply_sdma_switching(
-  vh_final,
+# HRM-specific Spacing Correction is also available
+# vh_results <- burgess_correction(vh_results)
+```
+
+For more details on baseline identification and correction models, see [Baseline & Zero-Flow Correction](vignette-03-baseline-and-zero-flow.html).
+
+## Step 6: Wound Correction
+
+Wounding at the probe site causes systematic underestimation. We scale the velocity based on the wound diameter.
+
+```{r wound}
+# Apply wound correction (B-factor from Burgess et al. 2001)
+vh_results <- apply_wound_correction(
+  vh_results,
+  wound_diameter = 2.0  # mm
+)
+```
+
+## Step 7 & 8: Calibration & Switching (sDMA)
+
+To capture the full diurnal range, we switch between methods (e.g., HRM and MHR) based on the **PÃ©clet number**. First, we calibrate the secondary method to the corrected HRM scale.
+
+```{r sdma}
+# 1. Calibrate MHR to HRM scale
+vh_results <- calibrate_secondary_method(
+  vh_results,
+  primary = "HRM",
+  secondary = "MHR"
+)
+
+# 2. Switch methods (sDMA)
+vh_results <- apply_sdma_switching(
+  vh_results,
+  primary = "HRM",
   secondary = "MHR",
   switching_mode = "peclet",
-  threshold = 1.0,
-  calibration = calib
+  threshold = 1.0
 )
 ```
 
-## 5. Water Use
+For more details on method integration and sDMA, see [Advanced Corrections & Switching](vignette-04-wound-and-method-correction.html).
 
-Convert to flux density ($J_v$) and scale to whole-tree flow ($Q$).
+## Step 9: Flux Density & Radial Integration
 
-```{r flux, eval=FALSE}
-flux <- apply_flux_conversion(vh_sdma, wood_properties = wood_props, velocity_col = "Vh_sdma")
-daily <- aggregate_daily(flux)
+We convert velocity ($V_h$) to sap flux density ($J_v$) and integrate over the sapwood area (using the two-annulus model).
+
+```{r flux}
+# Calculate sapwood areas and convert to tree-level sap flux (Q)
+sap_flux <- calc_sap_flux(
+  vh_results,
+  wood_properties = wood_props,
+  sapwood_depth_mm = 35  # example depth
+)
 ```
+
+## Step 10: Daily Aggregation
+
+Finally, we aggregate the sub-daily flux into daily totals.
+
+```{r daily}
+# Aggregate to daily L/day
+daily_totals <- aggregate_daily(
+  sap_flux,
+  method = "net_sum"
+)
+
+head(daily_totals)
+```
+
+For more details on scaling and daily aggregation, see [Flux Scaling & Daily Totals](vignette-05-flux-scaling-and-aggregation.html).
+
+------------------------------------------------------------------------
+
+# Next Steps
+
+This quickstart guide provides a high-level overview. For deep dives into each part of the pipeline, explore the detailed vignettes linked above.

@@ -417,7 +417,20 @@ calculate_time_to_max_temperatures <- function(zero_temps, pre_pulse = 30) {
     # Sort by row order (time sequence within pulse)
     pulse_data <- pulse_data[order(pulse_data$datetime), ]
 
-    if (nrow(pulse_data) < pre_pulse + 10) {
+    # Detect sampling interval from timestamps
+    sampling_interval <- 1.0
+    if (nrow(pulse_data) >= 2) {
+      time_diffs <- as.numeric(difftime(pulse_data$datetime[2:min(5, nrow(pulse_data))],
+                                         pulse_data$datetime[1:(min(5, nrow(pulse_data)) - 1)],
+                                         units = "secs"))
+      median_diff <- stats::median(time_diffs)
+      if (!is.na(median_diff) && median_diff > 0) {
+        sampling_interval <- median_diff
+      }
+    }
+    pre_pulse_rows <- round(pre_pulse / sampling_interval)
+
+    if (nrow(pulse_data) < pre_pulse_rows + 10) {
       # Not enough data points
       t_max_down[i] <- NA_real_
       t_max_up[i] <- NA_real_
@@ -425,7 +438,7 @@ calculate_time_to_max_temperatures <- function(zero_temps, pre_pulse = 30) {
     }
 
     # Calculate baseline (pre-pulse mean)
-    pre_pulse_idx <- 1:min(pre_pulse, nrow(pulse_data))
+    pre_pulse_idx <- 1:min(pre_pulse_rows, nrow(pulse_data))
     baseline_down <- mean(pulse_data[[down_col]][pre_pulse_idx], na.rm = TRUE)
     baseline_up <- mean(pulse_data[[up_col]][pre_pulse_idx], na.rm = TRUE)
 
@@ -442,10 +455,8 @@ calculate_time_to_max_temperatures <- function(zero_temps, pre_pulse = 30) {
     idx_max_up <- which.max(delta_up)
 
     # Convert to time after pulse (seconds)
-    # Index 1 = time 0 (pre-pulse start)
-    # Index (pre_pulse + 1) = time 0 after pulse injection
-    t_max_down[i] <- idx_max_down - pre_pulse
-    t_max_up[i] <- idx_max_up - pre_pulse
+    t_max_down[i] <- (idx_max_down - pre_pulse_rows) * sampling_interval
+    t_max_up[i] <- (idx_max_up - pre_pulse_rows) * sampling_interval
   }
 
   return(list(

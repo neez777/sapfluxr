@@ -492,6 +492,22 @@ calc_vh_single_pulse <- function(pulse_data, pulse_id, parameters, methods, plot
   HRM_end <- parameters$HRM_end
   pre_pulse <- parameters$pre_pulse
 
+  # Detect sampling interval from timestamps
+  sampling_interval <- 1.0
+  if (nrow(pulse_data) >= 2 && "datetime" %in% names(pulse_data)) {
+    time_diffs <- as.numeric(difftime(pulse_data$datetime[2:min(5, nrow(pulse_data))],
+                                       pulse_data$datetime[1:(min(5, nrow(pulse_data)) - 1)],
+                                       units = "secs"))
+    median_diff <- stats::median(time_diffs)
+    # Only use detected interval if positive (datetimes may be identical within a pulse)
+    if (!is.na(median_diff) && median_diff > 0) {
+      sampling_interval <- median_diff
+    }
+  }
+
+  # Convert pre_pulse (seconds) to row count
+  pre_pulse_rows <- round(pre_pulse / sampling_interval)
+
   # OPTIMISATION: Use C++ for preprocessing (delta temps, ratios, peak finding)
   # This is ~10-50x faster than pure R for large pulse datasets
   preprocessed <- preprocess_pulse_data_cpp(
@@ -499,7 +515,8 @@ calc_vh_single_pulse <- function(pulse_data, pulse_id, parameters, methods, plot
     di_vec = pulse_data$di,
     uo_vec = pulse_data$uo,
     ui_vec = pulse_data$ui,
-    pre_pulse = pre_pulse
+    pre_pulse_rows = pre_pulse_rows,
+    sampling_interval = sampling_interval
   )
 
   # Extract preprocessed results
@@ -511,8 +528,8 @@ calc_vh_single_pulse <- function(pulse_data, pulse_id, parameters, methods, plot
   dTratio_diui <- preprocessed$dTratio_diui
   peak_info <- preprocessed$peak_info
 
-  # Calculate time after heat pulse (still needed for HRM period)
-  tp <- pmax(1:nrow(pulse_data) - pre_pulse, 0)
+  # Calculate time after heat pulse in seconds (row index * sampling_interval)
+  tp <- pmax((1:nrow(pulse_data) - pre_pulse_rows) * sampling_interval, 0)
   HRM_period <- tp >= HRM_start & tp < HRM_end
 
   # Initialize results
@@ -528,7 +545,8 @@ calc_vh_single_pulse <- function(pulse_data, pulse_id, parameters, methods, plot
   # Maximum Heat Ratio (MHR) - Use C++ implementation
   if ("MHR" %in% methods) {
     mhr_results <- calc_mhr_cpp(deltaT_do, deltaT_di, deltaT_uo, deltaT_ui,
-                                diffusivity, probe_spacing, pre_pulse)
+                                diffusivity, probe_spacing, pre_pulse_rows,
+                                sampling_interval)
     method_results[["MHR"]] <- mhr_results
   }
 
@@ -552,13 +570,15 @@ calc_vh_single_pulse <- function(pulse_data, pulse_id, parameters, methods, plot
   # T-max methods - Use C++ implementations
   if ("Tmax_Coh" %in% methods) {
     tmax_coh_results <- calc_tmax_coh_cpp(deltaT_do, deltaT_di, diffusivity,
-                                          probe_spacing, pre_pulse)
+                                          probe_spacing, pre_pulse_rows,
+                                          sampling_interval)
     method_results[["Tmax_Coh"]] <- tmax_coh_results
   }
 
   if ("Tmax_Klu" %in% methods) {
     tmax_klu_results <- calc_tmax_klu_cpp(deltaT_do, deltaT_di, diffusivity,
-                                          probe_spacing, tp_1, pre_pulse)
+                                          probe_spacing, tp_1, pre_pulse_rows,
+                                          sampling_interval)
     method_results[["Tmax_Klu"]] <- tmax_klu_results
   }
 

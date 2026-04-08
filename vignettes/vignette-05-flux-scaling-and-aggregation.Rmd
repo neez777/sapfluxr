@@ -1,0 +1,81 @@
+---
+title: "05. Flux Scaling & Daily Totals"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{05. Flux Scaling & Daily Totals}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+The final steps of the **sapfluxr** pipeline transform corrected heat pulse velocity ($V_h$) into physically meaningful sap flux density ($J_v$) and scale these measurements to whole-tree water use ($Q$).
+
+# Step 9: Flux Density & Radial Integration
+
+## 1. Velocity to Flux Density ($J_v$)
+Heat pulse velocity ($V_h$) measures the speed of heat moving through the sapwood, which includes both the moving sap and the stationary wood matrix. To extract the true sap velocity, we apply the **sap flux conversion factor ($Z$)**:
+
+$$J_v = Z \cdot V_h$$
+
+The $Z$ factor is derived from the wood density and moisture content measurements established in Step 2.
+
+## 2. Radial Integration (Hatton 1990)
+Because sap flow varies with depth from the bark, a single sensor measurement must be integrated over the representative area (annulus) of the sapwood. `sapfluxr` implements the **Hatton et al. (1990) two-annulus model** for SFM1x probes:
+
+*   **Outer Annulus ($A_{so}$)**: Assigned the flux density from the outer sensor (7.5 mm depth).
+*   **Inner Annulus ($A_{si}$)**: Assigned the flux density from the inner sensor (22.5 mm depth).
+
+The boundaries of these annuli are determined by the total sapwood depth of the tree.
+
+```{r flux, eval=FALSE}
+library(sapfluxr)
+
+# Calculate tree-level sap flux (Q, in cm³/hr)
+sap_flux <- calc_sap_flux(
+  vh_results,
+  wood_properties = wood_props,
+  dbh = 35.2,            # Tree diameter (cm)
+  bark_thickness = 1.2,   # Bark thickness (cm)
+  sapwood_depth_mm = 45   # Sapwood depth (mm)
+)
+```
+
+### Handling Heartwood
+If the sapwood is shallow (e.g., < 22.5 mm), the inner sensor may sit in non-conducting heartwood. `sapfluxr` automatically detects this based on your `sapwood_depth_mm` input and adjusts the integration zones accordingly, zeroing the contribution of any sensors located beyond the sapwood-heartwood boundary.
+
+---
+
+# Step 10: Daily Aggregation
+
+Finally, sub-daily measurements (e.g., 15-minute or 30-minute pulses) are integrated into daily totals. This is the primary output used for seasonal water-use studies and environmental regressions.
+
+## Integration Method
+`sapfluxr` integration accounts for the measurement interval automatically:
+
+```{r daily, eval=FALSE}
+# Aggregate to daily L/day
+daily_totals <- aggregate_daily(
+  sap_flux,
+  method = "net_sum",
+  min_measurements_per_day = 40  # require at least 40 pulses/day
+)
+```
+
+### Options:
+*   **`net_sum`**: Includes negative velocities. This treats nocturnal reverse flow as a genuine hydraulic redistribution that offsets daytime transpiration.
+*   **`zero_floor`**: Zeros all negative values before integration. This assumes negative readings are noise or sensor artefacts rather than real flow.
+*   **Completeness Tracking**: The output includes `data_completeness` (0-1) and `n_measurements` columns, allowing you to filter out days with significant gaps (e.g., due to battery failure).
+
+---
+
+# Summary
+
+By following these 10 steps, **sapfluxr** ensures that your raw sensor data is transformed into validated, corrected, and integrated water-use estimates through a transparent and reproducible pipeline.
+
+For more advanced workflows, including batch processing of multiple trees or custom method development, see the [Reference Documentation](index.html).

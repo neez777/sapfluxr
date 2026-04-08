@@ -1,0 +1,91 @@
+---
+title: "04. Advanced Corrections & Switching"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{04. Advanced Corrections & Switching}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+The final stages of the velocity pipeline involve scaling the measurements to account for wood damage and integrating multiple methods to capture the full diurnal range of sap flow.
+
+# Step 6: Wound Correction
+
+The physical insertion of probes creates a wound zone that obstructs heat transport, leading to a systematic underestimation of velocity (often 40–60%). `sapfluxr` implements the standard linear scaling model:
+
+$$V_c = B \cdot V_h$$
+
+Where $B$ is a correction coefficient indexed by **wound diameter** and **probe spacing**.
+
+```{r wound, eval=FALSE}
+library(sapfluxr)
+
+# Apply wound correction using a 2.0 mm diameter
+vh_results <- apply_wound_correction(
+  vh_results,
+  wound_diameter = 2.0,
+  probe_spacing = 0.5
+)
+```
+
+## Temporal Wound Expansion
+Wound diameter is not static; callus formation can change the effective wound size over months. `sapfluxr` supports time-varying wound diameters if you provide initial and final measurements.
+
+---
+
+# Step 7: Secondary Method Calibration
+
+When using multiple methods (e.g., HRM for low flow and MHR for high flow), a "junction artefact" or step-change often appears at the switching boundary. This occurs because the baseline correction (Step 5) is typically derived from HRM data and may not perfectly align with the secondary method's raw scale.
+
+`sapfluxr` eliminates this by calibrating the secondary method to the corrected HRM scale using their overlapping valid region (typically 5–15 cm h⁻¹).
+
+```{r calibration, eval=FALSE}
+# Aligns MHR to the corrected HRM scale
+vh_results <- calibrate_secondary_method(
+  vh_results,
+  primary = "HRM",
+  secondary = "MHR",
+  sensor_position = "outer"
+)
+```
+
+---
+
+# Step 8: Dual Method Switching (sDMA)
+
+The **Selectable Dual Method Approach (sDMA)** dynamically selects the most appropriate method for each pulse. This ensures that low nocturnal flows are captured with the precision of HRM, while midday peaks are captured by the extended range of MHR or T-max.
+
+## Switching Modes
+`sapfluxr` supports two switching criteria:
+1.  **Péclet (Recommended)**: Switches when $Pe > 1.0$ (convection dominates).
+2.  **Velocity**: Switches at a user-defined velocity threshold (e.g., 18 cm h⁻¹).
+
+```{r sdma, eval=FALSE}
+# Combine methods using Péclet-based switching
+vh_results <- apply_sdma_switching(
+  vh_results,
+  primary = "HRM",
+  secondary = "MHR",
+  switching_mode = "peclet",
+  threshold = 1.0
+)
+```
+
+## The "Current Best" Column
+After switching, the `Vh_cm_hr` column is updated to point to the sDMA result. This "pointer column" ensures that all downstream flux and integration functions automatically use the most accurate available estimate.
+
+| Column | Description |
+| :--- | :--- |
+| `Vh_cm_hr_raw` | Uncorrected |
+| `Vh_cm_hr_wc` | Wound corrected |
+| `Vh_cm_hr_sdma` | **sDMA Integrated** |
+| `Vh_cm_hr` | **Pointer to vh_cm_hr_sdma** |
+
+With the integrated velocity time series finalized, the last steps are **Step 9: Flux Density & Radial Integration** and **Step 10: Daily Aggregation**.
