@@ -89,7 +89,7 @@ get_hardcoded_probe_defaults <- function(config_name = "symmetrical") {
 #' @field sensor_positions Named list of sensor positions relative to heater
 #' @field probe_diameter Probe diameter in mm
 #' @field heat_pulse_duration Heat pulse duration in seconds
-#' @field thermal_diffusivity Thermal diffusivity (cm²/s), NULL if estimated
+#' @field thermal_diffusivity Thermal diffusivity (cm^2/s), NULL if estimated
 #' @field compatible_methods List of compatible calculation methods
 #' @field method_priorities Priority ranking of methods for this configuration
 #' @field required_parameters List of required parameters for each method
@@ -122,7 +122,7 @@ ProbeConfiguration <- R6::R6Class(
     #' @param sensor_positions Named list of sensor positions
     #' @param probe_diameter Probe diameter in mm
     #' @param heat_pulse_duration Heat pulse duration in seconds
-    #' @param thermal_diffusivity Thermal diffusivity (cm²/s)
+    #' @param thermal_diffusivity Thermal diffusivity (cm^2/s)
     #' @param compatible_methods Compatible calculation methods
     #' @param method_priorities Priority ranking of methods (optional)
     #' @param required_parameters Required parameters for each method (optional)
@@ -589,11 +589,11 @@ validate_sensor_alignment <- function(sap_data, config) {
         baseline_temps[[col]] <- mean(measurements[[col]][1:baseline_window], na.rm = TRUE)
       }
 
-      # Check for large baseline differences (> 2°C)
+      # Check for large baseline differences (> 2 degC)
       temp_diffs <- abs(diff(unlist(baseline_temps)))
       if (any(temp_diffs > 2.0, na.rm = TRUE)) {
         warnings <- c(warnings, sprintf(
-          "Large baseline temperature differences detected (max: %.2f°C) - may indicate sensor misalignment",
+          "Large baseline temperature differences detected (max: %.2f degC) - may indicate sensor misalignment",
           max(temp_diffs, na.rm = TRUE)
         ))
       }
@@ -749,7 +749,7 @@ print_compatibility_matrix <- function() {
   methods <- names(matrix_df)[-1]  # exclude 'configuration' column
 
   cat("Method Compatibility Matrix\n")
-  cat("Legend: ✓✓✓ = Optimal, ✓✓ = Good, ✓ = Possible with limitations, ✗ = Not possible\n\n")
+  cat("Legend: ", "\u2713\u2713\u2713", "= Optimal, ", "\u2713\u2713", "= Good, ", "\u2713", "= Possible with limitations, ", "\u2717", "= Not possible\n\n")
 
   # Print header
   cat(sprintf("%-25s", "Configuration"))
@@ -765,10 +765,10 @@ print_compatibility_matrix <- function() {
     for (method in methods) {
       rating <- matrix_df[i, method]
       symbol <- switch(as.character(rating),
-                       "3" = "✓✓✓",
-                       "2" = "✓✓ ",
-                       "1" = "✓  ",
-                       "0" = "✗  ")
+                       "3" = "\u2713\u2713\u2713",
+                       "2" = "\u2713\u2713",
+                       "1" = "\u2713",
+                       "0" = "\u2717")
       cat(sprintf("%8s", symbol))
     }
     cat("\n")
@@ -1064,6 +1064,13 @@ load_probe_config <- function(config_name = NULL, custom_params = NULL) {
 
   # Fall back to hardcoded defaults if YAML not found or failed to parse
   if (is.null(config_data)) {
+    # Only allow certain hardcoded names, otherwise error
+    valid_hardcoded <- c("symmetrical", "asymmetrical")
+    if (!config_name %in% valid_hardcoded) {
+      stop(sprintf("Probe configuration '%s' not found. Available hardcoded defaults: %s",
+                   config_name, paste(valid_hardcoded, collapse = ", ")))
+    }
+
     message("Using hardcoded probe configuration defaults for '", config_name, "'")
     config_data <- get_hardcoded_probe_defaults(config_name)
     yaml_source <- "hardcoded_defaults"
