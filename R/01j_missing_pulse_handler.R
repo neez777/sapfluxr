@@ -208,7 +208,7 @@ create_missing_pulse_results <- function(diagnostics, methods) {
     return(NULL)
   }
 
-  # Create placeholder rows for each missing pulse × method × sensor
+  # Create placeholder rows for each missing pulse * method * sensor
   results_list <- vector("list", nrow(missing_pulses) * length(methods) * 2)
   idx <- 1
 

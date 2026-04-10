@@ -31,7 +31,7 @@
 #' @details
 #' The function uses the following heuristics for auto-detection:
 #' \itemize{
-#'   \item Temperature: Values typically < 50°C, column names containing "temp", "air", "ta"
+#'   \item Temperature: Values typically < 50degC, column names containing "temp", "air", "ta"
 #'   \item Relative Humidity: Values 0-100, column names containing "rh", "humidity", "humid"
 #'   \item Pressure: Values around 80-110 kPa, column names containing "pressure", "press", "pa", "kpa"
 #'   \item Datetime: Column names containing "date", "time", "datetime", or parseable datetime values
@@ -192,7 +192,7 @@ detect_temperature_column <- function(data) {
       col_data <- as.numeric(data[[idx]])
       col_data <- col_data[!is.na(col_data)]
 
-      # Temperature heuristic: typically -40 to 50°C for environmental data
+      # Temperature heuristic: typically -40 to 50degC for environmental data
       if (length(col_data) > 0 &&
           min(col_data, na.rm = TRUE) >= -40 &&
           max(col_data, na.rm = TRUE) <= 50 &&
@@ -372,7 +372,7 @@ validate_weather_data <- function(data) {
   # Check temperature range
   temp_range <- range(data$air_temp_c, na.rm = TRUE)
   if (temp_range[1] < -40 || temp_range[2] > 50) {
-    issues <- c(issues, sprintf("Temperature outside expected range: %.1f to %.1f°C",
+    issues <- c(issues, sprintf("Temperature outside expected range: %.1f to %.1fdegC",
                                temp_range[1], temp_range[2]))
   }
 
@@ -422,8 +422,8 @@ validate_weather_data <- function(data) {
 #'   weather_data object. Default is "relative_humidity".
 #' @param magnus_coef Numeric. Magnus equation coefficient (dimensionless).
 #'   Default is 17.27 (Alduchov & Eskridge 1996).
-#' @param magnus_base_temp Numeric. Magnus equation base temperature (°C).
-#'   Default is 237.7°C (Alduchov & Eskridge 1996).
+#' @param magnus_base_temp Numeric. Magnus equation base temperature (degC).
+#'   Default is 237.7degC (Alduchov & Eskridge 1996).
 #' @param return_components Logical. If TRUE, returns saturated vapor pressure
 #'   and actual vapor pressure in addition to VPD. Default is FALSE.
 #'
@@ -438,10 +438,10 @@ validate_weather_data <- function(data) {
 #'
 #' Where:
 #' \itemize{
-#'   \item \eqn{e_0} = 0.61078 kPa (reference saturation vapor pressure at 0°C)
-#'   \item \eqn{T} = air temperature (°C)
+#'   \item \eqn{e_0} = 0.61078 kPa (reference saturation vapor pressure at 0degC)
+#'   \item \eqn{T} = air temperature (degC)
 #'   \item \eqn{\alpha} = 17.27 (dimensionless coefficient, \code{magnus_coef})
-#'   \item \eqn{\beta} = 237.7°C (base temperature, \code{magnus_base_temp})
+#'   \item \eqn{\beta} = 237.7degC (base temperature, \code{magnus_base_temp})
 #' }
 #'
 #' Actual vapor pressure (AVP) is calculated from relative humidity:
@@ -450,8 +450,8 @@ validate_weather_data <- function(data) {
 #' Vapor pressure deficit is then:
 #' \deqn{VPD = SVP - AVP}
 #'
-#' Default parameters (α=17.27, β=237.7) are appropriate for temperatures
-#' between 0-60°C. For sub-zero temperatures, consider adjusting parameters.
+#' Default parameters (alpha=17.27, beta=237.7) are appropriate for temperatures
+#' between 0-60degC. For sub-zero temperatures, consider adjusting parameters.
 #'
 #' @references
 #' Alduchov, O. A., & Eskridge, R. E. (1996). Improved Magnus form approximation
@@ -607,10 +607,10 @@ print.weather_data <- function(x, ...) {
 #'
 #'   Site metadata is stored as attributes:
 #'   \itemize{
-#'     \item \code{latitude}, \code{longitude} — site coordinates
-#'     \item \code{elevation} — site elevation (if present in metadata)
-#'     \item \code{silo_dataset} — SILO dataset name
-#'     \item \code{silo_extracted} — extraction date
+#'     \item \code{latitude}, \code{longitude} - site coordinates
+#'     \item \code{elevation} - site elevation (if present in metadata)
+#'     \item \code{silo_dataset} - SILO dataset name
+#'     \item \code{silo_extracted} - extraction date
 #'   }
 #'
 #' @examples

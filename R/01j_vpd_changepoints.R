@@ -154,7 +154,7 @@ calculate_daily_vpd_minima <- function(weather_data,
 #' Unlike PELT changepoint detection which identifies statistical changes in baseline,
 #' this function identifies dates based on environmental suitability:
 #' \itemize{
-#'   \item Selects days when VPD ≤ threshold (low atmospheric demand)
+#'   \item Selects days when VPD <= threshold (low atmospheric demand)
 #'   \item Ensures minimum spacing between selected dates
 #'   \item Optionally requires consecutive stable days
 #'   \item Returns dates as "changepoints" for spacing correction workflow
@@ -656,9 +656,9 @@ print.vpd_changepoints <- function(x, ...) {
 #' zero-flow detection methods. For each date:
 #'
 #' 1. **Extract pre-dawn data**: Filter to specified hours (e.g., 02:00-06:00)
-#' 2. **Check magnitude**: Is mean VPD consistently low? (mean ≤ threshold)
-#' 3. **Check stability**: Is VPD stable? (SD ≤ stability_threshold)
-#' 4. **Validate**: Sufficient data points? (n ≥ min_n_points)
+#' 2. **Check magnitude**: Is mean VPD consistently low? (mean <= threshold)
+#' 3. **Check stability**: Is VPD stable? (SD <= stability_threshold)
+#' 4. **Validate**: Sufficient data points? (n >= min_n_points)
 #'
 #' Only dates passing ALL criteria are considered valid.
 #'
@@ -852,11 +852,11 @@ detect_stable_vpd_periods <- function(weather_data,
     ))
   }
 
-  # Check magnitude criterion (mean VPD ≤ threshold)
+  # Check magnitude criterion (mean VPD <= threshold)
   daily_stats$passed_magnitude <- daily_stats$mean_predawn_vpd <= vpd_threshold &
     !is.na(daily_stats$mean_predawn_vpd)
 
-  # Check stability criterion (SD ≤ stability_threshold)
+  # Check stability criterion (SD <= stability_threshold)
   # Handle case where SD is NA (only 1 point, or all values identical)
   daily_stats$passed_stability <- (daily_stats$sd_predawn_vpd <= stability_threshold |
                                       is.na(daily_stats$sd_predawn_vpd)) &

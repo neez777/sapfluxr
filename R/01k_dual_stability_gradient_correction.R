@@ -45,8 +45,8 @@
 #' For each date:
 #' 1. Extract predawn window data (e.g., 02:00-06:00)
 #' 2. Calculate mean and SD of sap flow
-#' 3. Check magnitude criterion: mean ≤ vh_threshold
-#' 4. Check stability criterion: SD ≤ stability_threshold
+#' 3. Check magnitude criterion: mean <= vh_threshold
+#' 4. Check stability criterion: SD <= stability_threshold
 #' 5. Require both criteria to pass
 #'
 #' **Parameter Tuning:**
