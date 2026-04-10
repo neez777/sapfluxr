@@ -59,7 +59,7 @@
 #'
 #' For HRM/HRMX methods, consider \code{\link{apply_spacing_correction_workflow}}
 #' which uses Burgess et al. (2001) physics-based correction. Burgess correction
-#' is more accurate but only validated for offsets ≤ ±5 cm/hr.
+#' is more accurate but only validated for offsets <= +/-5 cm/hr.
 #'
 #' @seealso
 #' \code{\link{apply_spacing_correction_workflow}} for Burgess correction (HRM only)
@@ -215,7 +215,7 @@ apply_zero_flow_offset <- function(vh_data,
       )
 
       if (verbose) {
-        cat(sprintf("  %s / %s: offset = %.3f ± %.3f cm/hr (n = %d, range: [%.2f, %.2f])\n",
+        cat(sprintf("  %s / %s: offset = %.3f +/- %.3f cm/hr (n = %d, range: [%.2f, %.2f])\n",
                     sensor, method, offset, offset_sd, length(zero_flow_values),
                     min(zero_flow_values), max(zero_flow_values)))
       }

@@ -45,7 +45,7 @@ NULL
 #'   \item **Ideal**: Extended periods of wet, cold, overcast weather
 #'   \item **Winter**: Leafless deciduous trees in winter
 #'   \item **Cut trees**: Freshly cut trees (first few hours)
-#'   \item **Night**: Extended night periods (less reliable - low flow ≠ zero flow)
+#'   \item **Night**: Extended night periods (less reliable - low flow <> zero flow)
 #' }
 #'
 #' **Quality Indicators:**
@@ -252,7 +252,7 @@ calculate_zero_offset <- function(vh_data,
 #'
 #' @param zero_vh_range Numeric vector of zero offset values (cm/hr).
 #'   Default: seq(-10, 10, by = 0.1)
-#' @param k Thermal diffusivity (cm²/s). Default: 0.0025
+#' @param k Thermal diffusivity (cm^2/s). Default: 0.0025
 #' @param x Probe spacing (cm). Default: 0.5
 #' @param t Measurement time (sec). Default: 80
 #'
@@ -260,7 +260,7 @@ calculate_zero_offset <- function(vh_data,
 #'   \item{zero_vh}{Zero offset value (cm/hr)}
 #'   \item{coef_a}{Slope coefficient}
 #'   \item{coef_b}{Intercept coefficient}
-#'   \item{range_type}{"modeled" (|zero_vh| ≤ 5) or "extrapolated" (|zero_vh| > 5)}
+#'   \item{range_type}{"modeled" (|zero_vh| <= 5) or "extrapolated" (|zero_vh| > 5)}
 #'
 #' @details
 #' **Correction Formula:**
@@ -269,7 +269,7 @@ calculate_zero_offset <- function(vh_data,
 #'
 #' **Coefficient Calculation:**
 #'
-#' For |zero_vh| ≤ 5 cm/hr (modeled range):
+#' For |zero_vh| <= 5 cm/hr (modeled range):
 #' \itemize{
 #'   \item Uses Burgess equations to simulate probe misalignment
 #'   \item Calculates corrected velocities for range of test values
@@ -287,8 +287,8 @@ calculate_zero_offset <- function(vh_data,
 #'
 #' Based on ICT SFM1x standard configuration:
 #' \itemize{
-#'   \item Probe spacing: ±0.5 cm
-#'   \item Thermal diffusivity: 0.0025 cm²/s (typical sapwood)
+#'   \item Probe spacing: +/-0.5 cm
+#'   \item Thermal diffusivity: 0.0025 cm^2/s (typical sapwood)
 #'   \item Measurement time: 80 seconds (HRM analysis window)
 #' }
 #'

@@ -12,14 +12,14 @@
 #' @param wood_properties WoodProperties R6 object with calculated Z factor
 #'   (sap_flux_conversion_factor). Must have run calculate_wood_properties() first.
 #'
-#' @return Sap flux density (cm³/cm²/h) = sap velocity (cm/h)
+#' @return Sap flux density (cm^3/cm^2/h) = sap velocity (cm/h)
 #'
 #' @details
 #' **Formula:**
 #'
-#' Jv = Z × Vh
+#' Jv = Z * Vh
 #'
-#' where Z = (ρdw/ρs) × ((cdw + mc×cs) / cs)
+#' where Z = (rho_dw/rho_s) \* ((cdw + mc * cs) / cs)
 #'
 #' This is the formula from Burgess et al. (2001), after Barrett et al. (1995).
 #'
@@ -27,7 +27,7 @@
 #'
 #' This conversion should be applied AFTER all velocity corrections:
 #'
-#' \code{Vh (raw) → Spacing Correction → Recalc with updated k → Wound Correction → Jv}
+#' \code{Vh (raw) -> Spacing Correction -> Recalc with updated k -> Wound Correction -> Jv}
 #'
 #' **Physical Interpretation:**
 #'
@@ -191,7 +191,7 @@ apply_flux_conversion <- function(data,
 
   cat("  Summary:\n")
   cat(sprintf("    %-25s %12s %12s\n", "", "Vh (input)", "Jv (output)"))
-  cat(sprintf("    %-25s %12.2f %12.2f\n", "Mean (cm/hr or cm³/cm²/hr)", input_mean, output_mean))
+  cat(sprintf("    %-25s %12.2f %12.2f\n", "Mean (cm/hr or cm^3/cm^2/hr)", input_mean, output_mean))
   cat(sprintf("    %-25s %12.2f %12.2f\n", "Min", input_range[1], output_range[1]))
   cat(sprintf("    %-25s %12.2f %12.2f\n", "Max", input_range[2], output_range[2]))
   cat("\n")

@@ -84,7 +84,7 @@ apply_spacing_correction_per_segment <- function(vh_data,
   if (verbose) {
     cat("\n")
     cat(strrep("=", 72), "\n")
-    cat("SEGMENT-BASED SPACING CORRECTION (k =", k_assumed, "cm²/s)\n")
+    cat("SEGMENT-BASED SPACING CORRECTION (k =", k_assumed, "cm^2/s)\n")
     cat(strrep("=", 72), "\n")
     cat("Sensor:", toupper(sensor_position), "| Method:", method, "\n")
     cat("Number of segments:", n_segments, "\n")
@@ -118,7 +118,7 @@ apply_spacing_correction_per_segment <- function(vh_data,
 
     if (nrow(seg_data) == 0) {
       if (verbose) {
-        cat("  ✗ No data in this segment - skipping\n\n")
+        cat("  [FAIL] No data in this segment - skipping\n\n")
       }
       next
     }
@@ -133,7 +133,7 @@ apply_spacing_correction_per_segment <- function(vh_data,
 
     if (length(vh_values_clean) == 0) {
       if (verbose) {
-        cat("  ✗ No valid Vh values in segment - skipping\n\n")
+        cat("  [FAIL] No valid Vh values in segment - skipping\n\n")
       }
       next
     }
@@ -199,7 +199,7 @@ apply_spacing_correction_per_segment <- function(vh_data,
 
     }, error = function(e) {
       if (verbose) {
-        cat("  ✗ Error getting correction coefficients:", e$message, "\n")
+        cat("  [FAIL] Error getting correction coefficients:", e$message, "\n")
       }
       warning("Segment ", seg_id, ": ", e$message, call. = FALSE)
       corrected_vh[seg_mask] <- vh_values  # Use uncorrected
@@ -255,7 +255,7 @@ apply_spacing_correction_per_segment <- function(vh_data,
 
   if (verbose) {
     cat(strrep("=", 72), "\n")
-    cat("✓ Segment-based spacing correction complete!\n")
+    cat("[OK] Segment-based spacing correction complete!\n")
     cat("  ", length(segment_results), "segments processed\n")
     n_corrected <- sum(corrected_data$spacing_correction_applied, na.rm = TRUE)
     cat("  ", n_corrected, "observations corrected\n")
@@ -297,7 +297,7 @@ apply_spacing_correction_per_segment <- function(vh_data,
 #' @param method Method to correct (default: "HRM")
 #' @param method_col Name of method column (default: "method")
 #' @param vh_col Name of velocity column (default: "Vh_cm_hr")
-#' @param k_assumed Assumed thermal diffusivity (cm²/s) (default: 0.0025)
+#' @param k_assumed Assumed thermal diffusivity (cm^2/s) (default: 0.0025)
 #' @param probe_spacing Probe spacing (cm) (default: 0.5)
 #' @param measurement_time Measurement time (sec) (default: 80)
 #' @param lookup_table Optional pre-calculated Burgess lookup table
@@ -499,7 +499,7 @@ apply_manual_spacing_correction <- function(vh_data,
   if (verbose) {
     cat("\n")
     cat(strrep("=", 72), "\n")
-    cat("MANUAL SPACING CORRECTION (k =", k_assumed, "cm²/s)\n")
+    cat("MANUAL SPACING CORRECTION (k =", k_assumed, "cm^2/s)\n")
     cat(strrep("=", 72), "\n")
     cat("Sensor:", toupper(sensor_position), "| Method:", method, "\n")
     cat("Manual changepoints:", length(manual_changepoints), "\n")
@@ -537,7 +537,7 @@ apply_manual_spacing_correction <- function(vh_data,
 
     if (nrow(seg_data) == 0) {
       if (verbose) {
-        cat("  ✗ No data in this segment - skipping\n\n")
+        cat("  [FAIL] No data in this segment - skipping\n\n")
       }
       next
     }
@@ -552,7 +552,7 @@ apply_manual_spacing_correction <- function(vh_data,
 
     if (length(vh_values_clean) == 0) {
       if (verbose) {
-        cat("  ✗ No valid Vh values in segment - skipping\n\n")
+        cat("  [FAIL] No valid Vh values in segment - skipping\n\n")
       }
       next
     }
@@ -639,7 +639,7 @@ apply_manual_spacing_correction <- function(vh_data,
 
     }, error = function(e) {
       if (verbose) {
-        cat("  ✗ Error getting correction coefficients:", e$message, "\n")
+        cat("  [FAIL] Error getting correction coefficients:", e$message, "\n")
       }
       warning("Segment ", seg_id, ": ", e$message, call. = FALSE)
       corrected_vh[seg_mask] <- vh_values  # Use uncorrected
@@ -696,7 +696,7 @@ apply_manual_spacing_correction <- function(vh_data,
 
   if (verbose) {
     cat(strrep("=", 72), "\n")
-    cat("✓ Manual spacing correction complete!\n")
+    cat("[OK] Manual spacing correction complete!\n")
     cat("  ", length(segment_results), "segments processed\n")
     n_user_specified <- sum(sapply(segment_results, function(x) x$baseline_source == "user-specified"))
     n_auto_detected <- sum(sapply(segment_results, function(x) x$baseline_source == "auto-detected"))

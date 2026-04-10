@@ -105,7 +105,7 @@ plot_zero_flow_periods <- function(vh_data,
       cv_zero <- sd_zero / mean_zero * 100
 
       stats_text <- sprintf(
-        "Zero-flow Vh: %.2f ± %.2f cm/hr (CV: %.1f%%)\nn = %d observations",
+        "Zero-flow Vh: %.2f +/- %.2f cm/hr (CV: %.1f%%)\nn = %d observations",
         mean_zero, sd_zero, cv_zero, nrow(zero_data)
       )
     }
@@ -245,7 +245,7 @@ plot_spacing_correction_comparison <- function(spacing_result,
   # Calculate summary statistics
   coef_info <- spacing_result$correction_coefficients[[sensor_position]]
   stats_label <- sprintf(
-    "Correction: Vh_corr = %.3f × Vh + %.2f\nZero offset: %.2f cm/hr",
+    "Correction: Vh_corr = %.3f * Vh + %.2f\nZero offset: %.2f cm/hr",
     coef_info$coef_a, coef_info$coef_b, coef_info$zero_vh
   )
 
@@ -347,7 +347,7 @@ plot_burgess_coefficients <- function(lookup_table,
   t_val <- attr(lookup_table, "t_measurement")
 
   subtitle <- sprintf(
-    "k = %.4f cm²/s  |  x = %.1f cm  |  t = %d s",
+    "k = %.4f cm^2/s  |  x = %.1f cm  |  t = %d s",
     k_val, x_val, t_val
   )
 
@@ -381,7 +381,7 @@ plot_burgess_coefficients <- function(lookup_table,
       x = "Zero-flow Vh offset (cm/hr)",
       y = "Coefficient value",
       color = "Coefficient",
-      caption = "Vh_corrected = a × Vh + b"
+      caption = "Vh_corrected = a * Vh + b"
     ) +
     ggplot2::theme_classic() +
     ggplot2::theme(
@@ -538,7 +538,7 @@ plot_temperature_traces <- function(heat_pulse_data,
       title = sprintf("Temperature Traces During Zero Flow - %s Sensor", toupper(sensor_position)),
       subtitle = "Identifying time to maximum temperature (Tmax)",
       x = "Time since pulse start (seconds)",
-      y = "Temperature (°C)",
+      y = "Temperature (degC)",
       color = "Probe"
     ) +
     ggplot2::theme_classic() +
@@ -625,13 +625,13 @@ plot_k_estimation_summary <- function(k_result,
     ggplot2::labs(
       title = "Thermal Diffusivity (k) Estimation Summary",
       subtitle = sprintf(
-        "Mean k = %.4f cm²/s (%.1f%% %s from nominal)",
+        "Mean k = %.4f cm^2/s (%.1f%% %s from nominal)",
         k_result$k_mean,
         abs(k_result$k_difference_percent),
         if (k_result$k_difference_percent > 0) "higher" else "lower"
       ),
       x = "Sensor",
-      y = "k (cm²/s)"
+      y = "k (cm^2/s)"
     ) +
     ggplot2::theme_classic() +
     ggplot2::theme(
@@ -662,10 +662,10 @@ plot_k_estimation_summary <- function(k_result,
 
   rec_label <- switch(
     k_result$recommendation,
-    "no_action" = "✓ No reprocessing needed",
-    "reprocess_optional" = "ℹ Reprocessing optional",
-    "reprocess_recommended" = "⚠ Reprocessing recommended",
-    "reprocess_critical" = "⚠ Reprocessing critical",
+    "no_action" = "[OK] No reprocessing needed",
+    "reprocess_optional" = "[INFO] Reprocessing optional",
+    "reprocess_recommended" = "[WARN] Reprocessing recommended",
+    "reprocess_critical" = "[WARN] Reprocessing critical",
     "Unknown recommendation"
   )
 

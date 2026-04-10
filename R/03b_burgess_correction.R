@@ -17,15 +17,17 @@ NULL
 #'
 #' @param zero_vh_range Numeric vector of zero offset values (cm/hr).
 #'   Default: seq(-10, 10, by = 0.1)
-#' @param k Thermal diffusivity (cm²/s). Default: 0.0025
+#' @param k Thermal diffusivity (cm^2/s). Default: 0.0025
 #' @param x Probe spacing (cm). Default: 0.5
 #' @param t Measurement time (sec). Default: 80
+#' @param zero_offset_range Alias for zero_vh_range (for backward compatibility).
+#' @param resolution Step size for zero_vh_range if zero_offset_range is used.
 #'
 #' @return A data frame with columns:
 #'   \item{zero_vh}{Zero offset value (cm/hr)}
 #'   \item{coef_a}{Slope coefficient}
 #'   \item{coef_b}{Intercept coefficient}
-#'   \item{range_type}{"modeled" (|zero_vh| ≤ 5) or "extrapolated" (|zero_vh| > 5)}
+#'   \item{range_type}{"modeled" (|zero_vh| <= 5) or "extrapolated" (|zero_vh| > 5)}
 #'
 #' @details
 #' **Correction Formula:**
@@ -34,7 +36,7 @@ NULL
 #'
 #' **Coefficient Calculation:**
 #'
-#' For |zero_vh| ≤ 5 cm/hr (modeled range):
+#' For |zero_vh| <= 5 cm/hr (modeled range):
 #' \itemize{
 #'   \item Uses Burgess equations to simulate probe misalignment
 #'   \item Calculates corrected velocities for range of test values
@@ -52,8 +54,8 @@ NULL
 #'
 #' Based on ICT SFM1x standard configuration:
 #' \itemize{
-#'   \item Probe spacing: ±0.5 cm
-#'   \item Thermal diffusivity: 0.0025 cm²/s (typical sapwood)
+#'   \item Probe spacing: +/-0.5 cm
+#'   \item Thermal diffusivity: 0.0025 cm^2/s (typical sapwood)
 #'   \item Measurement time: 80 seconds (HRM analysis window)
 #' }
 #'
@@ -68,7 +70,15 @@ NULL
 calculate_burgess_coefficients <- function(zero_vh_range = seq(-10, 10, by = 0.1),
                                            k = 0.0025,
                                            x = 0.5,
-                                           t = 80) {
+                                           t = 80,
+                                           zero_offset_range = NULL,
+                                           resolution = NULL) {
+
+  # Handle alias arguments
+  if (!is.null(zero_offset_range)) {
+    if (is.null(resolution)) resolution <- 0.1
+    zero_vh_range <- seq(zero_offset_range[1], zero_offset_range[2], by = resolution)
+  }
 
   # Input validation
   if (!is.numeric(zero_vh_range) || length(zero_vh_range) == 0) {
@@ -217,6 +227,8 @@ calculate_burgess_coefficients <- function(zero_vh_range = seq(-10, 10, by = 0.1
 #' @param zero_vh Zero offset value (cm/hr)
 #' @param lookup_table Burgess coefficient lookup table from
 #'   \code{\link{calculate_burgess_coefficients}}
+#' @param zero_offset Alias for zero_vh (for backward compatibility).
+#' @param verbose Print warning messages (default: TRUE).
 #'
 #' @return A list containing:
 #'   \item{coef_a}{Slope coefficient for correction}
@@ -231,7 +243,7 @@ calculate_burgess_coefficients <- function(zero_vh_range = seq(-10, 10, by = 0.1
 #' **Severity Assessment:**
 #'
 #' \describe{
-#'   \item{|zero_vh| ≤ 1 cm/hr}{**None/Minor** - Typical for field installations}
+#'   \item{|zero_vh| <= 1 cm/hr}{**None/Minor** - Typical for field installations}
 #'   \item{|zero_vh| 1-3 cm/hr}{**Minor** - Acceptable, correction reliable}
 #'   \item{|zero_vh| 3-5 cm/hr}{**Moderate** - Significant misalignment, elevated uncertainty}
 #'   \item{|zero_vh| 5-10 cm/hr}{**Severe** - Major misalignment, correction uses extrapolation}
@@ -252,7 +264,12 @@ calculate_burgess_coefficients <- function(zero_vh_range = seq(-10, 10, by = 0.1
 #'
 #' @family spacing correction functions
 #' @export
-get_correction_coefficients <- function(zero_vh, lookup_table) {
+get_correction_coefficients <- function(zero_vh, lookup_table, zero_offset = NULL, verbose = TRUE) {
+
+  # Handle alias arguments
+  if (!is.null(zero_offset)) {
+    zero_vh <- zero_offset
+  }
 
   # Input validation
   if (!is.numeric(zero_vh) || length(zero_vh) != 1) {
@@ -272,7 +289,7 @@ get_correction_coefficients <- function(zero_vh, lookup_table) {
   # Validate zero offset range
   if (abs(zero_vh) > 10) {
     stop(
-      "Zero offset ", zero_vh, " cm/hr exceeds maximum correctable range (±10 cm/hr).\n",
+      "Zero offset ", zero_vh, " cm/hr exceeds maximum correctable range (+/-10 cm/hr).\n",
       "  Probe misalignment is too severe - data should be discarded.\n",
       "  Recommendation: Reinstall probes and recollect data."
     )
@@ -303,7 +320,7 @@ get_correction_coefficients <- function(zero_vh, lookup_table) {
   if (abs(zero_vh) > 5) {
     severity <- "severe"
     warning_msg <- paste(
-      "Zero offset", zero_vh, "cm/hr exceeds modeled range (±5 cm/hr).",
+      "Zero offset", zero_vh, "cm/hr exceeds modeled range (+/-5 cm/hr).",
       "\n  Correction uses extrapolated 1:1 offset.",
       "\n  Treat results with caution - major probe misalignment indicated.",
       "\n  Recommendation: Verify installation and consider reinstalling probes."
@@ -393,7 +410,7 @@ get_correction_coefficients <- function(zero_vh, lookup_table) {
 #' )
 #'
 #' # Apply corrections
-#' vh_corrected <- apply_spacing_correction(
+#' vh_corrected <- apply_burgess_spacing_correction(
 #'   vh_data = vh_cleaned,
 #'   correction_params = correction_params,
 #'   method = "HRM"
@@ -402,7 +419,7 @@ get_correction_coefficients <- function(zero_vh, lookup_table) {
 #'
 #' @family spacing correction functions
 #' @export
-apply_spacing_correction <- function(vh_data,
+apply_burgess_spacing_correction <- function(vh_data,
                                      correction_params,
                                      method = "HRM",
                                      method_col = "method",
@@ -489,7 +506,7 @@ apply_spacing_correction <- function(vh_data,
 #' @param method Method to correct (default: "HRM")
 #' @param method_col Name of method column (default: "method")
 #' @param vh_col Name of velocity column (default: "Vh_cm_hr")
-#' @param k_assumed Assumed thermal diffusivity (cm²/s) (default: 0.0025)
+#' @param k_assumed Assumed thermal diffusivity (cm^2/s) (default: 0.0025)
 #' @param probe_spacing Probe spacing (cm) (default: 0.5)
 #' @param measurement_time Measurement time (sec) (default: 80)
 #' @param lookup_table Optional pre-calculated Burgess lookup table. If NULL,
@@ -573,11 +590,11 @@ apply_spacing_correction <- function(vh_data,
 #'
 #' The Burgess correction solves for probe misalignment using:
 #'
-#' \code{x_corrected = sqrt(x² - ln(ratio) * 4 * k * t)}
+#' \code{x_corrected = sqrt(x^2 - ln(ratio) * 4 * k * t)}
 #'
 #' For this to be physically valid, the discriminant must be positive:
 #'
-#' \code{x² - (offset * x * 4 * t) / 3600 > 0}
+#' \code{x^2 - (offset * x * 4 * t) / 3600 > 0}
 #'
 #' Solving for maximum offset:
 #'
@@ -590,8 +607,8 @@ apply_spacing_correction <- function(vh_data,
 #'
 #' For ICT SFM1x standard configuration (x = 0.5 cm, t = 80 sec):
 #' \itemize{
-#'   \item Maximum offset: ±5.625 cm/hr
-#'   \item Validated range: ±5 cm/hr (Burgess et al. 2001)
+#'   \item Maximum offset: +/-5.625 cm/hr
+#'   \item Validated range: +/-5 cm/hr (Burgess et al. 2001)
 #' }
 #'
 #' @references
@@ -608,7 +625,7 @@ validate_zero_offset <- function(offset,
 
   # Calculate maximum physically possible offset
   # Formula: |offset_max| = (x * 3600) / (4 * t)
-  # Derived from requirement that x² > (offset * x * 4 * t) / 3600
+  # Derived from requirement that x^2 > (offset * x * 4 * t) / 3600
   max_offset <- (probe_spacing * 3600) / (4 * measurement_time)
 
   is_valid <- abs(offset) <= max_offset
@@ -647,7 +664,7 @@ apply_spacing_correction_workflow <- function(vh_data,
   if (verbose) {
     cat("\n")
     cat(strrep("=", 72), "\n")
-    cat("SPACING CORRECTION WORKFLOW (Assumed k =", k_assumed, "cm²/s)\n")
+    cat("SPACING CORRECTION WORKFLOW (Assumed k =", k_assumed, "cm^2/s)\n")
     cat(strrep("=", 72), "\n")
     cat("\n")
   }
@@ -663,7 +680,7 @@ apply_spacing_correction_workflow <- function(vh_data,
       t = measurement_time
     )
     if (verbose) {
-      cat("  ✓ Lookup table generated (", nrow(lookup_table), " coefficient pairs)\n\n")
+      cat("  ", "\u2173" ," Lookup table generated (", nrow(lookup_table), " coefficient pairs)\n\n")
     }
   }
 
@@ -699,11 +716,11 @@ apply_spacing_correction_workflow <- function(vh_data,
         # Quality assessment
         if (!is.na(zero_result$overall_cv)) {
           if (zero_result$overall_cv < 0.3) {
-            cat("  Quality: ✓ EXCELLENT (CV < 0.3)\n")
+            cat("  Quality: [OK] EXCELLENT (CV < 0.3)\n")
           } else if (zero_result$overall_cv < 0.5) {
-            cat("  Quality: ✓ ACCEPTABLE (CV < 0.5)\n")
+            cat("  Quality: [OK] ACCEPTABLE (CV < 0.5)\n")
           } else {
-            cat("  Quality: ⚠ HIGH VARIABILITY (CV > 0.5)\n")
+            cat("  Quality: [WARN] HIGH VARIABILITY (CV > 0.5)\n")
           }
         }
       }
@@ -721,7 +738,7 @@ apply_spacing_correction_workflow <- function(vh_data,
           "SPACING CORRECTION VALIDATION FAILED - ", toupper(sensor), " SENSOR\n",
           strrep("!", 70), "\n",
           "Detected zero-flow offset: ", round(validation$offset, 2), " cm/hr\n",
-          "Maximum valid offset: ±", round(validation$max_offset, 2), " cm/hr\n",
+          "Maximum valid offset: +/-", round(validation$max_offset, 2), " cm/hr\n",
           "\n",
           "PHYSICAL IMPOSSIBILITY: The detected offset would require\n",
           "temperature probes to be touching or overlapping the heater probe.\n",
@@ -743,13 +760,13 @@ apply_spacing_correction_workflow <- function(vh_data,
 
         # Skip this sensor
         if (verbose) {
-          cat("  ✗ SKIPPED: Offset validation failed\n")
+          cat("  [FAIL] SKIPPED: Offset validation failed\n")
         }
         next
       }
 
       if (verbose) {
-        cat("  Validation: ✓ PASSED (max offset: ±",
+        cat("  Validation: [OK] PASSED (max offset: +/-",
             round(validation$max_offset, 2), " cm/hr)\n")
       }
 
@@ -781,7 +798,7 @@ apply_spacing_correction_workflow <- function(vh_data,
 
     }, error = function(e) {
       if (verbose) {
-        cat("  ✗ Error processing sensor", sensor, ":", e$message, "\n")
+        cat("  [FAIL] Error processing sensor", sensor, ":", e$message, "\n")
       }
       warning("Failed to process sensor ", sensor, ": ", e$message, call. = FALSE)
     })
@@ -800,7 +817,7 @@ apply_spacing_correction_workflow <- function(vh_data,
     cat("Applying corrections to data...\n")
   }
 
-  vh_corrected <- apply_spacing_correction(
+  vh_corrected <- apply_burgess_spacing_correction(
     vh_data = vh_data,
     correction_params = correction_params,
     method = method,
@@ -811,7 +828,7 @@ apply_spacing_correction_workflow <- function(vh_data,
 
   if (verbose) {
     n_corrected <- sum(vh_corrected$spacing_correction_applied, na.rm = TRUE)
-    cat("  ✓ Corrections applied to", n_corrected, "observations\n")
+    cat("  [OK] Corrections applied to", n_corrected, "observations\n")
   }
 
   # Step 4: Create metadata
@@ -829,7 +846,7 @@ apply_spacing_correction_workflow <- function(vh_data,
   if (verbose) {
     cat("\n")
     cat(strrep("=", 72), "\n")
-    cat("✓ Spacing correction workflow complete!\n")
+    cat("[OK] Spacing correction workflow complete!\n")
     cat(strrep("=", 72), "\n")
     cat("\n")
   }
@@ -881,7 +898,7 @@ print_spacing_correction_summary <- function(correction_result) {
 
   cat("Implementation Phase:", metadata$phase, "\n")
   cat("Method Corrected:", metadata$method, "\n")
-  cat("Thermal Diffusivity (assumed):", metadata$k_assumed, "cm²/s\n")
+  cat("Thermal Diffusivity (assumed):", metadata$k_assumed, "cm^2/s\n")
   cat("Probe Spacing:", metadata$probe_spacing, "cm\n")
   cat("Measurement Time:", metadata$measurement_time, "sec\n")
   cat("Date Applied:", format(metadata$date_applied, "%Y-%m-%d %H:%M:%S"), "\n")
@@ -902,38 +919,38 @@ print_spacing_correction_summary <- function(correction_result) {
     coef <- coeffs[[sensor_name]]
 
     cat("\n")
-    cat("╔", strrep("═", 70), "╗\n", sep = "")
-    cat("║ SENSOR:", toupper(sensor_name), strrep(" ", 60 - nchar(sensor_name)), "║\n", sep = "")
-    cat("╠", strrep("═", 70), "╣\n", sep = "")
+    cat("+", strrep("-", 70), "+\n", sep = "")
+    cat("| SENSOR:", toupper(sensor_name), strrep(" ", 60 - nchar(sensor_name)), "|\n", sep = "")
+    cat("+", strrep("-", 70), "+\n", sep = "")
 
-    cat("║  Zero Offset:", sprintf("%6.1f cm/hr", coef$zero_vh),
-        strrep(" ", 48), "║\n", sep = "")
-    cat("║  Observations:", sprintf("%5d", coef$n_observations),
-        strrep(" ", 52), "║\n", sep = "")
-    cat("║  Variability (CV):", sprintf("%5.3f", coef$cv),
-        strrep(" ", 47), "║\n", sep = "")
-    cat("║", strrep(" ", 70), "║\n", sep = "")
-    cat("║  Correction Formula:", strrep(" ", 49), "║\n", sep = "")
-    cat("║    Vh_corrected = ", sprintf("%7.4f × Vh %+7.4f",
+    cat("|  Zero Offset:", sprintf("%6.1f cm/hr", coef$zero_vh),
+        strrep(" ", 48), "|\n", sep = "")
+    cat("|  Observations:", sprintf("%5d", coef$n_observations),
+        strrep(" ", 52), "|\n", sep = "")
+    cat("|  Variability (CV):", sprintf("%5.3f", coef$cv),
+        strrep(" ", 47), "|\n", sep = "")
+    cat("|", strrep(" ", 70), "|\n", sep = "")
+    cat("|  Correction Formula:", strrep(" ", 49), "|\n", sep = "")
+    cat("|    Vh_corrected = ", sprintf("%7.4f * Vh %+7.4f",
                                          coef$coef_a, coef$coef_b),
-        strrep(" ", 28), "║\n", sep = "")
-    cat("║", strrep(" ", 70), "║\n", sep = "")
-    cat("║  Range Type:", coef$range_type,
-        strrep(" ", 57 - nchar(coef$range_type)), "║\n", sep = "")
-    cat("║  Severity:", coef$severity,
-        strrep(" ", 59 - nchar(coef$severity)), "║\n", sep = "")
+        strrep(" ", 28), "|\n", sep = "")
+    cat("|", strrep(" ", 70), "|\n", sep = "")
+    cat("|  Range Type:", coef$range_type,
+        strrep(" ", 57 - nchar(coef$range_type)), "|\n", sep = "")
+    cat("|  Severity:", coef$severity,
+        strrep(" ", 59 - nchar(coef$severity)), "|\n", sep = "")
 
     if (!is.null(coef$warning) && nchar(coef$warning) > 0) {
-      cat("║", strrep(" ", 70), "║\n", sep = "")
-      cat("║  ⚠ WARNING:", strrep(" ", 57), "║\n", sep = "")
+      cat("|", strrep(" ", 70), "|\n", sep = "")
+      cat("|  [WARN] WARNING:", strrep(" ", 57), "|\n", sep = "")
       # Wrap warning text
       wrapped <- strwrap(coef$warning, width = 64)
       for (line in wrapped) {
-        cat("║    ", line, strrep(" ", 66 - nchar(line)), "║\n", sep = "")
+        cat("|    ", line, strrep(" ", 66 - nchar(line)), "|\n", sep = "")
       }
     }
 
-    cat("╚", strrep("═", 70), "╝\n", sep = "")
+    cat("+", strrep("-", 70), "+\n", sep = "")
   }
 
   cat("\n")
@@ -966,7 +983,7 @@ print.spacing_correction_result <- function(x, ...) {
 #' @param method Method to correct (default: "HRM")
 #' @param method_col Name of method column (default: "method")
 #' @param vh_col Name of velocity column (default: "Vh_cm_hr")
-#' @param k_assumed Assumed thermal diffusivity (cm²/s) (default: 0.0025)
+#' @param k_assumed Assumed thermal diffusivity (cm^2/s) (default: 0.0025)
 #' @param probe_spacing Probe spacing (cm) (default: 0.5)
 #' @param measurement_time Measurement time (sec) (default: 80)
 #' @param lookup_table Optional pre-calculated Burgess lookup table

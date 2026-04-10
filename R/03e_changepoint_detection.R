@@ -227,17 +227,29 @@ detect_changepoints <- function(daily_min,
                                  penalty_value = NULL,
                                  detection_type = "mean",
                                  min_segment_days = 7,
-                                 merge_short_segments = TRUE) {
+                                 merge_short_segments = TRUE,
+                                 method = NULL,
+                                 ...) {
 
   # Input validation
   if (!is.data.frame(daily_min)) {
     stop("daily_min must be a data frame")
   }
 
+  # Auto-calculate daily minima if needed
   required_cols <- c("date", "min_value")
   missing_cols <- setdiff(required_cols, names(daily_min))
+
   if (length(missing_cols) > 0) {
-    stop("Missing required columns: ", paste(missing_cols, collapse = ", "))
+    # Check if it looks like vh_results
+    if (all(c("datetime", "sensor_position") %in% names(daily_min))) {
+      message("Input appears to be full vh_results. Calculating daily minima internally...")
+      daily_min <- calculate_daily_minima(daily_min, ...)
+    } else {
+      stop("Missing required columns for changepoint detection: ",
+           paste(missing_cols, collapse = ", "),
+           "\n  If providing full results, ensure 'datetime' and 'sensor_position' are present.")
+    }
   }
 
   if (!penalty %in% c("MBIC", "BIC", "Manual")) {
@@ -342,7 +354,7 @@ detect_changepoints <- function(daily_min,
 
   # Build segments data frame
   # n changepoints creates n+1 segments
-  # Seg 1: 1 → cpt[1], Seg 2: cpt[1]+1 → cpt[2], ..., Seg n+1: cpt[n]+1 → end
+  # Seg 1: 1 -> cpt[1], Seg 2: cpt[1]+1 -> cpt[2], ..., Seg n+1: cpt[n]+1 -> end
   segment_starts <- c(1, cpt_indices + 1)
   segment_ends <- c(cpt_indices, nrow(daily_min))
 

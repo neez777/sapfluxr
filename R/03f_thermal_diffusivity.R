@@ -16,7 +16,7 @@ NULL
 #'
 #' Estimates thermal diffusivity (k) from time to maximum temperature during
 #' zero-flow periods. At zero flow, heat spreads symmetrically by conduction,
-#' allowing k to be calculated from: k = x² / (4 * t_max)
+#' allowing k to be calculated from: k = x^2 / (4 * t_max)
 #'
 #' @param heat_pulse_data Heat pulse data object from \code{\link{read_heat_pulse_data}}
 #' @param zero_periods List of zero-flow periods (see \code{\link{calculate_zero_offset}})
@@ -132,7 +132,7 @@ estimate_k_from_tmax <- function(heat_pulse_data,
 
       if (is.null(zero_temps) || nrow(zero_temps) == 0) {
         warning("No temperature data for sensor ", sensor, " - skipping")
-        cat("  ✗ No temperature data available\n")
+        cat("  [FAIL] No temperature data available\n")
         next
       }
 
@@ -144,7 +144,7 @@ estimate_k_from_tmax <- function(heat_pulse_data,
 
       if (is.null(tmax_results)) {
         warning("Could not calculate Tmax for sensor ", sensor)
-        cat("  ✗ Could not calculate time to maximum\n")
+        cat("  [FAIL] Could not calculate time to maximum\n")
         next
       }
 
@@ -161,14 +161,14 @@ estimate_k_from_tmax <- function(heat_pulse_data,
 
       if (length(t_max_down) == 0 || length(t_max_up) == 0) {
         warning("No valid Tmax data for sensor ", sensor)
-        cat("  ✗ No valid time to maximum data\n")
+        cat("  [FAIL] No valid time to maximum data\n")
         next
       }
 
       # Report Tmax statistics
-      cat("  Downstream t_max:", round(mean(t_max_down), 2), "±",
+      cat("  Downstream t_max:", round(mean(t_max_down), 2), "+/-",
           round(sd(t_max_down), 2), "s (n =", length(t_max_down), ")\n")
-      cat("  Upstream t_max:", round(mean(t_max_up), 2), "±",
+      cat("  Upstream t_max:", round(mean(t_max_up), 2), "+/-",
           round(sd(t_max_up), 2), "s (n =", length(t_max_up), ")\n")
 
       # Check symmetry
@@ -184,12 +184,12 @@ estimate_k_from_tmax <- function(heat_pulse_data,
       symmetry_status <- "PASS"
       if (symmetry_diff > 5) {
         symmetry_status <- "FAIL"
-        cat("  ⚠ WARNING: Probes show >5s asymmetry - likely misalignment\n")
+        cat("  [WARN] WARNING: Probes show >5s asymmetry - likely misalignment\n")
       } else if (symmetry_diff > 3) {
         symmetry_status <- "CAUTION"
-        cat("  ⚠ CAUTION: Moderate asymmetry detected\n")
+        cat("  [WARN] CAUTION: Moderate asymmetry detected\n")
       } else {
-        cat("  ✓ Symmetry check passed\n")
+        cat("  [OK] Symmetry check passed\n")
       }
 
       symmetry_results[[sensor]] <- list(
@@ -200,17 +200,17 @@ estimate_k_from_tmax <- function(heat_pulse_data,
         status = symmetry_status
       )
 
-      # Estimate k using average t_max (cm²/s)
+      # Estimate k using average t_max (cm^2/s)
       t_max_mean <- mean(c(t_max_down_mean, t_max_up_mean))
       k_estimated <- (probe_spacing^2) / (4 * t_max_mean)
 
-      cat("  Estimated k:", round(k_estimated, 6), "cm²/s\n")
+      cat("  Estimated k:", round(k_estimated, 6), "cm^2/s\n")
 
       k_estimates[[sensor]] <- k_estimated
 
     }, error = function(e) {
       warning("Error processing sensor ", sensor, ": ", e$message)
-      cat("  ✗ Error:", e$message, "\n")
+      cat("  [FAIL] Error:", e$message, "\n")
     })
   }
 
@@ -232,33 +232,33 @@ estimate_k_from_tmax <- function(heat_pulse_data,
   cat(strrep("-", 72), "\n")
   cat("\n")
   cat("OVERALL RESULTS\n")
-  cat("  Nominal k (assumed):", k_nominal, "cm²/s\n")
-  cat("  Estimated k (mean):", round(k_mean, 6), "cm²/s\n")
-  cat("  Estimated k (SD):", round(k_sd, 6), "cm²/s\n")
-  cat("  Difference:", sprintf("%+.6f", k_diff), "cm²/s (",
+  cat("  Nominal k (assumed):", k_nominal, "cm^2/s\n")
+  cat("  Estimated k (mean):", round(k_mean, 6), "cm^2/s\n")
+  cat("  Estimated k (SD):", round(k_sd, 6), "cm^2/s\n")
+  cat("  Difference:", sprintf("%+.6f", k_diff), "cm^2/s (",
       sprintf("%+.1f", k_diff_pct), "%)\n")
   cat("\n")
 
   # Assess significance and provide recommendation
   recommendation <- "no_action"
   if (abs(k_diff_pct) > 20) {
-    cat("  🚨 CRITICAL: k differs by >20% - REPROCESSING STRONGLY RECOMMENDED\n")
+    cat("  [STOP] CRITICAL: k differs by >20% - REPROCESSING STRONGLY RECOMMENDED\n")
     cat("     Current results may have substantial systematic error\n")
     recommendation <- "reprocess_critical"
 
   } else if (abs(k_diff_pct) > 10) {
-    cat("  ⚠ WARNING: k differs by >10% - reprocessing recommended\n")
+    cat("  [WARN] WARNING: k differs by >10% - reprocessing recommended\n")
     cat("     For publication-quality results, consider reprocessing\n")
     recommendation <- "reprocess_recommended"
 
   } else if (abs(k_diff_pct) > 5) {
-    cat("  ℹ NOTE: k differs by 5-10% - within typical range\n")
+    cat("  [INFO] NOTE: k differs by 5-10% - within typical range\n")
     cat("     Current results acceptable for most applications\n")
     cat("     Reprocessing optional for highest precision\n")
     recommendation <- "reprocess_optional"
 
   } else {
-    cat("  ✓ GOOD: k values agree within 5% - no reprocessing needed\n")
+    cat("  [OK] GOOD: k values agree within 5% - no reprocessing needed\n")
     recommendation <- "no_action"
   }
 
@@ -268,11 +268,11 @@ estimate_k_from_tmax <- function(heat_pulse_data,
     cat("RADIAL VARIATION CHECK\n")
     for (sensor_name in names(k_estimates)) {
       cat("  ", toupper(sensor_name), ":", round(k_estimates[[sensor_name]], 6),
-          "cm²/s\n", sep = "")
+          "cm^2/s\n", sep = "")
     }
 
     if (k_cv > 0.15) {
-      cat("  ⚠ High variability between sensors (CV =", round(k_cv, 3), ")\n")
+      cat("  [WARN] High variability between sensors (CV =", round(k_cv, 3), ")\n")
       cat("     Consider using sensor-specific k values\n")
     }
   }
@@ -292,7 +292,7 @@ estimate_k_from_tmax <- function(heat_pulse_data,
     symmetry_results = symmetry_results,
     recommendation = recommendation,
     probe_spacing = probe_spacing,
-    calculation_method = "Tmax at zero flow: k = x²/(4*t_max)"
+    calculation_method = "Tmax at zero flow: k = x^2/(4*t_max)"
   )
 
   class(result) <- c("k_estimation_result", "list")
@@ -485,10 +485,10 @@ print.k_estimation_result <- function(x, ...) {
 
   cat("RESULTS\n")
   cat(strrep("-", 72), "\n")
-  cat("  Nominal k (assumed):", x$k_nominal, "cm²/s\n")
-  cat("  Estimated k (mean):", round(x$k_mean, 6), "cm²/s\n")
-  cat("  Estimated k (SD):", round(x$k_sd, 6), "cm²/s\n")
-  cat("  Difference:", sprintf("%+.6f cm²/s (%+.1f%%)",
+  cat("  Nominal k (assumed):", x$k_nominal, "cm^2/s\n")
+  cat("  Estimated k (mean):", round(x$k_mean, 6), "cm^2/s\n")
+  cat("  Estimated k (SD):", round(x$k_sd, 6), "cm^2/s\n")
+  cat("  Difference:", sprintf("%+.6f cm^2/s (%+.1f%%)",
                                x$k_difference, x$k_difference_percent), "\n")
   cat("\n")
 
@@ -500,7 +500,7 @@ print.k_estimation_result <- function(x, ...) {
     cat(strrep("-", 72), "\n")
     for (sensor in names(x$k_by_sensor)) {
       cat("  ", toupper(sensor), ": ", round(x$k_by_sensor[[sensor]], 6),
-          " cm²/s\n", sep = "")
+          " cm^2/s\n", sep = "")
     }
     cat("\n")
   }

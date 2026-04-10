@@ -21,7 +21,7 @@
 #'   Burgess spacing correction is only validated for HRM.
 #' @param wood_properties Wood properties object or list containing:
 #'   \itemize{
-#'     \item \code{derived_properties$thermal_diffusivity_actual_cm2_s} - Thermal diffusivity (cm²/s)
+#'     \item \code{derived_properties$thermal_diffusivity_actual_cm2_s} - Thermal diffusivity (cm^2/s)
 #'     \item \code{tree_measurements$sapwood_depth} - Sapwood depth (cm, required for heartwood method)
 #'     \item \code{tree_measurements$bark_thickness} - Bark thickness (cm, optional)
 #'   }
@@ -277,7 +277,7 @@ apply_spacing_correction <- function(vh_data,
   }
 
   if (verbose) {
-    cat(sprintf("Thermal diffusivity: %.6f cm²/s\n", k_assumed))
+    cat(sprintf("Thermal diffusivity: %.6f cm^2/s\n", k_assumed))
     cat("\n")
   }
 
@@ -512,7 +512,7 @@ apply_spacing_correction <- function(vh_data,
       }
 
       if (verbose) {
-        cat("✓ Heartwood reference available\n")
+        cat("[OK] Heartwood reference available\n")
         cat(sprintf("  Inner sensor depth: %.2f cm\n", hw_check$inner_depth_cm))
         cat(sprintf("  Margin into heartwood: %.2f cm\n", hw_check$margin_cm))
         cat("\n")
@@ -647,7 +647,7 @@ print.unified_spacing_correction_result <- function(x, ...) {
   cat(strrep("=", 60), "\n")
   cat(sprintf("Method used: %s\n", toupper(x$method_used)))
   cat(sprintf("HPV method corrected: %s\n", x$metadata$hpv_method))
-  cat(sprintf("Thermal diffusivity: %.6f cm²/s\n", x$metadata$k_assumed))
+  cat(sprintf("Thermal diffusivity: %.6f cm^2/s\n", x$metadata$k_assumed))
 
   if (!is.null(x$changepoints)) {
     cat(sprintf("\nChangepoints: %d\n", length(x$changepoints)))

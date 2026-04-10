@@ -166,7 +166,7 @@ print.heartwood_reference_check <- function(x, ...) {
 #' @param method HPV method to correct (default: "HRM").
 #' @param method_col Name of method column (default: "method").
 #' @param vh_col Name of velocity column (default: "Vh_cm_hr").
-#' @param k_assumed Assumed thermal diffusivity (cm2/s, default: 0.0025).
+#' @param k_assumed Assumed thermal diffusivity (cm^2/s, default: 0.0025).
 #' @param probe_spacing Probe spacing x (cm, default: 0.5).
 #' @param measurement_time Time after heat pulse for HRM measurement (seconds,
 #'   default: 80).
@@ -175,6 +175,10 @@ print.heartwood_reference_check <- function(x, ...) {
 #' @param create_new_col If TRUE (default), creates new column with "_hrc"
 #'   suffix. If FALSE, overwrites vh_col.
 #' @param verbose Print progress messages (default: TRUE).
+#' @param probe_config Optional probe configuration object. If provided,
+#'   \code{probe_spacing} and \code{measurement_time} are extracted from it.
+#' @param sapwood_depth Optional sapwood depth (cm) (for future use).
+#' @param bark_thickness Optional bark thickness (cm) (for future use).
 #'
 #' @return A list with class \code{"heartwood_reference_correction_result"}:
 #'   \item{vh_corrected}{Data frame with corrected velocities}
@@ -258,7 +262,18 @@ apply_heartwood_reference_correction <- function(vh_data,
                                                   measurement_time = 80,
                                                   lookup_table = NULL,
                                                   create_new_col = TRUE,
-                                                  verbose = TRUE) {
+                                                  verbose = TRUE,
+                                                  probe_config = NULL,
+                                                  sapwood_depth = NULL,
+                                                  bark_thickness = NULL) {
+
+  # Handle probe_config if provided
+  if (!is.null(probe_config)) {
+    if (inherits(probe_config, "ProbeConfiguration")) {
+      probe_spacing <- abs(probe_config$sensor_positions$outer)
+      measurement_time <- probe_config$heat_pulse_duration
+    }
+  }
 
   # Input validation
   if (!is.data.frame(vh_data)) {
@@ -391,7 +406,7 @@ apply_heartwood_reference_correction <- function(vh_data,
     )
 
     # Apply correction: Vh_corrected = a * Vh + b
-    corrected_vh[i] <- coef$a * original_vh + coef$b
+    corrected_vh[i] <- coef$coef_a * original_vh + coef$coef_b
   }
 
   # Create output column name

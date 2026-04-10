@@ -22,7 +22,7 @@ NULL
 #' @param method Method to correct (default: "HRM"). Burgess correction only validated for HRM.
 #' @param baseline_overrides_outer Optional named list of manual baselines for OUTER sensor per segment
 #' @param baseline_overrides_inner Optional named list of manual baselines for INNER sensor per segment
-#' @param k_assumed Assumed thermal diffusivity (cm²/s) (default: 0.0025)
+#' @param k_assumed Assumed thermal diffusivity (cm^2/s) (default: 0.0025)
 #' @param probe_spacing Probe spacing (cm) (default: 0.5)
 #' @param measurement_time Measurement time (sec) (default: 80)
 #' @param create_new_col Logical, whether to create new corrected column (Vh_cm_hr_sc)
