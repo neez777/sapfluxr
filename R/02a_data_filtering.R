@@ -373,7 +373,7 @@ interpolate_by_groups <- function(vh_data,
 #' Internal function that performs interpolation on a single method/sensor group.
 #' Uses optimized C++ implementation for 50-100x speedup.
 #'
-#' @param group_data Data frame for a single group (one method × sensor combination)
+#' @param group_data Data frame for a single group (one method * sensor combination)
 #' @param flags_to_interpolate Quality flags to interpolate
 #' @param flags_to_preserve Quality flags to leave unchanged
 #' @param interpolation_method Interpolation method
@@ -715,7 +715,7 @@ preview_interpolation_changes <- function(vh_flagged,
 
           all_gaps[[gap_counter]] <- data.frame(
             gap_id = gap_counter,
-            group = paste(unique_groups[i, ], collapse = " × "),
+            group = paste(unique_groups[i, ], collapse = " * "),
             gap_start = group_data$datetime[gap_info$start_idx[j]],
             gap_end = group_data$datetime[gap_info$end_idx[j]],
             duration_hours = gap_info$duration_hours[j],
