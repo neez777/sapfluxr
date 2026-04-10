@@ -28,7 +28,7 @@
 #' @param wood_properties Wood properties. Can be: WoodProperties object, config name (e.g., "eucalyptus"),
 #'   path to custom YAML, or NULL (uses default generic softwood)
 #' @param parameters List of calculation parameters. See details.
-#' @param diffusivity Thermal diffusivity override (cm²/s). If provided, overrides wood_properties value.
+#' @param diffusivity Thermal diffusivity override (cm^2/s). If provided, overrides wood_properties value.
 #' @param probe_spacing Probe spacing override (cm). If provided, overrides probe_config value.
 #' @param probe_corrections Optional output from apply_hpv_corrections(). If provided, corrections
 #'   metadata will be attached to results. Note: This function calculates raw Vh; apply corrections
@@ -55,7 +55,7 @@
 #' @details
 #' The parameters list should contain:
 #' \describe{
-#'   \item{diffusivity}{Thermal diffusivity of sapwood (cm²/s), default: 0.0025}
+#'   \item{diffusivity}{Thermal diffusivity of sapwood (cm^2/s), default: 0.0025}
 #'   \item{probe_spacing}{Distance from heat source (cm), default: 0.5}
 #'   \item{L}{Lower proportion of deltaTmax for HRMX sampling window, default: 0.5}
 #'   \item{H}{Higher proportion of deltaTmax for HRMX sampling window, default: 0.8}
@@ -75,7 +75,7 @@
 #'   \item{quality_flag}{Data quality indicator}
 #'   \item{hrm_window_start_sec}{HRM: Start of averaging window (seconds after pulse). NA for other methods.}
 #'   \item{hrm_window_end_sec}{HRM: End of averaging window (seconds after pulse). NA for other methods.}
-#'   \item{hrm_peclet_number}{HRM: Peclet number (dimensionless). Pe = (Vh × x) / (D × 3600). Used for method switching. NA for other methods.}
+#'   \item{hrm_peclet_number}{HRM: Peclet number (dimensionless). Pe = (Vh \* x) / (D \* 3600). Used for method switching. NA for other methods.}
 #'   \item{mhr_upstream_peak_sec}{MHR: Time when upstream sensor reaches maximum (seconds after pulse). NA for other methods.}
 #'   \item{mhr_downstream_peak_sec}{MHR: Time when downstream sensor reaches maximum (seconds after pulse). NA for other methods.}
 #'   \item{hrmxa_window_start_sec}{HRMXa: Start of dynamic sampling window based on L threshold (seconds after pulse). NA for other methods.}
@@ -180,7 +180,7 @@ calc_heat_pulse_velocity <- function(heat_pulse_data,
 
   # Merge user parameters with defaults
   if (!is.null(parameters)) {
-    params <- modifyList(default_params, parameters)
+    params <- utils::modifyList(default_params, parameters)
   } else {
     params <- default_params
   }
@@ -691,6 +691,7 @@ calc_vh_single_pulse <- function(pulse_data, pulse_id, parameters, methods, plot
     hrm_window_start_sec = res_hrm_window_start,
     hrm_window_end_sec = res_hrm_window_end,
     hrm_peclet_number = res_hrm_peclet_number,
+    peclet_number = res_hrm_peclet_number, # Alias for backward compatibility and tests
 
     mhr_upstream_peak_sec = res_mhr_upstream_peak,
     mhr_downstream_peak_sec = res_mhr_downstream_peak,
@@ -792,9 +793,9 @@ calc_hrm <- function(dTratio_douo, dTratio_diui, HRM_period, diffusivity, probe_
   }
 
   # Calculate Peclet number (dimensionless)
-  # Pe = (Vh × x) / (D × 3600)
-  # where Vh is in cm/hr, x in cm, D in cm²/s
-  # The 3600 converts D from cm²/s to cm²/hr to match Vh units
+  # Pe = (Vh \* x) / (D \* 3600)
+  # where Vh is in cm/hr, x in cm, D in cm^2/s
+  # The 3600 converts D from cm^2/s to cm^2/hr to match Vh units
   Pe_outer <- if (!is.na(Vho_HRM) && is.finite(Vho_HRM)) {
     (Vho_HRM * probe_spacing) / (diffusivity * 3600)
   } else {
@@ -954,13 +955,13 @@ calc_hrmx <- function(deltaT_do, deltaT_di, deltaT_uo, deltaT_ui,
   # Calculate pre-max values (only on rising limb BEFORE maximum)
   dTdo_premax <- c(NA, ifelse(diff(deltaT_do) > 0, deltaT_do[-1], NA))
   dTdo_premax[idx_do_max:length(dTdo_premax)] <- NA  # Exclude points at or after max
-  
+
   dTdi_premax <- c(NA, ifelse(diff(deltaT_di) > 0, deltaT_di[-1], NA))
   dTdi_premax[idx_di_max:length(dTdi_premax)] <- NA  # Exclude points at or after max
-  
+
   dTuo_premax <- c(NA, ifelse(diff(deltaT_uo) > 0, deltaT_uo[-1], NA))
   dTuo_premax[idx_uo_max:length(dTuo_premax)] <- NA  # Exclude points at or after max
-  
+
   dTui_premax <- c(NA, ifelse(diff(deltaT_ui) > 0, deltaT_ui[-1], NA))
   dTui_premax[idx_ui_max:length(dTui_premax)] <- NA  # Exclude points at or after max
 
@@ -1072,12 +1073,12 @@ calc_hrmx <- function(deltaT_do, deltaT_di, deltaT_uo, deltaT_ui,
   di_indices <- which(!is.na(dTdi_HRMX))
   uo_indices <- which(!is.na(dTuo_HRMX))
   ui_indices <- which(!is.na(dTui_HRMX))
-  
+
   hrmxb_downstream_start_outer <- if (length(do_indices) > 0) tp[min(do_indices)] else NA_real_
   hrmxb_downstream_end_outer <- if (length(do_indices) > 0) tp[max(do_indices)] else NA_real_
   hrmxb_upstream_start_outer <- if (length(uo_indices) > 0) tp[min(uo_indices)] else NA_real_
   hrmxb_upstream_end_outer <- if (length(uo_indices) > 0) tp[max(uo_indices)] else NA_real_
-  
+
   hrmxb_downstream_start_inner <- if (length(di_indices) > 0) tp[min(di_indices)] else NA_real_
   hrmxb_downstream_end_inner <- if (length(di_indices) > 0) tp[max(di_indices)] else NA_real_
   hrmxb_upstream_start_inner <- if (length(ui_indices) > 0) tp[min(ui_indices)] else NA_real_
@@ -1278,8 +1279,8 @@ calc_tmax_klu <- function(deltaT_do, deltaT_di, diffusivity, probe_spacing, tp_1
 #'
 #' @param vh_results A vh_results object from calc_heat_pulse_velocity() containing
 #'   the temp_ratio column
-#' @param k_new New thermal diffusivity value (cm²/s)
-#' @param k_old Original thermal diffusivity value used in initial calculation (cm²/s).
+#' @param k_new New thermal diffusivity value (cm^2/s)
+#' @param k_old Original thermal diffusivity value used in initial calculation (cm^2/s).
 #'   If NULL, attempts to extract from attributes.
 #' @param probe_spacing Probe spacing (cm). If NULL, attempts to extract from attributes.
 #'
@@ -1287,13 +1288,13 @@ calc_tmax_klu <- function(deltaT_do, deltaT_di, diffusivity, probe_spacing, tp_1
 #' This function uses stored temperature ratios and times to recalculate velocities:
 #'
 #' **For ratio-based methods (HRM, MHR, HRMX):**
-#' \code{Vh_new = (k_new / x) × ln(temp_ratio) × 3600}
+#' \code{Vh_new = (k_new / x) \* ln(temp_ratio) \* 3600}
 #'
 #' **For Tmax_Coh:**
-#' \code{Vh_new = sqrt(x² - 4×k_new×t_max) / t_max × 3600}
+#' \code{Vh_new = sqrt(x^2 - 4 \* k_new \*t_max) / t_max \* 3600}
 #'
 #' **For Tmax_Klu:**
-#' \code{Vh_new = (x/t_max - sqrt(k_new/t_max)) × 3600}
+#' \code{Vh_new = (x/t_max - sqrt(k_new/t_max)) \* 3600}
 #'
 #' Peclet numbers are automatically recalculated for HRM results.
 #'
@@ -1364,7 +1365,7 @@ recalc_vh_with_k <- function(vh_results, k_new, k_old = NULL, probe_spacing = NU
     method <- vh_new$method[i]
 
     if (method %in% c("HRM", "MHR", "HRMXa", "HRMXb")) {
-      # Ratio-based methods: Vh = (k/x) × ln(ratio) × 3600
+      # Ratio-based methods: Vh = (k/x) * ln(ratio) \* 3600
       if (!is.na(vh_new$temp_ratio[i]) && vh_new$temp_ratio[i] > 0) {
         vh_new$Vh_cm_hr[i] <- (k_new / probe_spacing) * log(vh_new$temp_ratio[i]) * 3600
 
@@ -1375,7 +1376,7 @@ recalc_vh_with_k <- function(vh_results, k_new, k_old = NULL, probe_spacing = NU
       }
 
     } else if (method == "Tmax_Coh") {
-      # Tmax_Coh: Vh = sqrt(x² - 4×k×t_max) / t_max × 3600
+      # Tmax_Coh: Vh = sqrt(x^2 - 4 \* k \* t_max) / t_max \* 3600
       if (!is.na(vh_new$calc_time_sec[i]) && vh_new$calc_time_sec[i] > 0) {
         t_max <- vh_new$calc_time_sec[i]
         discriminant <- probe_spacing^2 - 4 * k_new * t_max
@@ -1388,7 +1389,7 @@ recalc_vh_with_k <- function(vh_results, k_new, k_old = NULL, probe_spacing = NU
       }
 
     } else if (method == "Tmax_Klu") {
-      # Tmax_Klu: Vh = (x/t_max - sqrt(k/t_max)) × 3600
+      # Tmax_Klu: Vh = (x/t_max - sqrt(k/t_max)) \* 3600
       # Note: Full Tmax_Klu formula is complex - simplified here
       # For full accuracy, may need tp_1 parameter
       if (!is.na(vh_new$calc_time_sec[i]) && vh_new$calc_time_sec[i] > 0) {
@@ -1404,7 +1405,7 @@ recalc_vh_with_k <- function(vh_results, k_new, k_old = NULL, probe_spacing = NU
   attr(vh_new, "original_k") <- k_old
   attr(vh_new, "k_change_percent") <- ((k_new - k_old) / k_old) * 100
 
-  message(sprintf("Recalculated velocities with k = %.4f cm²/s (%.1f%% change from k = %.4f)",
+  message(sprintf("Recalculated velocities with k = %.4f cm^2/s (%.1f%% change from k = %.4f)",
                  k_new, ((k_new - k_old) / k_old) * 100, k_old))
 
   return(vh_new)
@@ -1438,10 +1439,10 @@ add_quality_flags <- function(results) {
 
   # Flag calculation issues (these indicate the calculation itself had problems)
   # Using CALC_ prefix to distinguish from data quality issues added later
-  results$quality_flag[is.infinite(results$Vh_cm_hr)] <- "CALC_INFINITE"
-  results$quality_flag[is.na(results$Vh_cm_hr)] <- "CALC_FAILED"
   results$quality_flag[abs(results$Vh_cm_hr) > 200] <- "CALC_EXTREME"
   results$quality_flag[results$Vh_cm_hr < -50] <- "CALC_EXTREME"
+  results$quality_flag[is.infinite(results$Vh_cm_hr)] <- "CALC_INFINITE"
+  results$quality_flag[is.na(results$Vh_cm_hr)] <- "CALC_FAILED"
 
   # Flag data quality issues (only for values not already flagged)
   # DATA_ILLOGICAL: exceeds hard maximum threshold (physically impossible)
@@ -1462,7 +1463,7 @@ add_quality_flags <- function(results) {
 #' @details
 #' Default parameters are:
 #' \describe{
-#'   \item{diffusivity}{Thermal diffusivity of sapwood (0.0025 cm²/s)}
+#'   \item{diffusivity}{Thermal diffusivity of sapwood (0.0025 cm^2/s)}
 #'   \item{probe_spacing}{Distance from heat source (0.5 cm)}
 #'   \item{L}{Lower proportion of deltaTmax for HRMX sampling window (0.5)}
 #'   \item{H}{Higher proportion of deltaTmax for HRMX sampling window (0.8)}
@@ -1475,7 +1476,7 @@ add_quality_flags <- function(results) {
 #' @export
 get_default_parameters <- function() {
   list(
-    diffusivity = 0.0025,  # Thermal diffusivity of sapwood (cm²/s)
+    diffusivity = 0.0025,  # Thermal diffusivity of sapwood (cm^2/s)
     probe_spacing = 0.5,   # Distance from heat source (cm)
     L = 0.5,               # Lower proportion of deltaTmax for HRMX sampling window
     H = 0.8,               # Higher proportion of deltaTmax for HRMX sampling window
@@ -1515,7 +1516,7 @@ validate_parameters <- function(parameters) {
   checks <- list()
 
   if (parameters$diffusivity <= 0 || parameters$diffusivity > 0.01) {
-    checks <- append(checks, "diffusivity should be between 0 and 0.01 cm²/s")
+    checks <- append(checks, "diffusivity should be between 0 and 0.01 cm^2/s")
   }
 
   if (parameters$probe_spacing <= 0 || parameters$probe_spacing > 2) {
