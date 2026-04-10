@@ -21,22 +21,22 @@
 #'
 #' This is also referred to as sapwood-area-weighted mean sap velocity (Jvm).
 #'
-#' @param Qp Numeric vector. Total tree sap flux in cm³/hr (from calc_sap_flux()).
-#' @param As Numeric. Total sapwood cross-sectional area in cm² (from
+#' @param Qp Numeric vector. Total tree sap flux in cm^3/hr (from calc_sap_flux()).
+#' @param As Numeric. Total sapwood cross-sectional area in cm^2 (from
 #'   calc_sapwood_areas()$total_sapwood_area_cm2). Should be a single value
 #'   or a vector matching the length of Qp.
 #'
 #' @return Numeric vector of sapwood-area-weighted mean sap flux density (Qps)
-#'   in cm³/hr/cm², which is equivalent to cm/hr (velocity units).
+#'   in cm^3/hr/cm^2, which is equivalent to cm/hr (velocity units).
 #'
 #' @details
 #' The formula is:
 #'   Qps = Qp / As
 #'
 #' Where:
-#' - Qp = total tree sap flux (cm³/hr)
-#' - As = total sapwood area (cm²)
-#' - Qps = sapwood-area-weighted mean flux density (cm³/hr/cm² = cm/hr)
+#' - Qp = total tree sap flux (cm^3/hr)
+#' - As = total sapwood area (cm^2)
+#' - Qps = sapwood-area-weighted mean flux density (cm^3/hr/cm^2 = cm/hr)
 #'
 #' This metric is conceptually similar to a weighted average velocity across
 #' the entire sapwood profile, accounting for the non-uniform distribution
@@ -92,7 +92,7 @@ calc_mean_flux_density <- function(Qp, As) {
 #' dimensionless relative flux metric (Qpsn) ranging from 0 to 1.
 #'
 #' @param Qps Numeric vector. Sapwood-area-weighted mean sap flux density
-#'   (cm³/hr/cm²) from calc_mean_flux_density().
+#'   (cm^3/hr/cm^2) from calc_mean_flux_density().
 #' @param period Character. Period over which to calculate maximum:
 #'   - "global": Maximum across entire dataset (default)
 #'   - "daily": Maximum within each day (requires datetime parameter)
@@ -240,22 +240,22 @@ normalise_flux_density <- function(Qps, period = "global", datetime = NULL,
 #' tree sap flux (Qp) by total plant leaf area (Al). This metric relates water
 #' uptake to transpiring leaf area and is useful for ecophysiological studies.
 #'
-#' @param Qp Numeric vector. Total tree sap flux in cm³/hr (from calc_sap_flux()).
-#' @param Al Numeric. Total plant leaf area in m² (or cm²). Should be a single
+#' @param Qp Numeric vector. Total tree sap flux in cm^3/hr (from calc_sap_flux()).
+#' @param Al Numeric. Total plant leaf area in m^2 (or cm^2). Should be a single
 #'   value or a vector matching the length of Qp.
 #' @param Al_units Character. Units of leaf area: "m2" (default) or "cm2".
 #'
-#' @return Numeric vector of leaf-area-specific sap flux (Qpl) in cm³/hr/m²
-#'   (if Al_units = "m2") or cm³/hr/cm² (if Al_units = "cm2").
+#' @return Numeric vector of leaf-area-specific sap flux (Qpl) in cm^3/hr/m^2
+#'   (if Al_units = "m2") or cm^3/hr/cm^2 (if Al_units = "cm2").
 #'
 #' @details
 #' The formula is:
 #'   Qpl = Qp / Al
 #'
 #' Where:
-#' - Qp = total tree sap flux (cm³/hr)
-#' - Al = total plant leaf area (m² or cm²)
-#' - Qpl = leaf-area-specific flux (cm³/hr/m² or cm³/hr/cm²)
+#' - Qp = total tree sap flux (cm^3/hr)
+#' - Al = total plant leaf area (m^2 or cm^2)
+#' - Qpl = leaf-area-specific flux (cm^3/hr/m^2 or cm^3/hr/cm^2)
 #'
 #' Leaf-area-specific flux is conceptually similar to transpiration rate and
 #' can be compared to stomatal conductance measurements. It accounts for
@@ -275,7 +275,7 @@ normalise_flux_density <- function(Qps, period = "global", datetime = NULL,
 #' # Calculate leaf-area-specific flux
 #' Qpl <- calc_leaf_area_flux(
 #'   Qp = flux_results$Q_cm3_hr,
-#'   Al = 12.5,  # m²
+#'   Al = 12.5,  # m^2
 #'   Al_units = "m2"
 #' )
 #' }
@@ -324,8 +324,8 @@ calc_leaf_area_flux <- function(Qp, Al, Al_units = "m2") {
 #' @param data Data frame containing sap flux results from calc_sap_flux() or
 #'   apply_sap_flux_integration(). Must contain a column with total flux values.
 #' @param flux_col Character. Name of column containing total sap flux (Qp) in
-#'   cm³/hr. Default: "Q_cm3_hr".
-#' @param sapwood_area Numeric. Total sapwood cross-sectional area (As) in cm².
+#'   cm^3/hr. Default: "Q_cm3_hr".
+#' @param sapwood_area Numeric. Total sapwood cross-sectional area (As) in cm^2.
 #'   Can be a single value (assumes constant across all rows) or a vector
 #'   matching the number of rows in data.
 #' @param normalise Logical. Whether to calculate normalised flux density (Qpsn).
@@ -335,7 +335,7 @@ calc_leaf_area_flux <- function(Qp, Al, Al_units = "m2") {
 #'   Default: "global".
 #' @param Qps_max Numeric. Custom maximum for normalisation. Only used if
 #'   normalise = TRUE and normalise_period = "custom". Default: NULL.
-#' @param leaf_area Numeric. Total plant leaf area in m² (or cm²). If provided,
+#' @param leaf_area Numeric. Total plant leaf area in m^2 (or cm^2). If provided,
 #'   calculates leaf-area-specific flux (Qpl). Default: NULL (not calculated).
 #' @param leaf_area_units Character. Units of leaf area: "m2" or "cm2".
 #'   Default: "m2".
@@ -460,9 +460,9 @@ apply_sapwood_metrics <- function(data, flux_col = "Q_cm3_hr",
 
   # Sapwood area
   if (length(sapwood_area) == 1) {
-    cat(sprintf("\nSapwood area (As): %.2f cm²\n", sapwood_area))
+    cat(sprintf("\nSapwood area (As): %.2f cm^2\n", sapwood_area))
   } else {
-    cat(sprintf("\nSapwood area (As): %.2f - %.2f cm² (variable)\n",
+    cat(sprintf("\nSapwood area (As): %.2f - %.2f cm^2 (variable)\n",
                 min(sapwood_area, na.rm = TRUE),
                 max(sapwood_area, na.rm = TRUE)))
   }
@@ -470,7 +470,7 @@ apply_sapwood_metrics <- function(data, flux_col = "Q_cm3_hr",
   # Qps range
   Qps_range <- range(data$Qps_cm3_hr_cm2, na.rm = TRUE)
   cat(sprintf("\nSapwood-area-weighted mean flux density (Qps):\n"))
-  cat(sprintf("  Range: %.4f - %.4f cm³/hr/cm² (= cm/hr)\n",
+  cat(sprintf("  Range: %.4f - %.4f cm^3/hr/cm^2 (= cm/hr)\n",
               Qps_range[1], Qps_range[2]))
   cat(sprintf("  Mean:  %.4f cm/hr\n",
               mean(data$Qps_cm3_hr_cm2, na.rm = TRUE)))
@@ -506,7 +506,7 @@ apply_sapwood_metrics <- function(data, flux_col = "Q_cm3_hr",
 
     col_name <- paste0("Qpl_cm3_hr_", leaf_area_units)
     Qpl_range <- range(data[[col_name]], na.rm = TRUE)
-    cat(sprintf("  Qpl range: %.2f - %.2f cm³/hr/%s\n",
+    cat(sprintf("  Qpl range: %.2f - %.2f cm^3/hr/%s\n",
                 Qpl_range[1], Qpl_range[2], leaf_area_units))
   }
 

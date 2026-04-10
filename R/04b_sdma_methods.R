@@ -16,8 +16,8 @@
 # IMPORTANT: Column Structure Update Needed (2025-12-01)
 # This file uses OLD generic column names (peclet_number, calc_window_start_sec, etc.).
 # When re-integrating, update to use NEW method-specific columns:
-#   - peclet_number → hrm_peclet_number
-#   - calc_window_start_sec → method-specific columns (hrm_window_start_sec, etc.)
+#   - peclet_number -> hrm_peclet_number
+#   - calc_window_start_sec -> method-specific columns (hrm_window_start_sec, etc.)
 #   - See 01e_heat_pulse_velocity_core.R for current vh_results schema
 #
 # When ready to re-integrate:
@@ -75,8 +75,8 @@
 #' \enumerate{
 #'   \item Calculate raw HPV (all methods)
 #'   \item Apply spacing correction
-#'   \item Apply wound correction → Vc (corrected velocities)
-#'   \item **Apply sDMA method selection** ← THIS FUNCTION
+#'   \item Apply wound correction -> Vc (corrected velocities)
+#'   \item **Apply sDMA method selection** <- THIS FUNCTION
 #'   \item Calculate flux density
 #'   \item Calculate tree water use
 #' }
@@ -126,13 +126,31 @@ apply_sdma_processing <- function(vh_results,
 
   # Check that HRM has Peclet numbers
   hrm_data <- vh_results[vh_results$method == "HRM", ]
-  if (all(is.na(hrm_data$hrm_peclet_number))) {
+  if (nrow(hrm_data) == 0) {
+    stop("HRM results not found. vh_results must contain HRM data for sDMA processing.")
+  }
+
+  # Determine Peclet column name
+  peclet_col <- if ("hrm_peclet_number" %in% names(hrm_data)) "hrm_peclet_number" else "peclet_number"
+
+  if (!peclet_col %in% names(hrm_data) || all(is.na(hrm_data[[peclet_col]]))) {
     stop("HRM results do not contain Peclet numbers.\n",
          "  This may be from an older version. Please recalculate HRM results.")
   }
 
+  # Validate secondary_method
+  if ("HRM" %in% secondary_method) {
+    stop("Cannot use HRM as secondary method. HRM is always the primary method in sDMA.")
+  }
+
+  missing_methods <- setdiff(secondary_method, unique(vh_results$method))
+  if (length(missing_methods) > 0) {
+    stop("Secondary method(s) not found in vh_results: ", paste(missing_methods, collapse = ", "),
+         "\n  Ensure all requested methods are calculated first.")
+  }
+
   # Check Peclet number range to determine if sDMA is necessary
-  max_peclet <- max(hrm_data$hrm_peclet_number, na.rm = TRUE)
+  max_peclet <- max(hrm_data[[peclet_col]], na.rm = TRUE)
 
   if (!is.na(max_peclet) && max_peclet <= peclet_threshold) {
     # All Peclet numbers are <= threshold, so sDMA would never switch to secondary method
@@ -141,9 +159,9 @@ apply_sdma_processing <- function(vh_results,
     message(strrep("=", 67))
     message(sprintf("\nMaximum Peclet number: %.3f", max_peclet))
     message(sprintf("\nAll Peclet numbers are <= %.2f, which means:", peclet_threshold))
-    message("  • HRM is valid for all measurements (low flow conditions)")
-    message("  • sDMA would never switch to the secondary method")
-    message("  • The sDMA results would be identical to HRM results")
+    message("  - HRM is valid for all measurements (low flow conditions)")
+    message("  - sDMA would never switch to the secondary method")
+    message("  - The sDMA results would be identical to HRM results")
     message("\nCalculating sDMA is unnecessary in this case.")
 
     # Determine whether to skip based on parameter or user input
@@ -315,6 +333,7 @@ apply_sdma_processing_internal <- function(vh_results, results_by_pulse, pulse_i
       # Add required columns
       sdma_outer$selected_method <- ifelse(use_hrm_outer, "HRM", sec_method)
       sdma_outer$Vh_sdma <- sdma_outer$Vh_cm_hr
+      sdma_outer$peclet_number <- hrm_outer[[peclet_col]] # Always include for switching audit
 
       sdma_parts[["outer"]] <- sdma_outer
     }
@@ -346,6 +365,7 @@ apply_sdma_processing_internal <- function(vh_results, results_by_pulse, pulse_i
       # Add required columns
       sdma_inner$selected_method <- ifelse(use_hrm_inner, "HRM", sec_method)
       sdma_inner$Vh_sdma <- sdma_inner$Vh_cm_hr
+      sdma_inner$peclet_number <- hrm_inner[[peclet_col]] # Always include for switching audit
 
       sdma_parts[["inner"]] <- sdma_inner
     }
@@ -468,7 +488,7 @@ parse_sdma_method <- function(method_string) {
 #' @param hrm_results Results from calc_hrm()
 #' @param secondary_results Results from secondary method (e.g., calc_mhr())
 #' @param secondary_method_name Name of secondary method (e.g., "MHR")
-#' @param diffusivity Thermal diffusivity (cm²/s)
+#' @param diffusivity Thermal diffusivity (cm^2/s)
 #' @param probe_spacing Probe spacing (cm)
 #' @return List with velocity results, Peclet numbers, and selected methods
 #' @keywords internal
@@ -479,9 +499,9 @@ calc_sdma <- function(hrm_results,
                       probe_spacing) {
 
   # Calculate Peclet number (dimensionless)
-  # Pe = (Vh × x) / (D × 3600)
-  # where Vh is in cm/hr, x in cm, D in cm²/s
-  # The 3600 converts D from cm²/s to cm²/hr to match Vh units
+  # Pe = (Vh * x) / (D * 3600)
+  # where Vh is in cm/hr, x in cm, D in cm^2/s
+  # The 3600 converts D from cm^2/s to cm^2/hr to match Vh units
   Pe_outer <- if (!is.na(hrm_results$outer) && is.finite(hrm_results$outer)) {
     (hrm_results$outer * probe_spacing) / (diffusivity * 3600)
   } else {
@@ -494,7 +514,7 @@ calc_sdma <- function(hrm_results,
     NA_real_
   }
 
-  # Switching logic: Pe < 1.0 → HRM; Pe >= 1.0 → secondary method
+  # Switching logic: Pe < 1.0 -> HRM; Pe >= 1.0 -> secondary method
   # Outer sensor
   if (is.na(hrm_results$outer) || !is.finite(hrm_results$outer)) {
     Vho_sDMA <- secondary_results$outer

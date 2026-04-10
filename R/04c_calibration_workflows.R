@@ -431,17 +431,17 @@ compare_calibration_timing <- function(early_result, late_result) {
     early_cal <- early_result$calibrations[[method]]$calibration
     late_cal <- late_result$calibrations[[method]]$calibration
 
-    cat(sprintf("\n%s → %s:\n", early_cal$primary_method, method))
+    cat(sprintf("\n%s -> %s:\n", early_cal$primary_method, method))
     cat(sprintf("  Early (before corrections):\n"))
-    cat(sprintf("    Slope: %.4f, Intercept: %.4f, R²: %.4f\n",
+    cat(sprintf("    Slope: %.4f, Intercept: %.4f, R^2: %.4f\n",
                 early_cal$slope, early_cal$intercept, early_cal$r_squared))
 
     cat(sprintf("  Late (after corrections):\n"))
-    cat(sprintf("    Slope: %.4f, Intercept: %.4f, R²: %.4f\n",
+    cat(sprintf("    Slope: %.4f, Intercept: %.4f, R^2: %.4f\n",
                 late_cal$slope, late_cal$intercept, late_cal$r_squared))
 
     cat(sprintf("  Difference:\n"))
-    cat(sprintf("    Δ Slope: %.4f, Δ Intercept: %.4f, Δ R²: %.4f\n",
+    cat(sprintf("    Slope: %.4f, Intercept: %.4f, R^2: %.4f\n",
                 late_cal$slope - early_cal$slope,
                 late_cal$intercept - early_cal$intercept,
                 late_cal$r_squared - early_cal$r_squared))

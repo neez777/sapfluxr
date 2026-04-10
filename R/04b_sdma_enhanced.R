@@ -26,7 +26,7 @@
 #' @param probe_config Probe configuration object or list with \code{probe_spacing}
 #'   (cm). If NULL, will attempt to extract from existing Peclet calculation.
 #' @param wood_properties Wood properties object or list with
-#'   \code{thermal_diffusivity} (cm²/s). If NULL, will attempt to extract from
+#'   \code{thermal_diffusivity} (cm^2/s). If NULL, will attempt to extract from
 #'   existing Peclet calculation.
 #' @param velocity_col Character. Name of corrected velocity column to use.
 #'   Default: NULL (auto-detect). Will search for "Vh_cm_hr_wc" (wound-corrected),
@@ -54,7 +54,7 @@
 #' \itemize{
 #'   \item \eqn{V_c} = sap velocity (cm/s)
 #'   \item \eqn{x} = probe spacing (cm)
-#'   \item \eqn{D} = thermal diffusivity (cm²/s)
+#'   \item \eqn{D} = thermal diffusivity (cm^2/s)
 #' }
 #'
 #' When spacing or wound corrections are applied, \eqn{V_c} changes, invalidating
@@ -151,7 +151,7 @@ recalculate_peclet <- function(vh_data,
 
   # Extract probe spacing and thermal diffusivity
   x <- NULL  # probe spacing (cm)
-  D <- NULL  # thermal diffusivity (cm²/s)
+  D <- NULL  # thermal diffusivity (cm^2/s)
 
   # Try to get from probe_config and wood_properties
   if (!is.null(probe_config)) {
@@ -210,7 +210,7 @@ recalculate_peclet <- function(vh_data,
 
     if (verbose) {
       cat("Probe spacing (x):", x, "cm\n")
-      cat("Thermal diffusivity (D):", D, "cm²/s\n")
+      cat("Thermal diffusivity (D):", D, "cm^2/s\n")
       cat("x/D =", round(x_over_D, 6), "s\n")
     }
   }
@@ -282,7 +282,7 @@ recalculate_peclet <- function(vh_data,
 #'
 #' @return A list (class "method_calibration_sdma") with components:
 #'   \code{coefficients} (regression coefficients), \code{fit_type} ("linear"
-#'   or "quadratic"), \code{r_squared} (R² of fit), \code{rmse} (root mean
+#'   or "quadratic"), \code{r_squared} (R^2 of fit), \code{rmse} (root mean
 #'   squared error), \code{n_points} (calibration points used), \code{breakpoint}
 #'   (velocity threshold if specified), \code{transformation_function} (function
 #'   to apply calibration), \code{calibrated_data} (data with calibrated column),
@@ -467,7 +467,7 @@ calibrate_secondary_method <- function(data,
 
   # Select best model
   if (method == "auto") {
-    # Use quadratic if it improves R² by > 1%
+    # Use quadratic if it improves R^2 by > 1%
     use_quadratic <- exists("r2_quad") && (r2_quad - r2_linear) > 0.01
     selected_method <- if (use_quadratic) "quadratic" else "linear"
   } else {
@@ -523,7 +523,7 @@ calibrate_secondary_method <- function(data,
                            colour = "red", alpha = 0.5) +
       ggplot2::labs(
         title = sprintf("%s Calibration to %s Scale", secondary, primary),
-        subtitle = sprintf("%s fit | R² = %.4f | RMSE = %.3f cm/hr | n = %d",
+        subtitle = sprintf("%s fit | R^2 = %.4f | RMSE = %.3f cm/hr | n = %d",
                            tools::toTitleCase(selected_method), r_squared, rmse,
                            nrow(merged)),
         x = paste(secondary, "Velocity (cm/hr)"),
@@ -590,7 +590,7 @@ print.method_calibration_sdma <- function(x, ...) {
   cat("REGRESSION RESULTS\n")
   cat(strrep("-", 70), "\n")
   cat("Fit type:", x$fit_type, "\n")
-  cat("R²:", round(x$r_squared, 4), "\n")
+  cat("R^2:", round(x$r_squared, 4), "\n")
   cat("RMSE:", round(x$rmse, 3), "cm/hr\n")
   cat("Calibration points:", x$n_points, "\n")
   cat("\n")
@@ -598,13 +598,13 @@ print.method_calibration_sdma <- function(x, ...) {
   cat("TRANSFORMATION EQUATION\n")
   cat(strrep("-", 70), "\n")
   if (x$fit_type == "linear") {
-    cat(sprintf("  %s_calibrated = %.4f + %.4f × %s\n",
+    cat(sprintf("  %s_calibrated = %.4f + %.4f * %s\n",
                 x$secondary_method,
                 x$coefficients[1],
                 x$coefficients[2],
                 x$secondary_method))
   } else {
-    cat(sprintf("  %s_calibrated = %.4f + %.4f × %s + %.6f × %s²\n",
+    cat(sprintf("  %s_calibrated = %.4f + %.4f * %s + %.6f * %s^2\n",
                 x$secondary_method,
                 x$coefficients[1],
                 x$coefficients[2],
@@ -809,7 +809,7 @@ apply_sdma_switching <- function(data,
 
       if (verbose) {
         cat("  Fit type:", calibration$fit_type, "\n")
-        cat("  R²:", round(calibration$r_squared, 4), "\n")
+        cat("  R^2:", round(calibration$r_squared, 4), "\n")
         cat("  RMSE:", round(calibration$rmse, 3), "cm/hr\n\n")
       }
     } else {
@@ -841,7 +841,7 @@ apply_sdma_switching <- function(data,
 
       if (verbose) {
         cat("  Fit type:", calibration$fit_type, "\n")
-        cat("  R²:", round(calibration$r_squared, 4), "\n")
+        cat("  R^2:", round(calibration$r_squared, 4), "\n")
         cat("  RMSE:", round(calibration$rmse, 3), "cm/hr\n\n")
       }
 

@@ -173,7 +173,7 @@ apply_method_calibration <- function(vh_corrected,
   if (!is.null(probe_config) && !is.null(wood_properties)) {
     tryCatch({
       x <- probe_config$probe_spacing  # cm
-      D <- wood_properties$thermal_diffusivity  # cm²/s
+      D <- wood_properties$thermal_diffusivity  # cm^2/s
 
       if (!is.null(x) && !is.null(D) && D > 0) {
         calibrated_data <- calibrated_data %>%
@@ -250,7 +250,7 @@ apply_method_calibration <- function(vh_corrected,
 #' \itemize{
 #'   \item \eqn{V_h} = sap velocity (cm/hr)
 #'   \item \eqn{x} = probe spacing (cm)
-#'   \item \eqn{D} = thermal diffusivity (cm²/s)
+#'   \item \eqn{D} = thermal diffusivity (cm^2/s)
 #'   \item 3600 = conversion factor (seconds to hours)
 #' }
 #'
@@ -356,7 +356,7 @@ recalculate_peclet <- function(vh_results,
   }
 
   # Recalculate Peclet numbers (VECTORIZED)
-  # Pe = (Vh × x) / (D × 3600)
+  # Pe = (Vh * x) / (D * 3600)
   # Convert velocity from cm/hr to cm/s, then calculate Pe
   v_cm_s <- vh_results[[velocity_col]] / 3600
   vh_results[[peclet_col]] <- (v_cm_s * x) / D
@@ -367,7 +367,7 @@ recalculate_peclet <- function(vh_results,
   cat(strrep("=", 72), "\n")
   cat(sprintf("Velocity column used: %s\n", velocity_col))
   cat(sprintf("Probe spacing: %.4f cm\n", x))
-  cat(sprintf("Thermal diffusivity: %.6f cm²/s\n", D))
+  cat(sprintf("Thermal diffusivity: %.6f cm^2/s\n", D))
   cat(sprintf("Total points recalculated: %d\n", nrow(vh_results)))
   cat(sprintf("Peclet range: %.3f to %.3f\n",
               min(vh_results[[peclet_col]], na.rm = TRUE),

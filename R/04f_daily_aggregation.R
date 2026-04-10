@@ -4,7 +4,7 @@
 # Daily temporal aggregation of sap flux metrics
 #
 # This module implements Step 9 of the sap flow analysis workflow:
-# - Daily total mean sap flux density (Jvm_daily, cm³/cm²/day)
+# - Daily total mean sap flux density (Jvm_daily, cm^3/cm^2/day)
 # - Daily total sap flux (Qp_daily, L/day)
 # - Optional daily normalisation
 #
@@ -32,7 +32,7 @@
 #'   (Qps, cm/hr) for calculating daily mean flux density. If NULL, Jvm_daily
 #'   will not be calculated. Default: "Qps_cm_hr".
 #' @param total_flux_col Character. Name of column containing total sap flux
-#'   (Qp, cm³/hr) for calculating daily total flux. If NULL, Qp_daily will not
+#'   (Qp, cm^3/hr) for calculating daily total flux. If NULL, Qp_daily will not
 #'   be calculated. Default: "Q_cm3_hr".
 #' @param interval Character. Measurement interval: "auto" (detect from data),
 #'   "hourly", "half-hourly", or a duration string like "30 min". Default: "auto".
@@ -46,9 +46,9 @@
 #'   - date: Date (Date class)
 #'   - datetime: Start of day (POSIXct, for plotting)
 #'   - Jvm_daily_cm3_cm2_day: Daily total mean flux density (if flux_density_col provided)
-#'   - Jvm_daily_mm_day: Same as above but in mm/day units (1 cm³/cm² = 10 mm)
+#'   - Jvm_daily_mm_day: Same as above but in mm/day units (1 cm^3/cm^2 = 10 mm)
 #'   - Qp_daily_L_day: Daily total sap flux in L/day (if total_flux_col provided)
-#'   - Qp_daily_cm3_day: Daily total sap flux in cm³/day (if total_flux_col provided)
+#'   - Qp_daily_cm3_day: Daily total sap flux in cm^3/day (if total_flux_col provided)
 #'   - n_measurements: Number of measurements in this day
 #'   - hours_covered: Total hours spanned by measurements
 #'   - data_completeness: Fraction of expected measurements present (0-1)
@@ -65,13 +65,13 @@
 #'   Qp_daily = sum(Q_i) / 2 / 1000 \[L/day\]
 #'
 #' General formula:
-#'   Jvm_daily = sum(Qps_i) × (interval_hours / 1)
-#'   Qp_daily = sum(Q_i) × (interval_hours / 1) / 1000
+#'   Jvm_daily = sum(Qps_i) * (interval_hours / 1)
+#'   Qp_daily = sum(Q_i) * (interval_hours / 1) / 1000
 #'
 #' Units conversion:
-#'   - Qps in cm/hr → Jvm_daily in cm³/cm²/day (= cm/day)
-#'   - Q in cm³/hr → Qp_daily in L/day (divide by 1000)
-#'   - Jvm in cm/day → mm/day (multiply by 10)
+#'   - Qps in cm/hr -> Jvm_daily in cm^3/cm^2/day (= cm/day)
+#'   - Q in cm^3/hr -> Qp_daily in L/day (divide by 1000)
+#'   - Jvm in cm/day -> mm/day (multiply by 10)
 #'
 #' @examples
 #' \dontrun{
@@ -200,7 +200,7 @@ aggregate_daily <- function(data, datetime_col = "datetime",
     if (has_flux_density) {
       Qps_sum <- sum(day_data[[flux_density_col]], na.rm = TRUE)
 
-      # Jvm_daily = sum(Qps) × interval_hours
+      # Jvm_daily = sum(Qps) * interval_hours
       # For hourly (interval_hours = 1): sum directly
       # For half-hourly (interval_hours = 0.5): sum/2
       result$Jvm_daily_cm3_cm2_day <- Qps_sum * interval_hours
@@ -213,7 +213,7 @@ aggregate_daily <- function(data, datetime_col = "datetime",
     if (has_total_flux) {
       Q_sum <- sum(day_data[[total_flux_col]], na.rm = TRUE)
 
-      # Qp_daily = sum(Q) × interval_hours
+      # Qp_daily = sum(Q) * interval_hours
       result$Qp_daily_cm3_day <- Q_sum * interval_hours
 
       # Convert to L/day
@@ -261,7 +261,7 @@ aggregate_daily <- function(data, datetime_col = "datetime",
   # Daily flux density summary
   if (has_flux_density) {
     cat(sprintf("\nDaily mean flux density (Jvm_daily):\n"))
-    cat(sprintf("  Range: %.2f - %.2f cm³/cm²/day (= cm/day)\n",
+    cat(sprintf("  Range: %.2f - %.2f cm^3/cm^2/day (= cm/day)\n",
                 min(daily_data$Jvm_daily_cm3_cm2_day, na.rm = TRUE),
                 max(daily_data$Jvm_daily_cm3_cm2_day, na.rm = TRUE)))
     cat(sprintf("         %.2f - %.2f mm/day\n",

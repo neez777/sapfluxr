@@ -255,7 +255,7 @@ plot_flux_proportion <- function(data, flux_col = "Q_cm3_hr",
 #' typical diurnal pattern averaged across all days in the dataset.
 #'
 #' Confidence intervals:
-#' - If stat = "mean": 95% confidence interval (mean ± 1.96 × SE)
+#' - If stat = "mean": 95% confidence interval (mean +/- 1.96 * SE)
 #' - If stat = "median": Interquartile range (25th-75th percentile)
 #'
 #' @examples
@@ -273,7 +273,7 @@ plot_flux_proportion <- function(data, flux_col = "Q_cm3_hr",
 #' plot_diurnal_pattern(
 #'   flux_data,
 #'   y_col = "Q_cm3_hr",
-#'   y_label = "Total Flux (cm³/hr)"
+#'   y_label = "Total Flux (cm^3/hr)"
 #' )
 #' }
 #'
@@ -498,17 +498,17 @@ plot_daily_timeseries <- function(data, y_col = "Qp_daily_L_day",
 auto_label <- function(col_name) {
   # Common column name patterns
   labels <- list(
-    "Q_cm3_hr" = "Total Sap Flux (cm³/hr)",
+    "Q_cm3_hr" = "Total Sap Flux (cm^3/hr)",
     "Q_L_hr" = "Total Sap Flux (L/hr)",
     "Q_L_day" = "Total Sap Flux (L/day)",
     "Qps_cm_hr" = "Flux Density (cm/hr)",
-    "Qps_cm3_hr_cm2" = "Flux Density (cm³/hr/cm²)",
+    "Qps_cm3_hr_cm2" = "Flux Density (cm^3/hr/cm^2)",
     "Qpsn" = "Normalised Flux Density",
-    "Qpl_cm3_hr_m2" = "Leaf-Area-Specific Flux (cm³/hr/m²)",
-    "Jvm_daily_cm3_cm2_day" = "Daily Flux Density (cm³/cm²/day)",
+    "Qpl_cm3_hr_m2" = "Leaf-Area-Specific Flux (cm^3/hr/m^2)",
+    "Jvm_daily_cm3_cm2_day" = "Daily Flux Density (cm^3/cm^2/day)",
     "Jvm_daily_mm_day" = "Daily Flux Density (mm/day)",
     "Qp_daily_L_day" = "Daily Total Flux (L/day)",
-    "Qp_daily_cm3_day" = "Daily Total Flux (cm³/day)"
+    "Qp_daily_cm3_day" = "Daily Total Flux (cm^3/day)"
   )
 
   # Return matching label or formatted column name

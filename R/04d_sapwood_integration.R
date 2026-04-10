@@ -17,7 +17,7 @@
 #'
 #' @return List containing:
 #'   \describe{
-#'     \item{total_sapwood_area_cm2}{Total conducting sapwood area (cm²)}
+#'     \item{total_sapwood_area_cm2}{Total conducting sapwood area (cm^2)}
 #'     \item{rings}{Data frame with columns: sensor, ring_name,
 #'                  inner_radius_cm, outer_radius_cm, area_cm2,
 #'                  depth_from_cambium_cm}
@@ -271,7 +271,7 @@ calc_sapwood_areas <- function(dbh,
 #'   \describe{
 #'     \item{datetime}{Timestamp}
 #'     \item{sensor_position}{Sensor position ("outer", "inner")}
-#'     \item{Jv_cm3_cm2_hr}{Sap flux density (cm³/cm²/hr)}
+#'     \item{Jv_cm3_cm2_hr}{Sap flux density (cm^3/cm^2/hr)}
 #'   }
 #' @param sapwood_areas Output from \code{\link{calc_sapwood_areas}}
 #' @param method Integration method. Options: "weighted_average" (default,
@@ -279,7 +279,7 @@ calc_sapwood_areas <- function(dbh,
 #'
 #' @return Data frame with added columns:
 #'   \describe{
-#'     \item{Q_cm3_hr}{Total sap flux (cm³/hr) per timestamp}
+#'     \item{Q_cm3_hr}{Total sap flux (cm^3/hr) per timestamp}
 #'     \item{Q_L_hr}{Total sap flux (L/hr) per timestamp}
 #'     \item{Q_L_day}{Total sap flux (L/day) per timestamp}
 #'   }
@@ -299,11 +299,11 @@ calc_sapwood_areas <- function(dbh,
 #'
 #' **Integration Formula (Hatton et al. 1990):**
 #'
-#' Q = Σ (Aₖ × Jvₖ)
+#' Q = Sum(A_k * J_vk)
 #'
 #' Where:
-#' - Aₖ = area of ring k (cm²)
-#' - Jvₖ = flux density for ring k (cm³/cm²/hr)
+#' - A_k = area of ring k (cm^2)
+#' - J_vk = flux density for ring k (cm^3/cm^2/hr)
 #' - Sum over all sapwood rings
 #'
 #' @examples
@@ -388,7 +388,7 @@ calc_sap_flux <- function(flux_data,
 #' @param sapwood_depth Total sapwood depth (cm)
 #' @param method Integration method
 #'
-#' @return Total flux (cm³/hr) for this timestamp
+#' @return Total flux (cm^3/hr) for this timestamp
 #' @keywords internal
 calc_flux_single_timestamp <- function(sensor_positions,
                                         Jv_values,
@@ -516,7 +516,7 @@ apply_sap_flux_integration <- function(flux_data,
   cat(sprintf("  DBH: %.1f cm\n", dbh))
   cat(sprintf("  Bark thickness: %.1f cm\n", bark_thickness))
   cat(sprintf("  Sapwood depth: %.1f cm\n", sapwood_depth))
-  cat(sprintf("  Total sapwood area: %.1f cm²\n",
+  cat(sprintf("  Total sapwood area: %.1f cm^2\n",
               sapwood_areas$total_sapwood_area_cm2))
   cat("\n")
 

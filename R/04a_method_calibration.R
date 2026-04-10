@@ -28,19 +28,19 @@ NULL
 #' @param threshold_max Maximum velocity threshold to test (cm/hr) (default: 20).
 #' @param threshold_step Increment between thresholds (cm/hr) (default: 0.5).
 #' @param fit_type Type of fit: "linear", "quadratic", or "auto" (default: "auto").
-#'   "auto" tries both and selects based on R² improvement.
+#'   "auto" tries both and selects based on R^2 improvement.
 #' @param min_points Minimum number of points required for valid calibration (default: 50).
 #' @param create_plots Logical indicating whether to create diagnostic plots (default: TRUE).
 #' @param verbose Logical indicating whether to print progress (default: TRUE).
 #' @param manual_threshold Numeric value to manually specify threshold (cm/hr).
 #'   If provided, skips automatic optimization and uses this threshold directly.
 #'   Useful when you want to use a specific threshold based on domain knowledge
-#'   or visual inspection of R² vs threshold plot. Default: NULL (automatic).
+#'   or visual inspection of R^2 vs threshold plot. Default: NULL (automatic).
 #'
 #' @return A list with components \code{optimal_threshold} (velocity threshold
-#'   with highest R²), \code{optimal_r_squared} (R² value at optimal threshold),
+#'   with highest R^2), \code{optimal_r_squared} (R^2 value at optimal threshold),
 #'   \code{optimal_calibration} (full calibration object), \code{threshold_results}
-#'   (data frame of tested thresholds with R², RMSE, n_points), \code{plots}
+#'   (data frame of tested thresholds with R^2, RMSE, n_points), \code{plots}
 #'   (diagnostic plots if \code{create_plots = TRUE}), \code{primary_method},
 #'   \code{secondary_method}, and \code{sensor_position}
 #'
@@ -54,8 +54,8 @@ NULL
 #'    \code{threshold_step} (e.g., 0, 0.5, 1.0, 1.5, ..., 20 cm/hr)
 #' 2. At each threshold, filters data to points where primary method <= threshold
 #' 3. Fits relationship between primary and secondary methods on this valid region
-#' 4. Records R², RMSE, and number of points
-#' 5. Identifies the maximum threshold that maintains high R² (where methods still agree)
+#' 4. Records R^2, RMSE, and number of points
+#' 5. Identifies the maximum threshold that maintains high R^2 (where methods still agree)
 #'
 #' **Interpretation:**
 #'
@@ -70,7 +70,7 @@ NULL
 #'
 #' When \code{create_plots = TRUE}, generates:
 #' \itemize{
-#'   \item **R² vs Threshold**: Shows how correlation changes with threshold
+#'   \item **R^2 vs Threshold**: Shows how correlation changes with threshold
 #'   \item **Calibration Scatter**: HRM vs MHR with line of best fit at optimal threshold
 #' }
 #'
@@ -240,12 +240,12 @@ find_optimal_calibration_threshold <- function(vh_corrected,
       manual_mode = TRUE
     )
 
-    # Create plots if requested (no R² vs threshold plot in manual mode)
+    # Create plots if requested (no R^2 vs threshold plot in manual mode)
     if (create_plots) {
       if (!requireNamespace("ggplot2", quietly = TRUE)) {
         warning("ggplot2 not available. Plots not created.")
       } else {
-        # Only create calibration scatter plot (no R² vs threshold in manual mode)
+        # Only create calibration scatter plot (no R^2 vs threshold in manual mode)
         calibration_plot <- create_single_calibration_plot(
           calibration_data = manual_calibration$calibration_data,
           calibration = manual_calibration,
@@ -307,7 +307,7 @@ find_optimal_calibration_threshold <- function(vh_corrected,
         r2_linear <- summary(linear_fit)$r.squared
         r2_quad <- summary(quad_fit)$r.squared
 
-        # Use quadratic if it improves R² by more than 0.02
+        # Use quadratic if it improves R^2 by more than 0.02
         if (r2_quad - r2_linear > 0.02) {
           final_fit <- quad_fit
           fit_used <- "quadratic"
@@ -375,7 +375,7 @@ find_optimal_calibration_threshold <- function(vh_corrected,
     results$fit_type_used[i] <- fit_used
   }
 
-  # Remove rows with NA R²
+  # Remove rows with NA R^2
   valid_results <- results[!is.na(results$r_squared), ]
 
   if (nrow(valid_results) == 0) {
@@ -385,7 +385,7 @@ find_optimal_calibration_threshold <- function(vh_corrected,
          "  - Checking data quality")
   }
 
-  # Find optimal threshold (maximum R²)
+  # Find optimal threshold (maximum R^2)
   optimal_idx <- which.max(valid_results$r_squared)
   optimal_threshold <- valid_results$threshold[optimal_idx]
   optimal_r_squared <- valid_results$r_squared[optimal_idx]
@@ -396,7 +396,7 @@ find_optimal_calibration_threshold <- function(vh_corrected,
     cat("\n")
     cat("RESULTS\n")
     cat("  Optimal threshold:", optimal_threshold, "cm/hr\n")
-    cat("  R² at optimal:", round(optimal_r_squared, 4), "\n")
+    cat("  R^2 at optimal:", round(optimal_r_squared, 4), "\n")
     cat("  Fit type:", optimal_fit_type, "\n")
     cat("  Points used:", valid_results$n_points[optimal_idx], "\n")
     cat("\n")
@@ -485,7 +485,7 @@ find_optimal_calibration_threshold <- function(vh_corrected,
 #' 1. Merges primary and secondary method data by pulse_id
 #' 2. Filters to **handover window**: points where primary method is between
 #'    \code{threshold * (1 - handover_pct)} and \code{threshold}
-#' 3. Fits regression: primary ~ secondary (or primary ~ secondary + secondary²)
+#' 3. Fits regression: primary ~ secondary (or primary ~ secondary + secondary^2)
 #' 4. Creates transformation function to convert secondary values to primary scale
 #' 5. This transformation is then applied to ALL secondary data, especially above
 #'    the threshold where the primary method becomes unreliable
@@ -508,7 +508,7 @@ find_optimal_calibration_threshold <- function(vh_corrected,
 #' If \code{fit_type = "auto"}:
 #' \itemize{
 #'   \item Tries both linear and quadratic fits
-#'   \item Uses quadratic if R² improves by more than 0.02
+#'   \item Uses quadratic if R^2 improves by more than 0.02
 #'   \item Otherwise uses simpler linear fit
 #' }
 #'
@@ -607,7 +607,7 @@ calibrate_method_to_primary <- function(vh_corrected,
 
   # Determine fit type
   if (fit_type == "auto") {
-    # Try both, pick best R² (using dynamic column names)
+    # Try both, pick best R^2 (using dynamic column names)
     formula_linear <- as.formula(paste(primary_col, "~", secondary_col))
     formula_quad <- as.formula(paste(primary_col, "~", secondary_col, "+ I(", secondary_col, "^2)"))
 
@@ -617,7 +617,7 @@ calibrate_method_to_primary <- function(vh_corrected,
     r2_linear <- summary(linear_fit)$r.squared
     r2_quad <- summary(quad_fit)$r.squared
 
-    # Use quadratic if it improves R² by more than 0.02
+    # Use quadratic if it improves R^2 by more than 0.02
     if (r2_quad - r2_linear > 0.02) {
       fit_type <- "quadratic"
       final_fit <- quad_fit
@@ -652,7 +652,7 @@ calibrate_method_to_primary <- function(vh_corrected,
       coeffs[1] + coeffs[2] * x
     }
   } else {
-    # y = a + b*x + c*x²
+    # y = a + b*x + c*x^2
     transform_fn <- function(x) {
       coeffs[1] + coeffs[2] * x + coeffs[3] * x^2
     }
@@ -661,7 +661,7 @@ calibrate_method_to_primary <- function(vh_corrected,
   # Report
   if (verbose) {
     cat("\n", strrep("=", 70), "\n")
-    cat("METHOD CALIBRATION:", toupper(secondary_method), "→", toupper(primary_method), "\n")
+    cat("METHOD CALIBRATION:", toupper(secondary_method), "->", toupper(primary_method), "\n")
     cat(strrep("=", 70), "\n\n")
     cat("Sensor:", toupper(sensor_position), "\n")
     cat("Threshold:", threshold_velocity, "cm/hr\n")
@@ -669,14 +669,14 @@ calibrate_method_to_primary <- function(vh_corrected,
     cat("Handover %:", round(handover_pct * 100, 0), "%\n")
     cat("Calibration points:", nrow(calib_data), "\n")
     cat("Fit type:", fit_type, "\n")
-    cat("R²:", round(r_squared, 4), "\n")
+    cat("R^2:", round(r_squared, 4), "\n")
     cat("RMSE:", round(rmse, 3), "cm/hr\n\n")
 
     if (fit_type == "linear") {
-      cat(sprintf("Transformation: %s = %.4f + %.4f × %s\n",
+      cat(sprintf("Transformation: %s = %.4f + %.4f * %s\n",
                   primary_method, coeffs[1], coeffs[2], secondary_method))
     } else {
-      cat(sprintf("Transformation: %s = %.4f + %.4f × %s + %.6f × %s²\n",
+      cat(sprintf("Transformation: %s = %.4f + %.4f * %s + %.6f * %s^2\n",
                   primary_method, coeffs[1], coeffs[2], secondary_method,
                   coeffs[3], secondary_method))
     }
@@ -813,7 +813,7 @@ transform_secondary_method <- function(vh_corrected, calibration, velocity_col =
 #'   secondary method. Each element contains:
 #'   \itemize{
 #'     \item \code{optimal_threshold}: Best threshold for this method
-#'     \item \code{optimal_r_squared}: R² at optimal threshold
+#'     \item \code{optimal_r_squared}: R^2 at optimal threshold
 #'     \item \code{optimal_calibration}: Full calibration object
 #'     \item \code{threshold_results}: Data frame of all thresholds tested
 #'     \item \code{plots}: Diagnostic plots (if \code{create_plots = TRUE})
@@ -1134,9 +1134,9 @@ create_single_calibration_plot <- function(calibration_data,
     ggplot2::geom_abline(slope = 1, intercept = 0, linetype = "dashed",
                          color = "blue", alpha = 0.5) +
     ggplot2::labs(
-      title = paste("Method Calibration:", secondary_method, "→", primary_method),
+      title = paste("Method Calibration:", secondary_method, "->", primary_method),
       subtitle = paste0("Threshold: ", calibration$threshold, " cm/hr | ",
-                        "R² = ", round(calibration$r_squared, 4), " | ",
+                        "R^2 = ", round(calibration$r_squared, 4), " | ",
                         "Fit: ", calibration$fit_type),
       x = paste(secondary_method, "Velocity (cm/hr)"),
       y = paste(primary_method, "Velocity (cm/hr)")
@@ -1163,7 +1163,7 @@ create_single_calibration_plot <- function(calibration_data,
 #' @param primary_method Primary method name.
 #' @param secondary_method Secondary method name.
 #'
-#' @return List with \code{r_squared_plot} (plot of R² vs threshold velocity)
+#' @return List with \code{r_squared_plot} (plot of R^2 vs threshold velocity)
 #'   and \code{calibration_plot} (scatter plot with line of best fit)
 #'
 #' @keywords internal
@@ -1180,20 +1180,20 @@ create_calibration_diagnostic_plots <- function(threshold_results,
     return(NULL)
   }
 
-  # Plot 1: R² vs Threshold
+  # Plot 1: R^2 vs Threshold
   r_squared_plot <- ggplot2::ggplot(threshold_results, ggplot2::aes(x = threshold, y = r_squared)) +
     ggplot2::geom_line(color = "steelblue", linewidth = 1) +
     ggplot2::geom_point(color = "steelblue", size = 2) +
     ggplot2::geom_vline(xintercept = optimal_threshold, linetype = "dashed",
                         color = "red", linewidth = 1) +
     ggplot2::annotate("text", x = optimal_threshold, y = max(threshold_results$r_squared, na.rm = TRUE),
-                      label = paste0("Optimal: ", optimal_threshold, " cm/hr\nR² = ",
+                      label = paste0("Optimal: ", optimal_threshold, " cm/hr\nR^2 = ",
                                      round(max(threshold_results$r_squared, na.rm = TRUE), 4)),
                       hjust = -0.1, vjust = 1, color = "red") +
     ggplot2::labs(
-      title = paste("Threshold Optimization:", secondary_method, "→", primary_method),
+      title = paste("Threshold Optimization:", secondary_method, "->", primary_method),
       x = "Threshold Velocity (cm/hr)",
-      y = "R²"
+      y = "R^2"
     ) +
     ggplot2::theme_classic() +
     ggplot2::theme(
@@ -1217,9 +1217,9 @@ create_calibration_diagnostic_plots <- function(threshold_results,
     ggplot2::geom_abline(slope = 1, intercept = 0, linetype = "dashed",
                          color = "blue", alpha = 0.5) +
     ggplot2::labs(
-      title = paste("Method Calibration:", secondary_method, "→", primary_method),
+      title = paste("Method Calibration:", secondary_method, "->", primary_method),
       subtitle = paste0("Threshold: ", optimal_threshold, " cm/hr | ",
-                        "R² = ", round(calibration$r_squared, 4), " | ",
+                        "R^2 = ", round(calibration$r_squared, 4), " | ",
                         "Fit: ", calibration$fit_type),
       x = paste(secondary_method, "Velocity (cm/hr)"),
       y = paste(primary_method, "Velocity (cm/hr)")
@@ -1251,14 +1251,14 @@ print.threshold_optimization_result <- function(x, ...) {
   cat(strrep("=", 72), "\n")
   cat("\n")
 
-  cat("Methods:", x$secondary_method, "→", x$primary_method, "\n")
+  cat("Methods:", x$secondary_method, "->", x$primary_method, "\n")
   cat("Sensor:", toupper(x$sensor_position), "\n")
   cat("\n")
 
   cat("OPTIMAL THRESHOLD\n")
   cat(strrep("-", 72), "\n")
   cat("  Velocity:", x$optimal_threshold, "cm/hr\n")
-  cat("  R²:", round(x$optimal_r_squared, 4), "\n")
+  cat("  R^2:", round(x$optimal_r_squared, 4), "\n")
   cat("  Fit type:", x$optimal_calibration$fit_type, "\n")
   cat("  Points used:", x$optimal_calibration$n_points, "\n")
   cat("\n")
@@ -1268,7 +1268,7 @@ print.threshold_optimization_result <- function(x, ...) {
   valid_results <- x$threshold_results[!is.na(x$threshold_results$r_squared), ]
   cat("  Thresholds tested:", nrow(x$threshold_results), "\n")
   cat("  Valid results:", nrow(valid_results), "\n")
-  cat("  R² range:", round(min(valid_results$r_squared), 4), "-",
+  cat("  R^2 range:", round(min(valid_results$r_squared), 4), "-",
       round(max(valid_results$r_squared), 4), "\n")
   cat("\n")
 
@@ -1276,10 +1276,10 @@ print.threshold_optimization_result <- function(x, ...) {
   cat(strrep("-", 72), "\n")
   coeffs <- x$optimal_calibration$coefficients
   if (x$optimal_calibration$fit_type == "linear") {
-    cat(sprintf("  %s = %.4f + %.4f × %s\n",
+    cat(sprintf("  %s = %.4f + %.4f * %s\n",
                 x$primary_method, coeffs[1], coeffs[2], x$secondary_method))
   } else {
-    cat(sprintf("  %s = %.4f + %.4f × %s + %.6f × %s²\n",
+    cat(sprintf("  %s = %.4f + %.4f * %s + %.6f * %s^2\n",
                 x$primary_method, coeffs[1], coeffs[2], x$secondary_method,
                 coeffs[3], x$secondary_method))
   }
@@ -1288,7 +1288,7 @@ print.threshold_optimization_result <- function(x, ...) {
   if (!is.null(x$plots)) {
     cat("DIAGNOSTIC PLOTS AVAILABLE\n")
     cat(strrep("-", 72), "\n")
-    cat("  - $plots$r_squared_plot: R² vs threshold\n")
+    cat("  - $plots$r_squared_plot: R^2 vs threshold\n")
     cat("  - $plots$calibration_plot: Calibration scatter plot\n")
     cat("\n")
   }
@@ -1310,7 +1310,7 @@ print.method_calibration <- function(x, ...) {
 
   cat("\n")
   cat(strrep("=", 70), "\n")
-  cat("METHOD CALIBRATION:", toupper(x$secondary_method), "→", toupper(x$primary_method), "\n")
+  cat("METHOD CALIBRATION:", toupper(x$secondary_method), "->", toupper(x$primary_method), "\n")
   cat(strrep("=", 70), "\n")
   cat("\n")
 
@@ -1318,18 +1318,18 @@ print.method_calibration <- function(x, ...) {
   cat("Threshold:", x$threshold, "cm/hr\n")
   cat("Points:", x$n_points, "\n")
   cat("Fit type:", x$fit_type, "\n")
-  cat("R²:", round(x$r_squared, 4), "\n")
+  cat("R^2:", round(x$r_squared, 4), "\n")
   cat("RMSE:", round(x$rmse, 3), "cm/hr\n")
   cat("\n")
 
   cat("TRANSFORMATION EQUATION\n")
   cat(strrep("-", 70), "\n")
   if (x$fit_type == "linear") {
-    cat(sprintf("  %s = %.4f + %.4f × %s\n",
+    cat(sprintf("  %s = %.4f + %.4f * %s\n",
                 x$primary_method, x$coefficients[1], x$coefficients[2],
                 x$secondary_method))
   } else {
-    cat(sprintf("  %s = %.4f + %.4f × %s + %.6f × %s²\n",
+    cat(sprintf("  %s = %.4f + %.4f * %s + %.6f * %s^2\n",
                 x$primary_method, x$coefficients[1], x$coefficients[2],
                 x$secondary_method, x$coefficients[3], x$secondary_method))
   }
@@ -1364,7 +1364,7 @@ print.method_calibration <- function(x, ...) {
 #'   velocity in cm/hr), \code{breakpoint_ci} (95\% confidence interval),
 #'   \code{breakpoint_se} (standard error), \code{slope_before} (slope before
 #'   breakpoint), \code{slope_after} (slope after breakpoint), \code{r_squared}
-#'   (overall R² of segmented model), \code{davies_test} (p-value from Davies
+#'   (overall R^2 of segmented model), \code{davies_test} (p-value from Davies
 #'   test), \code{n_points} (number of points), \code{segmented_model} (full
 #'   model object), \code{merged_data} (paired measurements data frame),
 #'   \code{plots} (list of diagnostic plots if \code{create_plots = TRUE}),
@@ -1396,7 +1396,7 @@ print.method_calibration <- function(x, ...) {
 #'   \item The calibration region for aligning methods
 #' }
 #'
-#' **Advantages over R² Optimization:**
+#' **Advantages over R^2 Optimization:**
 #'
 #' \itemize{
 #'   \item \strong{Statistical rigor}: Confidence intervals and significance testing
@@ -1563,7 +1563,7 @@ compare_methods_segmented <- function(vh_corrected,
   initial_r2 <- summary(lm_fit)$r.squared
 
   if (verbose) {
-    cat("Initial linear R²:", round(initial_r2, 4), "\n")
+    cat("Initial linear R^2:", round(initial_r2, 4), "\n")
   }
 
   # Determine initial breakpoint guess
@@ -1664,7 +1664,7 @@ compare_methods_segmented <- function(vh_corrected,
   breakpoint_est <- breakpoint_summary[, "Est."]
   breakpoint_se <- breakpoint_summary[, "St.Err"]
 
-  # Calculate 95% confidence interval (±1.96 SE)
+  # Calculate 95% confidence interval (+/-1.96 SE)
   breakpoint_ci <- c(
     breakpoint_est - 1.96 * breakpoint_se,
     breakpoint_est + 1.96 * breakpoint_se
@@ -1675,7 +1675,7 @@ compare_methods_segmented <- function(vh_corrected,
   slope_before <- slopes$Vh_cm_hr_primary[1, 1]  # First segment slope
   slope_after <- slopes$Vh_cm_hr_primary[2, 1]   # Second segment slope
 
-  # Calculate R² for segmented model
+  # Calculate R^2 for segmented model
   seg_r2 <- 1 - (sum(residuals(seg_fit)^2) / sum((merged_data$Vh_cm_hr_secondary - mean(merged_data$Vh_cm_hr_secondary))^2))
 
   # Davies test for significant breakpoint
@@ -1702,8 +1702,8 @@ compare_methods_segmented <- function(vh_corrected,
     cat("  Slope after breakpoint:", round(slope_after, 4), "\n")
     cat("  Slope change:", round(slope_after - slope_before, 4), "\n")
     cat("\n")
-    cat("  Segmented R²:", round(seg_r2, 4), "\n")
-    cat("  Linear R² (for comparison):", round(initial_r2, 4), "\n")
+    cat("  Segmented R^2:", round(seg_r2, 4), "\n")
+    cat("  Linear R^2 (for comparison):", round(initial_r2, 4), "\n")
     cat("  Improvement:", round(seg_r2 - initial_r2, 4), "\n")
     cat("\n")
 
@@ -1853,7 +1853,7 @@ create_segmented_regression_plots <- function(result, primary_method, secondary_
     # Labels and theme
     ggplot2::labs(
       title = paste("Segmented Regression:", secondary_method, "vs", primary_method),
-      subtitle = sprintf("R² = %.4f | Slopes: %.3f → %.3f | Davies test p = %s",
+      subtitle = sprintf("R^2 = %.4f | Slopes: %.3f -> %.3f | Davies test p = %s",
                         result$r_squared,
                         result$slope_before,
                         result$slope_after,
@@ -1955,7 +1955,7 @@ print.segmented_comparison <- function(x, ...) {
     cat("STATUS: Segmented regression did not converge\n")
     cat("No clear breakpoint detected - relationship appears linear\n")
     cat("\n")
-    cat("Linear model R²:", round(x$r_squared, 4), "\n")
+    cat("Linear model R^2:", round(x$r_squared, 4), "\n")
     cat("\n")
   } else {
     cat("BREAKPOINT ANALYSIS\n")
@@ -1975,8 +1975,8 @@ print.segmented_comparison <- function(x, ...) {
 
     cat("MODEL FIT\n")
     cat(strrep("-", 72), "\n")
-    cat("  Segmented R²:", round(x$r_squared, 4), "\n")
-    cat("  Linear R² (comparison):", round(x$r_squared_linear, 4), "\n")
+    cat("  Segmented R^2:", round(x$r_squared, 4), "\n")
+    cat("  Linear R^2 (comparison):", round(x$r_squared_linear, 4), "\n")
     cat("  Improvement:", round(x$r_squared - x$r_squared_linear, 4), "\n")
     cat("\n")
 

@@ -25,7 +25,7 @@
 #' \itemize{
 #'   \item When residuals show systematic patterns after the breakpoint
 #'   \item When the relationship appears to curve at higher velocities
-#'   \item When simple segmented regression R² is lower than expected
+#'   \item When simple segmented regression R^2 is lower than expected
 #' }
 #'
 #' @family method calibration functions
@@ -90,14 +90,14 @@ compare_methods_enhanced <- function(vh_corrected,
 
       cat("QUADRATIC MODEL RESULTS\n")
       cat(strrep("-", 72), "\n")
-      cat("  Quadratic R²:", round(quad_result$r_squared, 4), "\n")
-      cat("  Linear R²:", round(result$r_squared, 4), "\n")
+      cat("  Quadratic R^2:", round(quad_result$r_squared, 4), "\n")
+      cat("  Linear R^2:", round(result$r_squared, 4), "\n")
       cat("  Improvement:", round(r2_improvement, 4), "\n")
       cat("\n")
 
-      # Use quadratic model if it improves R² substantially
+      # Use quadratic model if it improves R^2 substantially
       if (r2_improvement > 0.01) {
-        cat("Quadratic model provides better fit (ΔR² > 0.01)\n")
+        cat("Quadratic model provides better fit (deltaR^2 > 0.01)\n")
         cat("Recommendation: Use quadratic model for this comparison\n")
         cat("\n")
 
@@ -221,7 +221,7 @@ fit_piecewise_linear_quadratic <- function(merged_data, breakpoint,
   # This ensures continuity at the breakpoint
   model <- lm(Vh_cm_hr_secondary ~ x1 + x2 + x2_sq, data = merged_data)
 
-  # Calculate R²
+  # Calculate R^2
   r_squared <- summary(model)$r.squared
 
   # Extract coefficients
@@ -285,7 +285,7 @@ create_quadratic_plot <- function(quad_result, primary_method, secondary_method)
     # Labels and theme
     ggplot2::labs(
       title = paste("Piecewise Linear-Quadratic:", secondary_method, "vs", primary_method),
-      subtitle = sprintf("R² = %.4f | Linear before BP, Quadratic after BP",
+      subtitle = sprintf("R^2 = %.4f | Linear before BP, Quadratic after BP",
                         quad_result$r_squared),
       x = paste(primary_method, "Velocity (cm/hr)"),
       y = paste(secondary_method, "Velocity (cm/hr)")

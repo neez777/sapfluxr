@@ -73,7 +73,7 @@ NULL
 #' @examples
 #' \dontrun{
 #' # === SINGLE METHOD CALIBRATION ===
-#' 
+#'
 #' # Transform method
 #' calibration <- calibrate_method_to_primary(
 #'   vh_corrected,
@@ -92,7 +92,7 @@ NULL
 #' )
 #'
 #' # === MULTI-METHOD CALIBRATION ===
-#' 
+#'
 #' # Calibrate multiple methods
 #' calibrations <- calibrate_multiple_methods(
 #'   vh_corrected,
@@ -157,15 +157,15 @@ plot_calibration_comparison <- function(vh_original,
   # ============================================================================
   # HANDLE MULTI-METHOD CALIBRATION: Prompt user to select method
   # ============================================================================
-  
+
   if (inherits(calibration, "multi_method_calibration")) {
     # Multi-method calibration provided
     available_methods <- names(calibration)
-    
+
     if (length(available_methods) == 0) {
       stop("calibration is an empty multi-method calibration object")
     }
-    
+
     # If method not specified, prompt user (or error if non-interactive)
     if (is.null(method)) {
       if (interactive()) {
@@ -183,14 +183,14 @@ plot_calibration_comparison <- function(vh_original,
         }
         cat("\n")
         cat("Enter method number to plot [1-", length(available_methods), "]: ", sep = "")
-        
+
         method_input <- readline()
         method_num <- suppressWarnings(as.integer(method_input))
-        
+
         if (is.na(method_num) || method_num < 1 || method_num > length(available_methods)) {
           stop("Invalid method number. Must be between 1 and ", length(available_methods))
         }
-        
+
         method <- available_methods[method_num]
         cat("\nPlotting calibration for:", method, "\n\n")
       } else {
@@ -200,21 +200,21 @@ plot_calibration_comparison <- function(vh_original,
              available_methods[1], "')")
       }
     }
-    
+
     # Validate specified method
     if (!method %in% available_methods) {
       stop("method '", method, "' not found in calibration.\n",
            "Available methods: ", paste(available_methods, collapse = ", "))
     }
-    
+
     # Extract the specific calibration
     calibration <- calibration[[method]]$optimal_calibration
   }
-  
+
   # ============================================================================
   # VALIDATE SINGLE CALIBRATION OBJECT
   # ============================================================================
-  
+
   # Input validation
   if (!inherits(calibration, "method_calibration")) {
     stop("calibration must be a method_calibration object or multi_method_calibration object")
@@ -404,10 +404,10 @@ plot_calibration_comparison <- function(vh_original,
     ggplot2::scale_linetype_manual(values = line_types) +
     ggplot2::scale_color_manual(values = colours) +
     ggplot2::labs(
-      title = paste("Method Calibration Comparison:", secondary_method, "→", primary_method),
+      title = paste("Method Calibration Comparison:", secondary_method, "->", primary_method),
       subtitle = paste0("Sensor: ", toupper(sensor_position), " | ",
                         "Threshold: ", calibration$threshold, " cm/hr | ",
-                        "R² = ", round(calibration$r_squared, 4)),
+                        "R^2 = ", round(calibration$r_squared, 4)),
       x = "Date/Time",
       y = "Velocity (cm/hr)",
       color = "Method",
@@ -474,7 +474,7 @@ parse_date_input <- function(input, reference_date) {
 #'   sensor_position, Vh_cm_hr (or velocity_col), Vh_sdma, sdma_source.
 #' @param threshold Numeric. The velocity or Peclet threshold where switching occurs.
 #' @param window_days Numeric. Number of days around the transition to display
-#'   (default: 7). The plot will show data from threshold ± window_days.
+#'   (default: 7). The plot will show data from threshold +/- window_days.
 #' @param sensor_position Character. Sensor position to plot ("outer" or "inner").
 #'   Default: "outer".
 #' @param primary_method Character. Name of primary method (default: "HRM").
@@ -603,14 +603,14 @@ plot_sdma_transition <- function(data,
 
   # Calculate velocity buffer around threshold for temporal windowing
   # This ensures we capture transitions even if they're spread over time
-  threshold_window <- threshold * 0.2  # ±20% of threshold
+  threshold_window <- threshold * 0.2  # +/-20% of threshold
 
   # Find times when we're near the threshold
   near_threshold <- primary_data[[switch_var]] >= (threshold - threshold_window) &
                     primary_data[[switch_var]] <= (threshold + threshold_window)
 
   if (!any(near_threshold, na.rm = TRUE)) {
-    warning("No data found near threshold (", threshold, " ± ", round(threshold_window, 2), ")")
+    warning("No data found near threshold (", threshold, " +/- ", round(threshold_window, 2), ")")
     # Fall back to showing all data
     transition_times <- primary_data$datetime
   } else {
@@ -699,9 +699,9 @@ plot_sdma_transition <- function(data,
 
     # Labels and theme
     ggplot2::labs(
-      title = paste("sDMA Transition Zone:", primary_method, "↔", secondary_method),
+      title = paste("sDMA Transition Zone:", primary_method, "<->", secondary_method),
       subtitle = paste0("Threshold: ", threshold, if (mode == "velocity") " cm/hr" else "",
-                        " | Window: ±", window_days, " days | ",
+                        " | Window: +/-", window_days, " days | ",
                         "Check for discontinuities at threshold"),
       x = "Date/Time",
       y = "Velocity (cm/hr)",
