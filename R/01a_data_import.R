@@ -74,7 +74,7 @@ trim_incomplete_days <- function(measurements, diagnostics, verbose = TRUE) {
   # If dataset spans less than 3 days, don't trim (keep all data)
   if (as.numeric(difftime(last_date, first_date, units = "days")) < 2) {
     if (verbose) {
-      message("   ℹ️  Dataset spans < 3 days, skipping incomplete day trimming")
+      message("!! Dataset spans < 3 days, skipping incomplete day trimming")
     }
     return(list(measurements = measurements, diagnostics = diagnostics))
   }
@@ -144,19 +144,19 @@ trim_incomplete_days <- function(measurements, diagnostics, verbose = TRUE) {
     n_pulses_removed <- nrow(diagnostics) - nrow(diagnostics_trimmed)
 
     if (n_measurements_removed > 0) {
-      message(sprintf("   ✂️  Trimmed incomplete days: removed %s measurements (%s pulses)",
+      message(sprintf("!! Trimmed incomplete days: removed %s measurements (%s pulses)",
                       format(n_measurements_removed, big.mark = ","),
                       format(n_pulses_removed, big.mark = ",")))
-      message(sprintf("      First day (%s): %.1f hours %s",
+      message(sprintf("- First day (%s): %.1f hours %s",
                       first_date,
                       first_day_duration_hours,
                       if (first_day_duration_hours >= 23) "[KEPT]" else "[REMOVED]"))
-      message(sprintf("      Last day (%s): %.1f hours %s",
+      message(sprintf("- Last day (%s): %.1f hours %s",
                       last_date,
                       last_day_duration_hours,
                       if (last_day_duration_hours >= 23) "[KEPT]" else "[REMOVED]"))
     } else {
-      message("   ℹ️  First and last days are complete (>= 23 hours), no trimming needed")
+      message("!! First and last days are complete (>= 23 hours), no trimming needed")
     }
   }
 
@@ -260,7 +260,7 @@ read_heat_pulse_data <- function(file_path,
   }
 
   if (show_progress) {
-    show_message(sprintf("📊 Reading heat pulse data: %s (%.1f MB)\n",
+    show_message(sprintf("|▄·····| Reading heat pulse data: %s (%.1f MB)\n",
                         basename(file_path), file_size_mb))
   }
 
@@ -268,7 +268,7 @@ read_heat_pulse_data <- function(file_path,
   if (is.null(format)) {
     format <- detect_format(file_path)
     if (show_progress) {
-      show_message(sprintf("🔍 Auto-detected format: %s\n", format))
+      show_message(sprintf("|█·····| Auto-detected format: %s\n", format))
     }
   }
 
@@ -313,7 +313,7 @@ read_heat_pulse_data <- function(file_path,
   # This ensures completeness calculations are accurate
   if (nrow(result$measurements) > 1 && "datetime" %in% names(result$measurements)) {
     if (show_progress) {
-      show_message("🔍 Detecting missing pulses...\n")
+      show_message("|████▄·| Detecting missing pulses...\n")
     }
 
     tryCatch({
@@ -337,13 +337,13 @@ read_heat_pulse_data <- function(file_path,
       if (show_progress && !is.null(gap_detection_result$gap_report) && nrow(gap_detection_result$gap_report) > 0) {
         n_gaps <- nrow(gap_detection_result$gap_report)
         n_filled <- gap_detection_result$summary$n_filled
-        show_message(sprintf("⚠️  Found %d gap(s), filled %d missing pulse(s) with interpolated timestamps\n",
+        show_message(sprintf("[WARN] Found %d gap(s), filled %d missing pulse(s) with interpolated timestamps\n",
                             n_gaps, n_filled))
       }
 
     }, error = function(e) {
       if (show_progress) {
-        show_message(sprintf("⚠️  Gap detection failed: %s\n", e$message))
+        show_message(sprintf("[WARN] Gap detection failed: %s\n", e$message))
         message("    ERROR details: ", e$message)
         message("    ERROR call: ", paste(deparse(e$call), collapse = " "))
       }
@@ -355,7 +355,7 @@ read_heat_pulse_data <- function(file_path,
   # Trim incomplete days if requested (AFTER gap detection, BEFORE validation)
   if (trim_incomplete_days && nrow(result$measurements) > 0 && "datetime" %in% names(result$measurements)) {
     if (show_progress) {
-      show_message("✂️  Trimming incomplete days...\n")
+      show_message("|█████·|  Trimming incomplete days...\n")
     }
 
     trimmed <- trim_incomplete_days(
@@ -377,7 +377,7 @@ read_heat_pulse_data <- function(file_path,
   # Validate if requested (now runs AFTER gap detection and trimming)
   if (validate_data) {
     if (show_progress) {
-      show_message("✔️ Validating data structure and ranges...\n")
+      show_message("|█████▄| Validating data structure and ranges...\n")
     }
     validation_result <- validate_heat_pulse_data(result)
     if (!validation_result$valid) {
@@ -388,7 +388,7 @@ read_heat_pulse_data <- function(file_path,
   }
 
   if (show_progress) {
-    summary_msg <- sprintf("🎉 Import complete: %s pulses, %s measurements",
+    summary_msg <- sprintf("|██████| Import complete: %s pulses, %s measurements",
                           format(nrow(result$diagnostics), big.mark = ","),
                           format(nrow(result$measurements), big.mark = ","))
 
@@ -490,7 +490,7 @@ read_ict_current <- function(file_path, chunk_size, show_progress, ...) {
   file_size_mb <- file_size / 1e6
 
   if (show_progress) {
-    show_message("📖 Reading file...\n")
+    show_message("|█▄····| Reading file...\n")
   }
 
   con <- file(file_path, "rb")
@@ -518,13 +518,13 @@ read_ict_current <- function(file_path, chunk_size, show_progress, ...) {
     }
 
     if (show_progress) {
-      show_message("✅ File reading complete\n")
+      show_message("|███···| File reading complete\n")
     }
 
   } else {
-    # For very large files, use list accumulation (avoids O(n²) string concatenation)
+    # For very large files, use list accumulation (avoids O(n^2) string concatenation)
     if (show_progress) {
-      show_message("📖 Reading large file in chunks...\n")
+      show_message("|██····| Reading large file in chunks...\n")
     }
 
     chunks <- list()
@@ -553,7 +553,7 @@ read_ict_current <- function(file_path, chunk_size, show_progress, ...) {
     }
 
     if (show_progress) {
-      show_message("✅ File reading complete\n")
+      show_message("|██▄···| File reading complete\n")
     }
 
     # Join all chunks once at the end - much faster than repeated paste0
@@ -561,7 +561,7 @@ read_ict_current <- function(file_path, chunk_size, show_progress, ...) {
   }
 
   if (show_progress) {
-    show_message("🔧 Parsing data...\n")
+    show_message("|███▄··| Parsing data...\n")
   }
 
   # Ultra-fast parsing: extract all data at once using vectorized operations
@@ -725,7 +725,7 @@ parse_ict_current_vectorized <- function(content, show_progress, file_size_mb = 
 read_ict_legacy <- function(file_path, chunk_size, show_progress, ...) {
 
   if (show_progress) {
-    show_message("📖 Reading ICT legacy format...\n")
+    show_message("???? Reading ICT legacy format...\n")
   }
 
   # Read file content
@@ -766,7 +766,7 @@ read_ict_legacy <- function(file_path, chunk_size, show_progress, ...) {
 read_csv_format <- function(file_path, show_progress, ...) {
 
   if (show_progress) {
-    show_message("📖 Reading CSV/tab-delimited format...\n")
+    show_message("???? Reading CSV/tab-delimited format...\n")
   }
 
   # Detect delimiter
@@ -1183,9 +1183,9 @@ read_multiple_heat_pulse_data <- function(file_paths,
   }
 
   if (show_progress) {
-    show_message(sprintf("🌳 Importing %d heat pulse data files...\n", length(file_paths)))
-    show_message(sprintf("📁 Files: %s\n", paste(basename(file_paths), collapse = ", ")))
-    show_message(sprintf("🏷️  Tree IDs: %s\n\n", paste(tree_ids, collapse = ", ")))
+    show_message(sprintf("???? Importing %d heat pulse data files...\n", length(file_paths)))
+    show_message(sprintf("???? Files: %s\n", paste(basename(file_paths), collapse = ", ")))
+    show_message(sprintf("???????  Tree IDs: %s\n\n", paste(tree_ids, collapse = ", ")))
   }
 
   # Import each file individually
@@ -1204,7 +1204,7 @@ read_multiple_heat_pulse_data <- function(file_paths,
 
   for (i in seq_along(file_paths)) {
     if (show_progress) {
-      show_message(sprintf("📊 [%d/%d] Importing %s (%s)...\n",
+      show_message(sprintf("???? [%d/%d] Importing %s (%s)...\n",
                           i, length(file_paths), tree_ids[i], basename(file_paths[i])))
     }
 
@@ -1237,7 +1237,7 @@ read_multiple_heat_pulse_data <- function(file_paths,
       import_summary$import_success[i] <- TRUE
 
       if (show_progress) {
-        show_message(sprintf("   ✅ Success: %s pulses, %s measurements\n",
+        show_message(sprintf("   ??? Success: %s pulses, %s measurements\n",
                             format(nrow(heat_pulse_data$diagnostics), big.mark = ","),
                             format(nrow(heat_pulse_data$measurements), big.mark = ",")))
       }
@@ -1248,7 +1248,7 @@ read_multiple_heat_pulse_data <- function(file_paths,
       import_summary$import_errors[i] <- as.character(e$message)
 
       if (show_progress) {
-        show_message(sprintf("   ❌ Error: %s\n", e$message), type = "error")
+        show_message(sprintf("   ??? Error: %s\n", e$message), type = "error")
       }
 
       # Create empty data structure for failed imports
@@ -1258,7 +1258,7 @@ read_multiple_heat_pulse_data <- function(file_paths,
 
   if (show_progress) {
     successful_imports <- sum(import_summary$import_success)
-    show_message(sprintf("\n🎉 Import complete: %d/%d files successful\n",
+    show_message(sprintf("\n???? Import complete: %d/%d files successful\n",
                         successful_imports, length(file_paths)))
   }
 
@@ -1309,7 +1309,7 @@ generate_tree_ids <- function(file_paths) {
 combine_multiple_heat_pulse_data <- function(individual_data, import_summary, show_progress) {
 
   if (show_progress) {
-    show_message("🔄 Combining data from multiple trees...\n")
+    show_message("???? Combining data from multiple trees...\n")
   }
 
   # Filter successful imports
@@ -1397,7 +1397,7 @@ combine_multiple_heat_pulse_data <- function(individual_data, import_summary, sh
   class(result) <- c("multiple_heat_pulse_data", "heat_pulse_data", "list")
 
   if (show_progress) {
-    show_message(sprintf("✅ Combined: %d trees, %s total pulses, %s total measurements\n",
+    show_message(sprintf("??? Combined: %d trees, %s total pulses, %s total measurements\n",
                         length(successful_data),
                         format(nrow(combined_diagnostics), big.mark = ","),
                         format(nrow(combined_measurements), big.mark = ",")))
