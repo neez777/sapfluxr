@@ -22,9 +22,9 @@ Identifies points that deviate significantly from their local rolling mean.
 }
 \details{
 For each point i, calculates mean and SD of window \code{(i-window):(i+window)}.
-Points deviating by more than threshold × SD from the local mean are flagged.
+Points deviating by more than threshold x SD from the local mean are flagged.
 
-\strong{Performance:} O(n × window) but with fast C++ loops and minimal overhead.
+\strong{Performance:} O(n x window) but with fast C++ loops and minimal overhead.
 Typically 10-50x faster than pure R implementation for large datasets.
 }
 \keyword{internal}

@@ -200,7 +200,7 @@ test_that("apply_flux_conversion errors if velocity column missing", {
 
   expect_error(
     apply_flux_conversion(test_data, wood_props),
-    "Column Vc_cm_hr not found"
+    "Column Vh_cm_hr not found"
   )
 })
 

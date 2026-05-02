@@ -4,13 +4,22 @@
 \alias{get_correction_coefficients}
 \title{Get Spacing Correction Coefficients for Zero Offset}
 \usage{
-get_correction_coefficients(zero_vh, lookup_table)
+get_correction_coefficients(
+  zero_vh,
+  lookup_table,
+  zero_offset = NULL,
+  verbose = TRUE
+)
 }
 \arguments{
 \item{zero_vh}{Zero offset value (cm/hr)}
 
 \item{lookup_table}{Burgess coefficient lookup table from
 \code{\link{calculate_burgess_coefficients}}}
+
+\item{zero_offset}{Alias for zero_vh (for backward compatibility).}
+
+\item{verbose}{Print warning messages (default: TRUE).}
 }
 \value{
 A list containing:
@@ -30,7 +39,7 @@ Provides warnings based on severity of probe misalignment.
 \strong{Severity Assessment:}
 
 \describe{
-\item{|zero_vh| ≤ 1 cm/hr}{\strong{None/Minor} - Typical for field installations}
+\item{|zero_vh| <= 1 cm/hr}{\strong{None/Minor} - Typical for field installations}
 \item{|zero_vh| 1-3 cm/hr}{\strong{Minor} - Acceptable, correction reliable}
 \item{|zero_vh| 3-5 cm/hr}{\strong{Moderate} - Significant misalignment, elevated uncertainty}
 \item{|zero_vh| 5-10 cm/hr}{\strong{Severe} - Major misalignment, correction uses extrapolation}
@@ -52,10 +61,10 @@ print(correction$correction_formula)
 }
 \seealso{
 Other spacing correction functions: 
-\code{\link{apply_heartwood_reference_correction}()},
+\code{\link{apply_burgess_spacing_correction}()},
 \code{\link{apply_manual_spacing_correction}()},
-\code{\link{apply_spacing_correction}()},
 \code{\link{apply_spacing_correction_both_sensors}()},
+\code{\link{apply_spacing_correction_workflow}()},
 \code{\link{calculate_burgess_coefficients}()},
 \code{\link{calculate_zero_offset}()},
 \code{\link{print_spacing_correction_summary}()},

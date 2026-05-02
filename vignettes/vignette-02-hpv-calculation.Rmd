@@ -7,6 +7,10 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
+```{r setup, include = FALSE}
+library(sapfluxr)
+```
+
 ```{r, include = FALSE}
 knitr::opts_chunk$set(
   collapse = TRUE,
@@ -58,9 +62,6 @@ These methods calculate velocity from the **time-to-peak** temperature at the do
 *   **Bidirectional**: No.
 *   **Reliable Range**: ~20 to >100 cm h⁻¹.
 *   **Key References**: Cohen et al. (1981); Kluitenberg and Ham (2004).
-
-## 4. Modified HRM (HRMXa/b)
-Variants of HRM that use dynamic sampling windows based on a proportion of the peak temperature increase, designed to optimize the signal-to-noise ratio in specific environments.
 
 ---
 

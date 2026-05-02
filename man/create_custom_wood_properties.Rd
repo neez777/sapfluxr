@@ -36,15 +36,15 @@ create_custom_wood_properties(
 
 \item{species}{Species identification}
 
-\item{thermal_diffusivity}{Thermal diffusivity (cm²/s). Default: 0.0025.}
+\item{thermal_diffusivity}{Thermal diffusivity (cm^2/s). Default: 0.0025.}
 
-\item{thermal_conductivity}{Thermal conductivity (W/(m·K)). Optional.}
+\item{thermal_conductivity}{Thermal conductivity (W/(m.K)). Optional.}
 
-\item{volumetric_heat_capacity}{Volumetric heat capacity (J/(m³·K)). Optional.}
+\item{volumetric_heat_capacity}{Volumetric heat capacity (J/(m^3.K)). Optional.}
 
-\item{dry_density}{Oven-dry wood density (kg/m³). Optional.}
+\item{dry_density}{Oven-dry wood density (kg/m^3). Optional.}
 
-\item{fresh_density}{Basic density (kg/m³). Optional.}
+\item{fresh_density}{Basic density (kg/m^3). Optional.}
 
 \item{moisture_content}{Moisture content (\%). Optional.}
 
@@ -52,13 +52,13 @@ create_custom_wood_properties(
 
 \item{dry_weight}{Oven-dry weight of wood sample (g). Optional.}
 
-\item{fresh_volume}{Fresh/green volume of wood sample (cm³). Optional.}
+\item{fresh_volume}{Fresh/green volume of wood sample (cm^3). Optional.}
 
-\item{dry_volume}{Dry volume of wood sample (cm³). Optional.}
+\item{dry_volume}{Dry volume of wood sample (cm^3). Optional.}
 
 \item{wood_type}{Wood type ("softwood"/"hardwood"). Default: "softwood"}
 
-\item{temperature}{Typical wood temperature (°C). Default: 20}
+\item{temperature}{Typical wood temperature (degC). Default: 20}
 
 \item{dbh}{Diameter at breast height (cm). Optional.}
 
@@ -66,7 +66,7 @@ create_custom_wood_properties(
 
 \item{sapwood_depth}{Sapwood depth (cm). Optional.}
 
-\item{sapwood_area}{Sapwood area (cm²). Optional.}
+\item{sapwood_area}{Sapwood area (cm^2). Optional.}
 
 \item{heartwood_radius}{Heartwood radius (cm). Optional.}
 
@@ -74,7 +74,7 @@ create_custom_wood_properties(
 
 \item{min_velocity_cm_hr}{Minimum velocity threshold (cm/hr). Default: -50}
 
-\item{temperature_range}{Temperature range (°C). Default: c(-10, 60)}
+\item{temperature_range}{Temperature range (degC). Default: c(-10, 60)}
 
 \item{assume_no_shrinkage}{Logical. If TRUE, assumes fresh_volume = dry_volume
 when deriving properties. This allows moisture content to be calculated from
@@ -97,7 +97,7 @@ missing wood property values from the measurements you provide. This is
 particularly useful when you have:
 \itemize{
 \item \strong{Both densities but no moisture content}: With \code{assume_no_shrinkage = TRUE},
-MC will be calculated as (ρ_fresh - ρ_dry) / ρ_dry × 100
+MC will be calculated as (rho_fresh - rho_dry) / rho_dry x 100
 \item \strong{Weights but no densities}: Provide volume to calculate densities
 \item \strong{Partial measurements}: The function will derive as much as possible
 }
@@ -121,8 +121,8 @@ wood1 <- create_custom_wood_properties(
 wood2 <- create_custom_wood_properties(
   config_name = "My Eucalypt",
   species = "Eucalyptus",
-  fresh_density = 380,    # kg/m³ (fresh density at constant volume)
-  dry_density = 450,      # kg/m³ (dry density at same volume)
+  fresh_density = 380,    # kg/m^3 (fresh density at constant volume)
+  dry_density = 450,      # kg/m^3 (dry density at same volume)
   assume_no_shrinkage = TRUE
   # Automatically derives: MC = 18.4\%
 )
@@ -131,7 +131,7 @@ wood2 <- create_custom_wood_properties(
 wood3 <- create_custom_wood_properties(
   fresh_weight = 2.45,    # grams
   dry_weight = 1.38,      # grams
-  fresh_volume = 2.73     # cm³
+  fresh_volume = 2.73     # cm^3
   # Automatically derives: fresh_density, moisture_content
 )
 

@@ -27,7 +27,7 @@ create_calibration_diagnostic_plots(
 \item{secondary_method}{Secondary method name.}
 }
 \value{
-List with \code{r_squared_plot} (plot of R² vs threshold velocity)
+List with \code{r_squared_plot} (plot of R^2 vs threshold velocity)
 and \code{calibration_plot} (scatter plot with line of best fit)
 }
 \description{

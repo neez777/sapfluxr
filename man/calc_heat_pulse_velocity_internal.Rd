@@ -16,7 +16,8 @@ calc_heat_pulse_velocity_internal(
   max_gap_hours,
   interval_tolerance_seconds,
   probe_corrections,
-  progress_update_frequency
+  progress_update_frequency,
+  baseline_method = NULL
 )
 }
 \description{

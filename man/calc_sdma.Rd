@@ -19,7 +19,7 @@ calc_sdma(
 
 \item{secondary_method_name}{Name of secondary method (e.g., "MHR")}
 
-\item{diffusivity}{Thermal diffusivity (cm²/s)}
+\item{diffusivity}{Thermal diffusivity (cm^2/s)}
 
 \item{probe_spacing}{Probe spacing (cm)}
 }

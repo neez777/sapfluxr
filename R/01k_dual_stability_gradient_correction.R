@@ -14,6 +14,11 @@
 #' @param vh_data Data frame containing sap flow data with columns:
 #'   \code{datetime} and a sap flow column (specified by \code{vh_col})
 #' @param vh_col Name of sap flow column (e.g., "Vh_cm_hr")
+#' @param method Character. Method to filter to when \code{vh_data} contains a
+#'   \code{method} column. Default: \code{"HRM"}.
+#' @param sensor_position Character. Sensor position to filter to when
+#'   \code{vh_data} contains a \code{sensor_position} column. Default:
+#'   \code{"outer"}.
 #' @param predawn_window Vector of two integers defining predawn hours (e.g., c(2, 6))
 #'   to analyse hours 2, 3, 4, 5. Default: c(2, 6)
 #' @param vh_threshold Maximum mean sap flow during predawn (cm/hr). Default: 2.0
@@ -82,6 +87,8 @@
 #' @export
 find_stable_vh_dates <- function(vh_data,
                                   vh_col,
+                                  method          = "HRM",
+                                  sensor_position = "outer",
                                   predawn_window = c(2, 6),
                                   vh_threshold = 2.0,
                                   stability_threshold = 0.5,
@@ -98,6 +105,24 @@ find_stable_vh_dates <- function(vh_data,
   missing_cols <- setdiff(required_cols, names(vh_data))
   if (length(missing_cols) > 0) {
     stop("Missing required columns: ", paste(missing_cols, collapse = ", "))
+  }
+
+  # Filter to the requested method × sensor_position stream when those columns
+  # are present. If the filtered result is empty, stop() with a clear message.
+  if ("method" %in% names(vh_data) || "sensor_position" %in% names(vh_data)) {
+    avail_methods <- if ("method" %in% names(vh_data)) unique(vh_data$method) else character(0)
+    avail_sensors <- if ("sensor_position" %in% names(vh_data)) unique(vh_data$sensor_position) else character(0)
+    keep <- rep(TRUE, nrow(vh_data))
+    if ("method" %in% names(vh_data))
+      keep <- keep & vh_data$method == method
+    if ("sensor_position" %in% names(vh_data))
+      keep <- keep & vh_data$sensor_position == sensor_position
+    vh_data <- vh_data[keep, , drop = FALSE]
+    if (nrow(vh_data) == 0L)
+      stop("No rows remain after filtering to method = '", method,
+           "', sensor_position = '", sensor_position, "'. ",
+           "Available methods: ", paste(avail_methods, collapse = ", "), ". ",
+           "Available sensor positions: ", paste(avail_sensors, collapse = ", "), ".")
   }
 
   # Ensure datetime is POSIXct
@@ -244,15 +269,46 @@ find_stable_vh_dates <- function(vh_data,
 #' This dual-criterion approach reduces false positives from nocturnal hydraulic
 #' redistribution or other processes that can occur even when VPD is low.
 #'
-#' @param vh_data Data frame with datetime and sap flow columns
+#' @param vh_data Data frame with datetime and sap flow columns. When this data
+#'   frame contains \code{method} and/or \code{sensor_position} columns the
+#'   function filters to the single stream specified by \code{method} and
+#'   \code{sensor_position} before analysis.
 #' @param weather_data Data frame with datetime and VPD columns
 #' @param vh_col Name of sap flow column
+#' @param method Character. Method to filter to when \code{vh_data} contains a
+#'   \code{method} column. Default: \code{"HRM"}.
+#' @param sensor_position Character. Sensor position to filter to when
+#'   \code{vh_data} contains a \code{sensor_position} column. Default:
+#'   \code{"outer"}.
 #' @param vpd_col Name of VPD column (default: "vpd_kpa")
-#' @param predawn_window Predawn hours window (default: c(2, 6))
-#' @param vpd_threshold Maximum mean VPD (kPa, default: 0.5)
-#' @param vpd_stability Maximum SD VPD (kPa, default: 0.1)
-#' @param vh_threshold Maximum mean sap flow (cm/hr, default: 2.0)
-#' @param vh_stability Maximum SD sap flow (cm/hr, default: 0.5)
+#' @param predawn_window Predawn hours window. In \code{"static"} mode: \code{c(start_hour,
+#'   end_hour)} inclusive start, exclusive end (e.g., \code{c(2, 6)} = 02:00–05:59).
+#'   In \code{"dynamic"} mode: \code{c(hours_before_dawn, hours_after_dawn)}, both
+#'   relative to astronomical dawn (e.g., \code{c(4, 1)} = 4 h before to 1 h before dawn).
+#'   Default: \code{c(2, 6)}.
+#' @param mode Predawn window mode: \code{"static"} (default) uses fixed clock hours;
+#'   \code{"dynamic"} uses dawn-relative hours computed from \code{dawn_times}.
+#' @param dawn_times POSIXct vector of astronomical dawn times, one per unique date in the
+#'   data. Required when \code{mode = "dynamic"}. Obtain via
+#'   \code{wood_properties$get_dawn_times(dates)}.
+#' @param timezone IANA timezone string (e.g., \code{"Australia/Perth"}) used to
+#'   interpret predawn hours. Logger data stored in UTC must be converted to local
+#'   time before hour-based filtering — supply the site timezone here and the
+#'   function handles the conversion internally. Defaults to \code{NULL} (no
+#'   conversion; hours are extracted in whatever timezone the POSIXct columns carry).
+#' @param vpd_threshold Maximum mean predawn VPD (kPa). A day is VPD-stable only if its
+#'   predawn mean VPD is at or below this value. Default: \code{0.5}. This matches the
+#'   default in the \code{shiny-sapfluxr} interface. Lower for drier climates;
+#'   raise if very few stable nights are found.
+#' @param vpd_stability Maximum predawn VPD standard deviation (kPa). A day is VPD-stable
+#'   only if its predawn VPD SD is at or below this value. Default: \code{0.1}. Matches
+#'   the \code{shiny-sapfluxr} default. Tighten to \code{0.05} for high-quality datasets.
+#' @param vh_threshold Maximum mean predawn sap flow (cm/hr). Default: \code{2.0}. Matches
+#'   the \code{shiny-sapfluxr} default. Typical species ranges:
+#'   conifers / slow hardwoods \code{0.5–1.5}; fast-growing hardwoods \code{2.5–4.0}.
+#' @param vh_stability Maximum predawn sap flow standard deviation (cm/hr). Default:
+#'   \code{0.5}. Matches the \code{shiny-sapfluxr} default. Lower to \code{0.3} for
+#'   very stable species; raise to \code{0.8} for permissive detection.
 #' @param min_n_points Minimum observations per day (default: 4)
 #' @param min_segment_days Minimum spacing between dates (default: 7)
 #' @param max_changepoints Maximum dates to select (default: NULL)
@@ -299,17 +355,17 @@ find_stable_vh_dates <- function(vh_data,
 #'
 #' @examples
 #' \dontrun{
-#' # Find dual-stable periods
+#' # Find dual-stable periods (threshold defaults match shiny-sapfluxr interface)
 #' dual_results <- find_dual_stable_periods(
-#'   vh_data = vh_results,
-#'   weather_data = weather,
-#'   vh_col = "Vh_cm_hr",
-#'   vpd_col = "vpd_kpa",
+#'   vh_data        = vh_results,
+#'   weather_data   = vpd_data,
+#'   vh_col         = "Vs_cm_hr",
 #'   predawn_window = c(2, 6),
-#'   vpd_threshold = 0.5,
-#'   vpd_stability = 0.1,
-#'   vh_threshold = 2.0,
-#'   vh_stability = 0.5
+#'   mode           = "static",
+#'   vpd_threshold  = 0.5,   # kPa  — Shiny default
+#'   vpd_stability  = 0.1,   # kPa SD
+#'   vh_threshold   = 2.0,   # cm/hr
+#'   vh_stability   = 0.5    # cm/hr SD
 #' )
 #'
 #' # View results
@@ -327,8 +383,14 @@ find_stable_vh_dates <- function(vh_data,
 find_dual_stable_periods <- function(vh_data,
                                      weather_data,
                                      vh_col,
+                                     method          = "HRM",
+                                     sensor_position = "outer",
                                      vpd_col = "vpd_kpa",
                                      predawn_window = c(2, 6),
+                                     mode = c("static", "dynamic"),
+                                     dawn_times = NULL,
+                                     timezone = NULL,
+                                     site_location = NULL,
                                      vpd_threshold = 0.5,
                                      vpd_stability = 0.1,
                                      vh_threshold = 2.0,
@@ -337,13 +399,76 @@ find_dual_stable_periods <- function(vh_data,
                                      min_segment_days = 7,
                                      max_changepoints = NULL) {
 
-  # Convert predawn_window to hours vector for detect_stable_vpd_periods
-  predawn_hours <- seq(predawn_window[1], predawn_window[2] - 1)
+  mode <- match.arg(mode)
 
-  # 1. Find VPD-stable dates using existing function
+  # Filter to the requested method × sensor_position stream when those columns
+  # are present. If the filtered result is empty, stop() with a clear message.
+  if ("method" %in% names(vh_data) || "sensor_position" %in% names(vh_data)) {
+    avail_methods <- if ("method" %in% names(vh_data)) unique(vh_data$method) else character(0)
+    avail_sensors <- if ("sensor_position" %in% names(vh_data)) unique(vh_data$sensor_position) else character(0)
+    keep <- rep(TRUE, nrow(vh_data))
+    if ("method" %in% names(vh_data))
+      keep <- keep & vh_data$method == method
+    if ("sensor_position" %in% names(vh_data))
+      keep <- keep & vh_data$sensor_position == sensor_position
+    vh_data <- vh_data[keep, , drop = FALSE]
+    if (nrow(vh_data) == 0L)
+      stop("No rows remain after filtering to method = '", method,
+           "', sensor_position = '", sensor_position, "'. ",
+           "Available methods: ", paste(avail_methods, collapse = ", "), ". ",
+           "Available sensor positions: ", paste(avail_sensors, collapse = ", "), ".")
+  }
+
+  # Convert datetimes to local timezone so lubridate::hour() returns local hours.
+  # Logger data stored in UTC requires this for predawn_window to match local time.
+  if (!is.null(timezone) && nzchar(timezone)) {
+    if (inherits(vh_data$datetime, "POSIXct")) {
+      vh_data$datetime <- lubridate::with_tz(vh_data$datetime, timezone)
+    }
+    if (inherits(weather_data$datetime, "POSIXct")) {
+      weather_data$datetime <- lubridate::with_tz(weather_data$datetime, timezone)
+    }
+  }
+
+  if (mode == "dynamic") {
+    if (is.null(dawn_times)) {
+      if (!is.null(site_location) && !is.null(site_location$latitude) && !is.null(site_location$longitude)) {
+        if (!requireNamespace("suncalc", quietly = TRUE)) {
+          stop("The 'suncalc' package is required to calculate dawn times dynamically. Please install it.")
+        }
+        dates <- unique(as.Date(vh_data$datetime, tz = timezone %||% "UTC"))
+        dawn_df <- suncalc::getSunlightTimes(
+          date = dates,
+          lat = site_location$latitude,
+          lon = site_location$longitude,
+          keep = "dawn",
+          tz = timezone %||% "UTC"
+        )
+        dawn_times <- dawn_df$dawn
+      } else {
+        stop("When mode = 'dynamic', you must provide either 'dawn_times' or a 'site_location' list with $latitude and $longitude.")
+      }
+    }
+    # Pre-filter both datasets to the dynamic (dawn-relative) predawn window.
+    # After filtering, sub-functions receive only predawn rows so we pass a
+    # full-span window (0:23) to avoid double-filtering.
+    vh_data      <- filter_predawn(vh_data,      window = predawn_window,
+                                   mode = "dynamic", dawn_times = dawn_times,
+                                   tz = timezone)
+    weather_data <- filter_predawn(weather_data, window = predawn_window,
+                                   mode = "dynamic", dawn_times = dawn_times,
+                                   tz = timezone)
+    effective_hours  <- 0:23
+    effective_window <- c(0L, 24L)
+  } else {
+    effective_hours  <- resolve_predawn_hours(predawn_window, mode = "static")
+    effective_window <- predawn_window
+  }
+
+  # 1. Find VPD-stable dates
   vpd_results <- detect_stable_vpd_periods(
     weather_data = weather_data,
-    predawn_window = predawn_hours,
+    predawn_window = effective_hours,
     vpd_threshold = vpd_threshold,
     stability_threshold = vpd_stability,
     min_n_points = min_n_points,
@@ -354,12 +479,14 @@ find_dual_stable_periods <- function(vh_data,
 
   # 2. Find vh-stable dates
   vh_results <- find_stable_vh_dates(
-    vh_data = vh_data,
-    vh_col = vh_col,
-    predawn_window = predawn_window,
-    vh_threshold = vh_threshold,
+    vh_data         = vh_data,
+    vh_col          = vh_col,
+    method          = method,
+    sensor_position = sensor_position,
+    predawn_window  = effective_window,
+    vh_threshold    = vh_threshold,
     stability_threshold = vh_stability,
-    min_n_points = min_n_points,
+    min_n_points    = min_n_points,
     min_segment_days = min_segment_days,
     max_changepoints = NULL  # Don't limit yet
   )
@@ -406,7 +533,7 @@ find_dual_stable_periods <- function(vh_data,
     vh_data = vh_data,
     dates = dual_stable_dates,
     vh_col = vh_col,
-    predawn_window = predawn_window
+    predawn_window = effective_window
   )
 
   # 7. Merge daily statistics
@@ -427,6 +554,7 @@ find_dual_stable_periods <- function(vh_data,
     daily_stats = daily_stats,
     parameters = list(
       predawn_window = predawn_window,
+      mode = mode,
       vpd_threshold = vpd_threshold,
       vpd_stability = vpd_stability,
       vh_threshold = vh_threshold,
@@ -580,11 +708,80 @@ find_min_vh_timestamps <- function(vh_data, dates, vh_col, predawn_window) {
 #' @seealso
 #'   \code{\link{find_dual_stable_periods}} for identifying changepoints
 #' @export
+#' @param edge_handling Character, how to handle data before the first and after
+#'   the last changepoint. One of:
+#'   \itemize{
+#'     \item \strong{"extend"} (default) - Use the value of the nearest changepoint
+#'     \item \strong{"zero"} - Assume zero offset (no correction)
+#'     \item \strong{"na"} - Set to NA (exclude from analysis)
+#'   }
+#' @param correction_type Character, either "linear" (default) or "burgess".
+#'   Linear uses a 1:1 offset; Burgess uses physics-based coefficients derived
+#'   continuously from the interpolated baseline.
+#' @param lookup_table Optional pre-calculated Burgess lookup table. Required if
+#'   \code{correction_type = "burgess"}.
+#'
+#' @return A data frame containing the corrected velocity data.
+#'
+#' @details
+#' **Continuous vs. Segmented Correction:**
+#'
+#' Traditional spacing correction divides the time series into discrete segments,
+#' applying a single constant offset to all data points within a segment. This
+#' can create artificial "jumps" in sap flow at segment boundaries.
+#'
+#' Gradient interpolation eliminates these jumps by calculating a unique zero-flow
+#' offset for every timestamp. It linearly interpolates the baseline between
+#' identified zero-flow points (changepoints).
+#'
+#' **Correction Math:**
+#' \itemize{
+#'   \item \strong{Linear:} \eqn{V_c(t) = V_h(t) - zero\_vh(t)}
+#'   \item \strong{Burgess:} \eqn{V_c(t) = a(t) \times V_h(t) + b(t)}, where
+#'     \eqn{a(t)} and \eqn{b(t)} are derived from \eqn{zero\_vh(t)} via the
+#'     Burgess physics model.
+#' }
+#'
+#' @examples
+#' \dontrun{
+#' # Identify stable periods
+#' dual_result <- find_dual_stable_periods(vh_data, weather_data)
+#'
+#' # Apply gradient correction (Linear)
+#' vh_corrected <- apply_gradient_offset_correction(
+#'   vh_data = vh_data,
+#'   changepoints = dual_result$changepoints,
+#'   vh_col = "Vh_cm_hr",
+#'   correction_type = "linear"
+#' )
+#'
+#' # Apply gradient correction (Burgess)
+#' # Requires a lookup table generated from wood properties
+#' lookup <- calculate_burgess_coefficients(k = 0.0025, x = 0.5)
+#' vh_corrected_burgess <- apply_gradient_offset_correction(
+#'   vh_data = vh_data,
+#'   changepoints = dual_result$changepoints,
+#'   vh_col = "Vh_cm_hr",
+#'   correction_type = "burgess",
+#'   lookup_table = lookup
+#' )
+#' }
+#'
+#' @family dual stability functions
+#' @seealso
+#'   \code{\link{find_dual_stable_periods}} for identifying changepoints
+#' @export
 apply_gradient_offset_correction <- function(vh_data,
                                              changepoints,
                                              vh_col,
                                              new_col_suffix = "_gradient_corrected",
-                                             edge_handling = "extend") {
+                                             edge_handling = c("extend", "zero", "na"),
+                                             correction_type = c("linear", "burgess"),
+                                             lookup_table = NULL) {
+
+  # Match and validate arguments
+  edge_handling <- match.arg(edge_handling)
+  correction_type <- match.arg(correction_type)
 
   # Input validation
   if (!is.data.frame(vh_data) || !is.data.frame(changepoints)) {
@@ -601,6 +798,10 @@ apply_gradient_offset_correction <- function(vh_data,
   missing <- setdiff(required_cp_cols, names(changepoints))
   if (length(missing) > 0) {
     stop("changepoints missing columns: ", paste(missing, collapse = ", "))
+  }
+
+  if (correction_type == "burgess" && is.null(lookup_table)) {
+    stop("lookup_table is required when correction_type is 'burgess'")
   }
 
   if (!inherits(vh_data$datetime, "POSIXct")) {
@@ -624,35 +825,94 @@ apply_gradient_offset_correction <- function(vh_data,
     return(vh_data)
   }
 
-  # Initialize offset vector
-  offset <- rep(NA_real_, nrow(vh_data))
-
   # Convert to numeric for interpolation
   data_time <- as.numeric(vh_data$datetime)
   cp_time <- as.numeric(changepoints$timestamp)
   cp_offset <- changepoints$vh_value
 
-  # Linear interpolation between changepoints
-  offset <- approx(
+  # Determine interpolation rule
+  rule <- switch(edge_handling,
+    "extend" = 2,
+    "zero"   = 1,
+    "na"     = 1
+  )
+
+  # Linear interpolation of the zero-flow BASELINE between changepoints
+  interp_zero_vh <- approx(
     x = cp_time,
     y = cp_offset,
     xout = data_time,
     method = "linear",
-    rule = ifelse(edge_handling == "extend", 2, 1)
+    rule = rule
   )$y
 
-  # If edge_handling is "zero", set NAs to 0
+  # Handle edge periods if "zero" was selected (approx with rule=1 returns NA)
   if (edge_handling == "zero") {
-    offset[is.na(offset)] <- 0
+    interp_zero_vh[is.na(interp_zero_vh)] <- 0
   }
 
-  # Apply correction
-  vh_data[[new_col]] <- vh_data[[vh_col]] - offset
+  # Calculate corrected values based on math type
+  if (correction_type == "linear") {
+    # Simple linear offset: Vc = Vh - zero_vh
+    vh_data[[new_col]] <- vh_data[[vh_col]] - interp_zero_vh
+    
+    # Store applied baseline for transparency
+    vh_data$baseline_offset_cm_hr <- interp_zero_vh
+    vh_data$spacing_correction_a <- 1.0
+    vh_data$spacing_correction_b <- -interp_zero_vh
+    
+  } else {
+    # Physics-based Burgess correction applied continuously
+    # We need to find Burgess a and b for every interpolated zero_vh value
+    
+    # Round interp_zero_vh to 1 decimal place to match lookup table keys
+    lookup_keys <- round(interp_zero_vh, 1)
+    
+    # Create mask for valid baseline values (avoid NAs from edge periods)
+    valid_mask <- !is.na(lookup_keys)
+    
+    # Initialise result columns
+    vh_data[[new_col]] <- vh_data[[vh_col]] # Default to raw
+    vh_data$spacing_correction_a <- NA_real_
+    vh_data$spacing_correction_b <- NA_real_
+    vh_data$baseline_offset_cm_hr <- interp_zero_vh
+
+    if (any(valid_mask)) {
+      # Use match to find indices in lookup table
+      # lookup_table rows are named/indexed by zero_vh strings
+      lookup_indices <- match(as.character(lookup_keys[valid_mask]), 
+                              as.character(lookup_table$zero_vh))
+      
+      # Handle potential mismatches (values outside lookup range)
+      if (any(is.na(lookup_indices))) {
+        # Fall back to nearest available in lookup for out-of-range values
+        na_indices <- which(is.na(lookup_indices))
+        valid_vals <- lookup_keys[valid_mask]
+        
+        for (idx in na_indices) {
+          closest_idx <- which.min(abs(lookup_table$zero_vh - valid_vals[idx]))
+          lookup_indices[idx] <- closest_idx
+        }
+      }
+      
+      # Extract coefficients
+      a_vals <- lookup_table$coef_a[lookup_indices]
+      b_vals <- lookup_table$coef_b[lookup_indices]
+      
+      # Apply Burgess math: Vc = a * Vh + b
+      vh_data[[new_col]][valid_mask] <- a_vals * vh_data[[vh_col]][valid_mask] + b_vals
+      
+      # Store applied factors
+      vh_data$spacing_correction_a[valid_mask] <- a_vals
+      vh_data$spacing_correction_b[valid_mask] <- b_vals
+    }
+  }
 
   # Add metadata attributes
-  attr(vh_data[[new_col]], "correction_method") <- "gradient_offset"
+  attr(vh_data[[new_col]], "correction_method") <- paste0("gradient_", correction_type)
   attr(vh_data[[new_col]], "n_changepoints") <- nrow(changepoints)
   attr(vh_data[[new_col]], "edge_handling") <- edge_handling
+  attr(vh_data[[new_col]], "correction_type") <- correction_type
 
   return(vh_data)
 }

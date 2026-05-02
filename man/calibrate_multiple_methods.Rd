@@ -26,7 +26,7 @@ calibrate_multiple_methods(
 \item{primary_method}{Primary method name (default: "HRM").}
 
 \item{secondary_methods}{Character vector of secondary method names to
-calibrate (e.g., \code{c("MHR", "Tmax_Klu", "HRMXa")}).}
+calibrate (e.g., \code{c("MHR", "Tmax_Klu")}).}
 
 \item{sensor_position}{Sensor position ("outer" or "inner").}
 
@@ -47,13 +47,15 @@ calibrate (e.g., \code{c("MHR", "Tmax_Klu", "HRMXa")}).}
 \item{manual_thresholds}{Optional named list of manual thresholds for specific
 methods (e.g., \code{list(MHR = 10.5, Tmax_Klu = 15.0)}). Methods not in
 this list will use automatic optimization. Default: NULL (all automatic).}
+
+\item{velocity_col}{Name of velocity column to use (default: "Vh_cm_hr").}
 }
 \value{
 A named list where each element is a calibration result for one
 secondary method. Each element contains:
 \itemize{
 \item \code{optimal_threshold}: Best threshold for this method
-\item \code{optimal_r_squared}: R² at optimal threshold
+\item \code{optimal_r_squared}: R^2 at optimal threshold
 \item \code{optimal_calibration}: Full calibration object
 \item \code{threshold_results}: Data frame of all thresholds tested
 \item \code{plots}: Diagnostic plots (if \code{create_plots = TRUE})
@@ -95,7 +97,7 @@ optimise automatically:
 calibrations <- calibrate_multiple_methods(
   vh_corrected,
   primary_method = "HRM",
-  secondary_methods = c("MHR", "Tmax_Klu", "HRMXa"),
+  secondary_methods = c("MHR", "Tmax_Klu"),
   sensor_position = "outer",
   manual_thresholds = list(MHR = 8.5)  # MHR manual, others automatic
 )

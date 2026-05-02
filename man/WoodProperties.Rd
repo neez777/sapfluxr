@@ -18,6 +18,8 @@ tree measurements, and quality thresholds.
 \describe{
 \item{\code{config_name}}{Name of the configuration}
 
+\item{\code{site_location}}{List with latitude, longitude, and timezone for the site}
+
 \item{\code{wood_measurements}}{List of user-provided measurements (Method 1 or Method 2)}
 
 \item{\code{wood_constants}}{List of physical constants (thermal/sap/cell wall properties)}
@@ -41,7 +43,7 @@ tree measurements, and quality thresholds.
 \section{Active bindings}{
 \if{html}{\out{<div class="r6-active-bindings">}}
 \describe{
-\item{\code{thermal_diffusivity}}{Thermal diffusivity in cm²/s (actual if available, otherwise default)}
+\item{\code{thermal_diffusivity}}{Thermal diffusivity in cm^2/s (actual if available, otherwise default)}
 }
 \if{html}{\out{</div>}}
 }
@@ -51,6 +53,8 @@ tree measurements, and quality thresholds.
 \item \href{#method-WoodProperties-new}{\code{WoodProperties$new()}}
 \item \href{#method-WoodProperties-validate}{\code{WoodProperties$validate()}}
 \item \href{#method-WoodProperties-print}{\code{WoodProperties$print()}}
+\item \href{#method-WoodProperties-is_australia}{\code{WoodProperties$is_australia()}}
+\item \href{#method-WoodProperties-get_dawn_times}{\code{WoodProperties$get_dawn_times()}}
 \item \href{#method-WoodProperties-clone}{\code{WoodProperties$clone()}}
 }
 }
@@ -62,6 +66,7 @@ Initialize a new WoodProperties object
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{WoodProperties$new(
   config_name = "Custom Wood Properties",
+  site_location = NULL,
   wood_measurements = NULL,
   wood_constants = NULL,
   wood_property = NULL,
@@ -78,6 +83,8 @@ Initialize a new WoodProperties object
 \if{html}{\out{<div class="arguments">}}
 \describe{
 \item{\code{config_name}}{Name of the configuration}
+
+\item{\code{site_location}}{List with latitude, longitude, timezone for predawn/SILO calculations}
 
 \item{\code{wood_measurements}}{List of measurements (Method 1 or Method 2)}
 
@@ -119,6 +126,42 @@ Print wood properties summary
 \if{html}{\out{<div class="r">}}\preformatted{WoodProperties$print()}\if{html}{\out{</div>}}
 }
 
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-WoodProperties-is_australia"></a>}}
+\if{latex}{\out{\hypertarget{method-WoodProperties-is_australia}{}}}
+\subsection{Method \code{is_australia()}}{
+Check whether the site is located within Australia's bounding box.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{WoodProperties$is_australia()}\if{html}{\out{</div>}}
+}
+
+\subsection{Returns}{
+Logical scalar; FALSE if site_location is not set.
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-WoodProperties-get_dawn_times"></a>}}
+\if{latex}{\out{\hypertarget{method-WoodProperties-get_dawn_times}{}}}
+\subsection{Method \code{get_dawn_times()}}{
+Calculate astronomical dawn times for a vector of dates.
+
+Requires the \pkg{suncalc} package (listed in Suggests).
+\code{site_location$latitude} and \code{site_location$longitude} must be set.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{WoodProperties$get_dawn_times(dates)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{dates}}{A vector of \code{Date} objects.}
+}
+\if{html}{\out{</div>}}
+}
+\subsection{Returns}{
+A POSIXct vector of dawn times in \code{site_location$timezone} (defaults to UTC).
+}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-WoodProperties-clone"></a>}}

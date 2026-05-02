@@ -1,74 +1,38 @@
-# R/03b_changepoint_detection.R
-# Changepoint Detection for Baseline Shifts in Sap Flow Data
-# Used to identify periods requiring separate zero-offset calibration
-
-#' Changepoint Detection Functions
-#'
-#' Functions for detecting baseline shifts in sap flow velocity data that
-#' indicate changes in probe alignment requiring separate zero-offset corrections.
-#' Uses PELT (Pruned Exact Linear Time) changepoint detection on daily minimum values.
-#'
-#' @name changepoint_detection
-NULL
-
+# R/03e_changepoint_detection.R
+# Automatic Changepoint Detection for Zero-Flow Baselines
 
 #' Calculate Daily Minimum Velocities
 #'
-#' Extracts daily minimum sap velocities from heat pulse velocity results,
-#' typically used as input for changepoint detection to identify baseline shifts.
+#' Aggregates heat pulse velocity data to daily minima, which are used as
+#' proxies for the zero-flow baseline in changepoint detection and spacing
+#' correction.
 #'
-#' @param vh_data Data frame containing velocity data with columns: datetime,
-#'   sensor_position, method, and velocity column (specified by vh_col)
-#' @param sensor_position Sensor position to analyse ("outer" or "inner", default: "outer")
-#' @param method_col Name of method column (default: "method")
-#' @param method Value of method to analyse (default: "HRM")
-#' @param vh_col Name of velocity column (default: "Vh_cm_hr")
+#' @param vh_data Data frame containing velocity measurements.
+#' @param sensor_position Character, "outer" (default) or "inner".
+#' @param method_col Character, name of method column (default: "method").
+#' @param method Character, which HPV method to use (default: "HRM").
+#' @param vh_col Character, name of velocity column (default: "Vh_cm_hr").
 #'
 #' @return A data frame with columns:
-#'   \item{date}{Date (as Date class)}
-#'   \item{min_value}{Minimum velocity for that day (cm/hr)}
-#'   \item{n_obs}{Number of observations that day}
-#'
-#' @details
-#' **Why Daily Minima?**
-#'
-#' Daily minimum velocities are used because:
-#' \itemize{
-#'   \item They typically occur at pre-dawn when transpiration is lowest
-#'   \item They represent the baseline offset from zero
-#'   \item Changes in daily minima indicate probe movement or alignment shifts
-#'   \item Less affected by environmental variation than means or maxima
-#' }
-#'
-#' **Default: HRM Outer Probe**
-#'
-#' The outer probe is preferred because:
-#' \itemize{
-#'   \item More reliably positioned in sapwood
-#'   \item Less affected by heartwood interference
-#'   \item HRM method validated by Burgess et al. (2001) for low flows
-#' }
+#'   \itemize{
+#'     \item \code{date} - Date of measurement
+#'     \item \code{min_value} - Minimum velocity recorded that day
+#'     \item \code{n_obs} - Number of observations that day
+#'   }
 #'
 #' @examples
 #' \dontrun{
-#' # Calculate daily minima
-#' daily_min <- calculate_daily_minima(
-#'   vh_data = vh_results,
-#'   sensor_position = "outer",
-#'   method = "HRM"
-#' )
-#'
-#' # Plot to visualise baseline shifts
+#' daily_min <- calculate_daily_minima(vh_results, sensor_position = "outer")
 #' plot(daily_min$date, daily_min$min_value, type = "l")
 #' }
 #'
 #' @family changepoint detection functions
 #' @export
 calculate_daily_minima <- function(vh_data,
-                                    sensor_position = "outer",
-                                    method_col = "method",
-                                    method = "HRM",
-                                    vh_col = "Vh_cm_hr") {
+                                     sensor_position = "outer",
+                                     method_col = "method",
+                                     method = "HRM",
+                                     vh_col = "Vh_cm_hr") {
 
   # Input validation
   if (!is.data.frame(vh_data)) {
@@ -77,26 +41,19 @@ calculate_daily_minima <- function(vh_data,
 
   required_cols <- c("datetime", "sensor_position", method_col, vh_col)
   missing_cols <- setdiff(required_cols, names(vh_data))
+
   if (length(missing_cols) > 0) {
     stop("Missing required columns: ", paste(missing_cols, collapse = ", "))
   }
 
-  if (!sensor_position %in% c("outer", "inner")) {
-    stop("sensor_position must be 'outer' or 'inner'")
-  }
-
-  # Filter data for specified sensor and method
-  filtered_data <- vh_data[
-    vh_data$sensor_position == sensor_position &
-    vh_data[[method_col]] == method &
-    !is.na(vh_data[[vh_col]]),
-  ]
+  # Filter to specific sensor and method
+  filtered_data <- vh_data[vh_data$sensor_position == sensor_position &
+                             vh_data[[method_col]] == method, ]
 
   if (nrow(filtered_data) == 0) {
-    stop("No data found for sensor '", sensor_position, "' and method '", method, "'")
+    stop("No data found for sensor_position='", sensor_position, "' and method='", method, "'")
   }
 
-  # Ensure datetime is POSIXct
   if (!inherits(filtered_data$datetime, "POSIXct")) {
     filtered_data$datetime <- as.POSIXct(filtered_data$datetime)
   }
@@ -125,38 +82,33 @@ calculate_daily_minima <- function(vh_data,
 }
 
 
-#' Detect Changepoints in Daily Minimum Velocities
+#' Detect Changepoints in Sap Flow Data
 #'
-#' Uses PELT (Pruned Exact Linear Time) changepoint detection to identify
-#' times when baseline sap flow velocities shift, indicating probe movement
-#' or alignment changes requiring separate zero-offset calibration.
+#' Automatically identifies dates where the baseline (zero-flow offset) shifts,
+#' which typically indicates physical probe movement or stem swelling/shrinkage.
 #'
-#' @param daily_min Data frame with columns \code{date} and \code{min_value}
-#'   (typically from \code{\link{calculate_daily_minima}})
-#' @param penalty Penalty type for PELT algorithm. Options:
-#'   \itemize{
-#'     \item "MBIC" - Modified Bayesian Information Criterion (default, most conservative)
-#'     \item "BIC" - Bayesian Information Criterion (moderate)
-#'     \item "Manual" - Manual penalty value (requires \code{penalty_value})
-#'   }
-#' @param penalty_value Numeric penalty value when \code{penalty = "Manual"}.
-#'   Range typically 0-100. Higher values = fewer changepoints detected.
-#' @param detection_type Type of change to detect:
-#'   \itemize{
-#'     \item "mean" - Changes in mean only (default, recommended)
-#'     \item "meanvar" - Changes in mean and/or variance
-#'   }
-#' @param min_segment_days Minimum number of days for a segment (default: 7).
+#' @param vh_data Data frame containing velocity data (e.g., from `calc_heat_pulse_velocity()`).
+#' @param daily_min Optional. A data frame of pre-calculated daily minima. If NULL,
+#'   this is automatically calculated from \code{vh_data}.
+#' @param sensor_position Character, "outer" or "inner" (default: "outer"). Used if calculating daily minima.
+#' @param hpv_method Character, HPV method to use for detection (default: "HRM").
+#' @param penalty Penalty method for PELT algorithm: "MBIC" (default, most conservative),
+#'   "BIC" (moderate), or "Manual" (custom value).
+#' @param penalty_value Numeric value required if \code{penalty = "Manual"}.
+#' @param detection_type What to detect: "mean" (shifts in baseline, default) or
+#'   "meanvar" (shifts in baseline and variance).
+#' @param min_segment_days Minimum days required between changepoints (default: 7).
 #'   Segments shorter than this will be merged with adjacent segments.
 #' @param merge_short_segments Logical, whether to merge segments shorter than
 #'   \code{min_segment_days} (default: TRUE)
+#' @param method Deprecated argument (use hpv_method).
+#' @param ... Additional arguments passed to \code{\link{calculate_daily_minima}}.
 #'
-#' @return A list containing:
-#'   \item{changepoints}{Vector of changepoint dates (Date class)}
-#'   \item{changepoint_indices}{Vector of row indices in daily_min where changes occur}
-#'   \item{segments}{Data frame describing segments between changepoints}
-#'   \item{daily_min_with_segments}{Original daily_min with added \code{segment_id} column}
-#'   \item{parameters}{List of detection parameters used}
+#' @return A list with class \code{"pelt_changepoints"} containing:
+#'   \item{changepoints}{Vector of detected Date objects}
+#'   \item{segments}{Data frame detailing each segment}
+#'   \item{daily_min}{The daily minima data used for detection}
+#'   \item{parameters}{List of detection parameters}
 #'
 #' @details
 #' **PELT Algorithm:**
@@ -192,11 +144,8 @@ calculate_daily_minima <- function(vh_data,
 #'
 #' @examples
 #' \dontrun{
-#' # Calculate daily minima
-#' daily_min <- calculate_daily_minima(vh_results)
-#'
-#' # Detect changepoints with default MBIC
-#' result <- detect_changepoints(daily_min)
+#' # Pass the full data directly - it will calculate minima automatically
+#' result <- detect_changepoints(vh_results)
 #'
 #' # View detected changepoints
 #' print(result$changepoints)
@@ -205,11 +154,11 @@ calculate_daily_minima <- function(vh_data,
 #' print(result$segments)
 #'
 #' # Try BIC for more changepoints
-#' result_bic <- detect_changepoints(daily_min, penalty = "BIC")
+#' result_bic <- detect_changepoints(vh_results, penalty = "BIC")
 #'
 #' # Manual penalty for fine control
 #' result_manual <- detect_changepoints(
-#'   daily_min,
+#'   vh_results,
 #'   penalty = "Manual",
 #'   penalty_value = 50
 #' )
@@ -222,7 +171,10 @@ calculate_daily_minima <- function(vh_data,
 #'
 #' @family changepoint detection functions
 #' @export
-detect_changepoints <- function(daily_min,
+detect_changepoints <- function(vh_data = NULL,
+                                 daily_min = NULL,
+                                 sensor_position = "outer",
+                                 hpv_method = "HRM",
                                  penalty = "MBIC",
                                  penalty_value = NULL,
                                  detection_type = "mean",
@@ -231,25 +183,23 @@ detect_changepoints <- function(daily_min,
                                  method = NULL,
                                  ...) {
 
-  # Input validation
-  if (!is.data.frame(daily_min)) {
-    stop("daily_min must be a data frame")
+  # Handle legacy calling pattern where daily_min was the first unnamed argument
+  if (!is.null(vh_data) && is.null(daily_min) && is.data.frame(vh_data) && 
+      "min_value" %in% names(vh_data) && !("sensor_position" %in% names(vh_data))) {
+    daily_min <- vh_data
+    vh_data <- NULL
   }
 
-  # Auto-calculate daily minima if needed
-  required_cols <- c("date", "min_value")
-  missing_cols <- setdiff(required_cols, names(daily_min))
-
-  if (length(missing_cols) > 0) {
-    # Check if it looks like vh_results
-    if (all(c("datetime", "sensor_position") %in% names(daily_min))) {
-      message("Input appears to be full vh_results. Calculating daily minima internally...")
-      daily_min <- calculate_daily_minima(daily_min, ...)
-    } else {
-      stop("Missing required columns for changepoint detection: ",
-           paste(missing_cols, collapse = ", "),
-           "\n  If providing full results, ensure 'datetime' and 'sensor_position' are present.")
-    }
+  if (is.null(daily_min)) {
+    if (is.null(vh_data)) stop("Must provide either vh_data or daily_min")
+    daily_min <- calculate_daily_minima(
+      vh_data = vh_data,
+      sensor_position = sensor_position,
+      method = if (!is.null(method)) method else hpv_method,
+      ...
+    )
+  } else if (!is.data.frame(daily_min)) {
+    stop("daily_min must be a data frame")
   }
 
   if (!penalty %in% c("MBIC", "BIC", "Manual")) {
@@ -298,10 +248,11 @@ detect_changepoints <- function(daily_min,
       )
     }
   } else {
-    # Detect changes in mean and/or variance
+    # Detect changes in mean and variance
     if (penalty == "Manual") {
       cpt_result <- changepoint::cpt.meanvar(
         x,
+        test.stat = "Normal",
         method = "PELT",
         penalty = "Manual",
         pen.value = penalty_value
@@ -309,195 +260,139 @@ detect_changepoints <- function(daily_min,
     } else {
       cpt_result <- changepoint::cpt.meanvar(
         x,
+        test.stat = "Normal",
         method = "PELT",
         penalty = penalty
       )
     }
   }
 
-  # Extract changepoint indices
+  # Extract results
   cpt_indices <- changepoint::cpts(cpt_result)
+  changepoints <- daily_min$date[cpt_indices]
 
-  # Convert to dates
-  if (length(cpt_indices) == 0) {
-    # No changepoints detected - entire dataset is one segment
-    segments <- data.frame(
-      segment_id = 1,
-      start_date = min(daily_min$date),
-      end_date = max(daily_min$date),
-      start_idx = 1,
-      end_idx = nrow(daily_min),
-      n_days = nrow(daily_min),
-      stringsAsFactors = FALSE
-    )
+  # Post-process: Merge short segments if requested
+  if (merge_short_segments && length(changepoints) > 0) {
+    # Calculate segment lengths (days)
+    seg_ends <- c(cpt_indices, nrow(daily_min))
+    seg_starts <- c(1, cpt_indices + 1)
+    seg_days <- seg_ends - seg_starts + 1
 
-    daily_min$segment_id <- 1
+    # Identify short segments
+    short_segs <- which(seg_days < min_segment_days)
 
-    return(list(
-      changepoints = as.Date(character(0)),
-      changepoint_indices = integer(0),
-      segments = segments,
-      daily_min_with_segments = daily_min,
-      parameters = list(
-        penalty = penalty,
-        penalty_value = penalty_value,
-        detection_type = detection_type,
-        min_segment_days = min_segment_days,
-        merge_short_segments = merge_short_segments,
-        n_changepoints_detected = 0,
-        n_segments = 1
-      )
-    ))
+    if (length(short_segs) > 0) {
+      # Keep track of indices to remove
+      to_remove <- numeric(0)
+
+      for (i in short_segs) {
+        # If it's a middle segment or last segment, remove the changepoint before it
+        if (i > 1) {
+          to_remove <- c(to_remove, i - 1)
+        } else {
+          # If it's the first segment, remove the changepoint after it
+          to_remove <- c(to_remove, 1)
+        }
+      }
+
+      # Clean up indices and remove duplicates
+      to_remove <- unique(to_remove)
+      to_remove <- to_remove[to_remove <= length(cpt_indices)]
+
+      if (length(to_remove) > 0) {
+        cpt_indices <- cpt_indices[-to_remove]
+        changepoints <- daily_min$date[cpt_indices]
+      }
+    }
   }
 
-  changepoint_dates <- daily_min$date[cpt_indices]
+  # Build segment summary
+  seg_ends <- c(cpt_indices, nrow(daily_min))
+  seg_starts <- c(1, cpt_indices + 1)
+  n_segments <- length(seg_starts)
 
-  # Build segments data frame
-  # n changepoints creates n+1 segments
-  # Seg 1: 1 -> cpt[1], Seg 2: cpt[1]+1 -> cpt[2], ..., Seg n+1: cpt[n]+1 -> end
-  segment_starts <- c(1, cpt_indices + 1)
-  segment_ends <- c(cpt_indices, nrow(daily_min))
-
-  segments <- data.frame(
-    segment_id = seq_along(segment_starts),
-    start_date = daily_min$date[segment_starts],
-    end_date = daily_min$date[segment_ends],
-    start_idx = segment_starts,
-    end_idx = segment_ends,
+  segments_df <- data.frame(
+    segment_id = 1:n_segments,
+    start_date = daily_min$date[seg_starts],
+    end_date = daily_min$date[seg_ends],
+    n_days = seg_ends - seg_starts + 1,
     stringsAsFactors = FALSE
   )
 
-  segments$n_days <- segments$end_idx - segments$start_idx + 1
+  # Calculate segment statistics
+  segments_df$baseline_value <- sapply(1:n_segments, function(i) {
+    mean(daily_min$min_value[seg_starts[i]:seg_ends[i]], na.rm = TRUE)
+  })
 
-  # Assign segment IDs to daily_min
-  daily_min$segment_id <- NA_integer_
-  for (i in seq_len(nrow(segments))) {
-    daily_min$segment_id[segments$start_idx[i]:segments$end_idx[i]] <- segments$segment_id[i]
-  }
+  segments_df$sd_value <- sapply(1:n_segments, function(i) {
+    sd(daily_min$min_value[seg_starts[i]:seg_ends[i]], na.rm = TRUE)
+  })
 
-  # Merge short segments if requested
-  if (merge_short_segments && any(segments$n_days < min_segment_days)) {
-
-    short_segs <- which(segments$n_days < min_segment_days)
-
-    for (i in short_segs) {
-      if (i > nrow(segments)) next  # Already merged
-
-      # Try to merge with previous segment
-      if (i > 1 && segments$segment_id[i - 1] == (i - 1)) {
-        # Merge with previous
-        segments$end_date[i - 1] <- segments$end_date[i]
-        segments$end_idx[i - 1] <- segments$end_idx[i]
-        segments$n_days[i - 1] <- segments$end_idx[i - 1] - segments$start_idx[i - 1] + 1
-        segments <- segments[-i, ]
-
-      } else if (i < nrow(segments) && segments$segment_id[i + 1] == (i + 1)) {
-        # Merge with next
-        segments$start_date[i + 1] <- segments$start_date[i]
-        segments$start_idx[i + 1] <- segments$start_idx[i]
-        segments$n_days[i + 1] <- segments$end_idx[i + 1] - segments$start_idx[i + 1] + 1
-        segments <- segments[-i, ]
-      }
-    }
-
-    # Reassign segment IDs after merging
-    segments$segment_id <- seq_len(nrow(segments))
-
-    # Reassign segment IDs in daily_min
-    daily_min$segment_id <- NA_integer_
-    for (i in seq_len(nrow(segments))) {
-      daily_min$segment_id[segments$start_idx[i]:segments$end_idx[i]] <- segments$segment_id[i]
-    }
-
-    # Update changepoint indices and dates based on new segments
-    if (nrow(segments) > 1) {
-      cpt_indices <- segments$end_idx[-nrow(segments)]  # All segment ends except last
-      changepoint_dates <- daily_min$date[cpt_indices]
-    } else {
-      cpt_indices <- integer(0)
-      changepoint_dates <- as.Date(character(0))
-    }
-  }
-
-  # Return results
-  list(
-    changepoints = changepoint_dates,
+  # Prepare result list
+  result <- list(
+    changepoints = changepoints,
     changepoint_indices = cpt_indices,
-    segments = segments,
-    daily_min_with_segments = daily_min,
+    segments = segments_df,
+    daily_min = daily_min,
     parameters = list(
       penalty = penalty,
       penalty_value = penalty_value,
       detection_type = detection_type,
       min_segment_days = min_segment_days,
       merge_short_segments = merge_short_segments,
-      n_changepoints_detected = length(changepoint_dates),
-      n_segments = nrow(segments)
+      n_changepoints = length(changepoints),
+      n_segments = n_segments
     )
   )
+
+  class(result) <- c("pelt_changepoints", "list")
+
+  return(result)
 }
 
 
-#' Extract Segment Baseline Values
+#' Extract Segment Baselines from Changepoint Result
 #'
-#' Calculates baseline (minimum or low quantile) value for each segment
-#' identified by changepoint detection.
+#' Helper function to extract baselines in a format compatible with
+#' \code{\link{apply_spacing_correction}}.
 #'
-#' @param changepoint_result Output from \code{\link{detect_changepoints}}
-#' @param use_quantile Logical, whether to use quantile instead of minimum (default: FALSE)
-#' @param quantile_prob Quantile probability if \code{use_quantile = TRUE} (default: 0.05)
+#' @param cpt_result Result from \code{\link{detect_changepoints}}.
 #'
-#' @return The segments data frame with added columns:
-#'   \item{baseline_value}{Baseline velocity for that segment (cm/hr)}
-#'   \item{mean_value}{Mean velocity for that segment}
-#'   \item{sd_value}{Standard deviation of velocities}
+#' @return A named list where names are segment IDs and values are baselines.
 #'
-#' @examples
-#' \dontrun{
-#' # Detect changepoints
-#' cpt_result <- detect_changepoints(daily_min)
-#'
-#' # Get segment baselines
-#' segments_with_baselines <- extract_segment_baselines(cpt_result)
-#'
-#' print(segments_with_baselines)
-#' }
-#'
-#' @family changepoint detection functions
 #' @export
-extract_segment_baselines <- function(changepoint_result,
-                                       use_quantile = FALSE,
-                                       quantile_prob = 0.05) {
-
-  if (!is.list(changepoint_result) ||
-      !all(c("segments", "daily_min_with_segments") %in% names(changepoint_result))) {
-    stop("changepoint_result must be output from detect_changepoints()")
+extract_segment_baselines <- function(cpt_result) {
+  if (!inherits(cpt_result, "pelt_changepoints")) {
+    stop("Input must be a pelt_changepoints object")
   }
 
-  segments <- changepoint_result$segments
-  daily_min <- changepoint_result$daily_min_with_segments
+  baselines <- as.list(cpt_result$segments$baseline_value)
+  names(baselines) <- as.character(cpt_result$segments$segment_id)
 
-  # Calculate baseline for each segment
-  segments$baseline_value <- NA_real_
-  segments$mean_value <- NA_real_
-  segments$sd_value <- NA_real_
+  return(baselines)
+}
 
-  for (i in seq_len(nrow(segments))) {
-    segment_data <- daily_min[daily_min$segment_id == segments$segment_id[i], ]
 
-    if (use_quantile) {
-      segments$baseline_value[i] <- quantile(
-        segment_data$min_value,
-        probs = quantile_prob,
-        na.rm = TRUE
-      )
-    } else {
-      segments$baseline_value[i] <- min(segment_data$min_value, na.rm = TRUE)
-    }
+#' Print PELT Changepoint Result
+#' @export
+#' @keywords internal
+print.pelt_changepoints <- function(x, ...) {
+  cat("\nPELT CHANGEPOINT DETECTION RESULT\n")
+  cat(strrep("=", 40), "\n")
+  cat(sprintf("Penalty type:     %s\n", x$parameters$penalty))
+  cat(sprintf("Detection type:   %s\n", x$parameters$detection_type))
+  cat(sprintf("Days processed:   %d\n", nrow(x$daily_min)))
+  cat(sprintf("Changepoints:     %d\n", x$parameters$n_changepoints))
+  cat(sprintf("Segments created: %d\n", x$parameters$n_segments))
 
-    segments$mean_value[i] <- mean(segment_data$min_value, na.rm = TRUE)
-    segments$sd_value[i] <- sd(segment_data$min_value, na.rm = TRUE)
+  if (x$parameters$n_changepoints > 0) {
+    cat("\nChangepoint Dates:\n")
+    print(x$changepoints)
   }
 
-  return(segments)
+  cat("\nSegment Summary:\n")
+  print(x$segments[, c("segment_id", "start_date", "end_date", "n_days", "baseline_value")],
+        row.names = FALSE)
+
+  invisible(x)
 }

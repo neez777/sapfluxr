@@ -39,6 +39,8 @@ smooth handover.}
 \item{min_points}{Minimum points required for calibration (default: 50).}
 
 \item{verbose}{Logical indicating whether to print summary (default: TRUE).}
+
+\item{velocity_col}{Name of velocity column to use (default: "Vh_cm_hr").}
 }
 \value{
 A list (class "method_calibration") with components \code{coefficients}
@@ -61,7 +63,7 @@ to the primary method scale.
 \item Merges primary and secondary method data by pulse_id
 \item Filters to \strong{handover window}: points where primary method is between
 \code{threshold * (1 - handover_pct)} and \code{threshold}
-\item Fits regression: primary ~ secondary (or primary ~ secondary + secondary²)
+\item Fits regression: primary ~ secondary (or primary ~ secondary + secondary^2)
 \item Creates transformation function to convert secondary values to primary scale
 \item This transformation is then applied to ALL secondary data, especially above
 the threshold where the primary method becomes unreliable
@@ -85,7 +87,7 @@ matches the primary method value, preventing discontinuities
 If \code{fit_type = "auto"}:
 \itemize{
 \item Tries both linear and quadratic fits
-\item Uses quadratic if R² improves by more than 0.02
+\item Uses quadratic if R^2 improves by more than 0.02
 \item Otherwise uses simpler linear fit
 }
 

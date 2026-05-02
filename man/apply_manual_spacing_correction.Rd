@@ -12,6 +12,7 @@ apply_manual_spacing_correction(
   method = "HRM",
   method_col = "method",
   vh_col = "Vh_cm_hr",
+  correction_type = c("burgess", "linear"),
   k_assumed = 0.0025,
   probe_spacing = 0.5,
   measurement_time = 80,
@@ -41,7 +42,7 @@ If a segment is not specified, its baseline will be auto-detected as the minimum
 
 \item{vh_col}{Name of velocity column (default: "Vh_cm_hr")}
 
-\item{k_assumed}{Assumed thermal diffusivity (cm²/s) (default: 0.0025)}
+\item{k_assumed}{Assumed thermal diffusivity (cm^2/s) (default: 0.0025)}
 
 \item{probe_spacing}{Probe spacing (cm) (default: 0.5)}
 
@@ -146,9 +147,9 @@ measure low and reverse rates of sap flow in woody plants.
 }
 \seealso{
 Other spacing correction functions: 
-\code{\link{apply_heartwood_reference_correction}()},
-\code{\link{apply_spacing_correction}()},
+\code{\link{apply_burgess_spacing_correction}()},
 \code{\link{apply_spacing_correction_both_sensors}()},
+\code{\link{apply_spacing_correction_workflow}()},
 \code{\link{calculate_burgess_coefficients}()},
 \code{\link{calculate_zero_offset}()},
 \code{\link{get_correction_coefficients}()},

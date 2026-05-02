@@ -13,64 +13,38 @@ calculate_daily_minima(
 )
 }
 \arguments{
-\item{vh_data}{Data frame containing velocity data with columns: datetime,
-sensor_position, method, and velocity column (specified by vh_col)}
+\item{vh_data}{Data frame containing velocity measurements.}
 
-\item{sensor_position}{Sensor position to analyse ("outer" or "inner", default: "outer")}
+\item{sensor_position}{Character, "outer" (default) or "inner".}
 
-\item{method_col}{Name of method column (default: "method")}
+\item{method_col}{Character, name of method column (default: "method").}
 
-\item{method}{Value of method to analyse (default: "HRM")}
+\item{method}{Character, which HPV method to use (default: "HRM").}
 
-\item{vh_col}{Name of velocity column (default: "Vh_cm_hr")}
+\item{vh_col}{Character, name of velocity column (default: "Vh_cm_hr").}
 }
 \value{
 A data frame with columns:
-\item{date}{Date (as Date class)}
-\item{min_value}{Minimum velocity for that day (cm/hr)}
-\item{n_obs}{Number of observations that day}
+\itemize{
+\item \code{date} - Date of measurement
+\item \code{min_value} - Minimum velocity recorded that day
+\item \code{n_obs} - Number of observations that day
+}
 }
 \description{
-Extracts daily minimum sap velocities from heat pulse velocity results,
-typically used as input for changepoint detection to identify baseline shifts.
-}
-\details{
-\strong{Why Daily Minima?}
-
-Daily minimum velocities are used because:
-\itemize{
-\item They typically occur at pre-dawn when transpiration is lowest
-\item They represent the baseline offset from zero
-\item Changes in daily minima indicate probe movement or alignment shifts
-\item Less affected by environmental variation than means or maxima
-}
-
-\strong{Default: HRM Outer Probe}
-
-The outer probe is preferred because:
-\itemize{
-\item More reliably positioned in sapwood
-\item Less affected by heartwood interference
-\item HRM method validated by Burgess et al. (2001) for low flows
-}
+Aggregates heat pulse velocity data to daily minima, which are used as
+proxies for the zero-flow baseline in changepoint detection and spacing
+correction.
 }
 \examples{
 \dontrun{
-# Calculate daily minima
-daily_min <- calculate_daily_minima(
-  vh_data = vh_results,
-  sensor_position = "outer",
-  method = "HRM"
-)
-
-# Plot to visualise baseline shifts
+daily_min <- calculate_daily_minima(vh_results, sensor_position = "outer")
 plot(daily_min$date, daily_min$min_value, type = "l")
 }
 
 }
 \seealso{
 Other changepoint detection functions: 
-\code{\link{detect_changepoints}()},
-\code{\link{extract_segment_baselines}()}
+\code{\link{detect_changepoints}()}
 }
 \concept{changepoint detection functions}

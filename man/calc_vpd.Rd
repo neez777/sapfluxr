@@ -26,8 +26,8 @@ weather_data object. Default is "relative_humidity".}
 \item{magnus_coef}{Numeric. Magnus equation coefficient (dimensionless).
 Default is 17.27 (Alduchov & Eskridge 1996).}
 
-\item{magnus_base_temp}{Numeric. Magnus equation base temperature (°C).
-Default is 237.7°C (Alduchov & Eskridge 1996).}
+\item{magnus_base_temp}{Numeric. Magnus equation base temperature (degC).
+Default is 237.7degC (Alduchov & Eskridge 1996).}
 
 \item{return_components}{Logical. If TRUE, returns saturated vapor pressure
 and actual vapor pressure in addition to VPD. Default is FALSE.}
@@ -49,10 +49,10 @@ The Magnus-Tetens equation calculates saturated vapor pressure (SVP) as:
 
 Where:
 \itemize{
-\item \eqn{e_0} = 0.61078 kPa (reference saturation vapor pressure at 0°C)
-\item \eqn{T} = air temperature (°C)
+\item \eqn{e_0} = 0.61078 kPa (reference saturation vapor pressure at 0degC)
+\item \eqn{T} = air temperature (degC)
 \item \eqn{\alpha} = 17.27 (dimensionless coefficient, \code{magnus_coef})
-\item \eqn{\beta} = 237.7°C (base temperature, \code{magnus_base_temp})
+\item \eqn{\beta} = 237.7degC (base temperature, \code{magnus_base_temp})
 }
 
 Actual vapor pressure (AVP) is calculated from relative humidity:
@@ -61,8 +61,8 @@ Actual vapor pressure (AVP) is calculated from relative humidity:
 Vapor pressure deficit is then:
 \deqn{VPD = SVP - AVP}
 
-Default parameters (α=17.27, β=237.7) are appropriate for temperatures
-between 0-60°C. For sub-zero temperatures, consider adjusting parameters.
+Default parameters (alpha=17.27, beta=237.7) are appropriate for temperatures
+between 0-60degC. For sub-zero temperatures, consider adjusting parameters.
 }
 \examples{
 \dontrun{
@@ -91,6 +91,7 @@ of saturation vapor pressure. Journal of Applied Meteorology, 35(4), 601-609.
 }
 \seealso{
 Other weather data functions: 
+\code{\link{download_silo_weather}()},
 \code{\link{read_silo_data}()},
 \code{\link{read_weather_data}()}
 }

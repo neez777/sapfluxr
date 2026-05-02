@@ -2,7 +2,7 @@
 % Please edit documentation in R/03b_burgess_correction.R
 \name{validate_zero_offset}
 \alias{validate_zero_offset}
-\title{Apply Spacing Correction Workflow}
+\title{Validate Zero-Flow Offset for Burgess Correction}
 \usage{
 validate_zero_offset(offset, probe_spacing = 0.5, measurement_time = 80)
 }
@@ -12,35 +12,8 @@ validate_zero_offset(offset, probe_spacing = 0.5, measurement_time = 80)
 \item{probe_spacing}{Nominal probe spacing (cm). Default: 0.5}
 
 \item{measurement_time}{Measurement time (sec). Default: 80 (HRM window average)}
-
-\item{vh_data}{Data frame containing validated/filtered velocity data}
-
-\item{zero_periods}{List of zero-flow periods (see \code{\link{calculate_zero_offset}})}
-
-\item{sensors}{Vector of sensor positions to process (default: c("outer", "inner"))}
-
-\item{method}{Method to correct (default: "HRM")}
-
-\item{method_col}{Name of method column (default: "method")}
-
-\item{vh_col}{Name of velocity column (default: "Vh_cm_hr")}
-
-\item{k_assumed}{Assumed thermal diffusivity (cm²/s) (default: 0.0025)}
-
-\item{lookup_table}{Optional pre-calculated Burgess lookup table. If NULL,
-will calculate using \code{\link{calculate_burgess_coefficients}}}
-
-\item{create_new_col}{Logical, whether to create new corrected column (default: TRUE)}
-
-\item{verbose}{Logical, whether to print progress messages (default: TRUE)}
 }
 \value{
-A list containing:
-\item{vh_corrected}{Data frame with spacing corrections applied}
-\item{zero_offset_results}{List of zero offset results per sensor}
-\item{correction_coefficients}{List of correction coefficients per sensor}
-\item{metadata}{List containing correction metadata}
-
 A list with:
 \item{is_valid}{Logical, TRUE if offset is within valid range}
 \item{offset}{The tested offset value}
@@ -49,38 +22,21 @@ A list with:
 \item{measurement_time}{Measurement time used}
 }
 \description{
-Complete workflow for spacing correction using zero-flow calibration.
-Orchestrates zero offset calculation, coefficient lookup, and correction application.
+Validates that a detected zero-flow offset is within the physically possible
+range for Burgess spacing correction. Offsets that are too large would require
+temperature probes to be touching or overlapping the heater probe, which is
+physically impossible.
 }
 \details{
-\strong{Workflow Steps:}
-
-For each sensor position:
-\enumerate{
-\item Calculate zero offset from zero-flow periods
-\item Look up Burgess correction coefficients
-\item Apply linear correction to all data
-\item Store metadata for reproducibility
-}
-
-\strong{Metadata Stored:}
-\itemize{
-\item Zero-flow period specifications
-\item Zero offset values and quality metrics (CV)
-\item Correction coefficients (a, b)
-\item Thermal diffusivity assumed
-\item Date/time of correction
-}
-
 \strong{Physical Constraint:}
 
 The Burgess correction solves for probe misalignment using:
 
-\code{x_corrected = sqrt(x² - ln(ratio) * 4 * k * t)}
+\code{x_corrected = sqrt(x^2 - ln(ratio) * 4 * k * t)}
 
 For this to be physically valid, the discriminant must be positive:
 
-\code{x² - (offset * x * 4 * t) / 3600 > 0}
+\code{x^2 - (offset * x * 4 * t) / 3600 > 0}
 
 Solving for maximum offset:
 
@@ -93,42 +49,9 @@ It only depends on probe geometry and measurement timing.
 
 For ICT SFM1x standard configuration (x = 0.5 cm, t = 80 sec):
 \itemize{
-\item Maximum offset: ±5.625 cm/hr
-\item Validated range: ±5 cm/hr (Burgess et al. 2001)
+\item Maximum offset: +/-5.625 cm/hr
+\item Validated range: +/-5 cm/hr (Burgess et al. 2001)
 }
-}
-\examples{
-\dontrun{
-# Complete spacing correction workflow
-zero_periods <- list(
-  list(start = "2024-05-01 00:00:00", end = "2024-05-05 23:59:59"),
-  list(start = "2024-08-15 00:00:00", end = "2024-08-18 23:59:59")
-)
-
-correction_result <- apply_spacing_correction_workflow(
-  vh_data = vh_cleaned,
-  zero_periods = zero_periods,
-  sensors = c("outer", "inner"),
-  method = "HRM",
-  k_assumed = 0.0025
-)
-
-# Extract corrected data
-vh_corrected <- correction_result$vh_corrected
-
-# View correction summary
-print_spacing_correction_summary(correction_result)
-
-# Check zero offset quality
-print(correction_result$zero_offset_results$outer$overall_cv)
-}
-Validate Zero-Flow Offset for Burgess Correction
-
-Validates that a detected zero-flow offset is within the physically possible
-range for Burgess spacing correction. Offsets that are too large would require
-temperature probes to be touching or overlapping the heater probe, which is
-physically impossible.
-
 }
 \references{
 Burgess, S.S.O., Adams, M.A., Turner, N.C., Beverly, C.R., Ong, C.K.,
@@ -138,10 +61,10 @@ measure low and reverse rates of sap flow in woody plants.
 }
 \seealso{
 Other spacing correction functions: 
-\code{\link{apply_heartwood_reference_correction}()},
+\code{\link{apply_burgess_spacing_correction}()},
 \code{\link{apply_manual_spacing_correction}()},
-\code{\link{apply_spacing_correction}()},
 \code{\link{apply_spacing_correction_both_sensors}()},
+\code{\link{apply_spacing_correction_workflow}()},
 \code{\link{calculate_burgess_coefficients}()},
 \code{\link{calculate_zero_offset}()},
 \code{\link{get_correction_coefficients}()},

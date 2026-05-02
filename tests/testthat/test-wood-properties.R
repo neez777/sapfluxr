@@ -561,7 +561,8 @@ test_that("calc_sap_flux_density() works with vectors", {
 
 test_that("calc_sap_flux_density() errors if Z not calculated", {
   wood <- load_wood_properties("generic_sw")
-  # Don't run calculate_wood_properties()
+  # Manually clear Z to simulate uncalculated state
+  wood$derived_properties$sap_flux_conversion_factor <- NA_real_
 
   expect_error(
     calc_sap_flux_density(10, wood),
@@ -641,6 +642,8 @@ test_that("get_sap_flux_conversion_factor() extracts Z factor", {
 
 test_that("get_sap_flux_conversion_factor() errors if Z not calculated", {
   wood <- load_wood_properties("generic_sw")
+  # Manually clear Z
+  wood$derived_properties$sap_flux_conversion_factor <- NA_real_
 
   expect_error(
     get_sap_flux_conversion_factor(wood),

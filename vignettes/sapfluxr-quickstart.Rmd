@@ -35,7 +35,7 @@ The processing pipeline follows a sequence of physically grounded steps:
 7.  **Secondary Method Calibration**: Aligning methods to ensure a smooth transition across flow regimes.
 8.  **Dual Method Switching (sDMA)**: Dynamically selecting the most accurate method for current flow.
 9.  **Flux Density & Radial Integration**: Converting velocity to sap flux and scaling to tree-level.
-10. **Daily Aggregation**: Integrating sub-daily data into daily totals (L day⁻¹).
+10. **Daily Aggregation**: Integrating sub-daily data into daily totals (L/day).
 
 ------------------------------------------------------------------------
 
@@ -55,7 +55,7 @@ sample_file <- system.file("extdata", "sample_ict_current.txt", package = "sapfl
 hp_data <- read_heat_pulse_data(sample_file)
 
 # Inspect the structure
-hp_data$measurements
+head(hp_data$measurements)
 ```
 
 For more details on supported formats and validation, see [Data Import & Configuration](vignette-01-import-and-config.html).
@@ -69,7 +69,7 @@ Accurate thermal properties are critical. You can load pre-defined configuration
 wood_props <- load_wood_properties("eucalyptus")
 
 # View the derived thermal diffusivity (k) used in HPV equations
-wood_props$thermal_properties$axial_diffusivity
+wood_props$derived_properties$thermal_diffusivity
 ```
 
 ## Step 3: HPV Calculation
@@ -90,37 +90,33 @@ head(vh_results)
 
 For more details on HPV physics and method selection, see [HPV Calculation Methods](vignette-02-hpv-calculation.html).
 
-## Step 4: Changepoint & Zero-Flow Identification
+## Step 4: Baseline & Spacing Correction
 
-Probes drift over time. We need to identify periods where sap flow is at a genuine zero-flow baseline. We can use the **PELT** algorithm to find structural breaks in the daily minima.
+Probes drift over time. We need to identify periods where sap flow is at a genuine zero-flow baseline and correct these offsets. `sapfluxr` separates this into two steps: identifying anchors (e.g., using the **PELT** algorithm to find structural breaks in daily minima), and then applying an offset model and correction math (e.g., **Segmented Burgess spacing correction**).
 
-```{r changepoints}
-# Detect changepoints in the zero-flow baseline
-vh_results <- detect_changepoints(
+```{r baseline, eval=FALSE}
+# Step 4: Identify zero-flow anchor points
+anchors <- detect_changepoints(
   vh_results,
-  method = "pelt",
+  sensor_position = "outer",
+  hpv_method = "HRM",
   penalty = "MBIC"
 )
-```
 
-## Step 5: Baseline Correction
-
-Once changepoints are identified, we subtract the zero-flow offset. `sapfluxr` uses a **non-destructive architecture**, creating new columns for each correction stage.
-
-```{r baseline}
-# Apply flat offset subtraction per segment
-vh_results <- apply_zero_flow_offset(
-  vh_results,
-  correction_model = "flat"
+# Step 5: Apply offset model and correction math
+vh_results <- apply_spacing_correction(
+  vh_data = vh_results,
+  changepoints = anchors$changepoints,
+  offset_model = "segment",
+  correction_math = "burgess",
+  sensor_position = "both",
+  wood_properties = wood_props
 )
-
-# HRM-specific Spacing Correction is also available
-# vh_results <- burgess_correction(vh_results)
 ```
 
 For more details on baseline identification and correction models, see [Baseline & Zero-Flow Correction](vignette-03-baseline-and-zero-flow.html).
 
-## Step 6: Wound Correction
+## Step 5: Wound Correction
 
 Wounding at the probe site causes systematic underestimation. We scale the velocity based on the wound diameter.
 
@@ -128,15 +124,15 @@ Wounding at the probe site causes systematic underestimation. We scale the veloc
 # Apply wound correction (B-factor from Burgess et al. 2001)
 vh_results <- apply_wound_correction(
   vh_results,
-  wound_diameter = 2.0  # mm
+  wound_diameter = 0.2  # cm
 )
 ```
 
 ## Step 7 & 8: Calibration & Switching (sDMA)
 
-To capture the full diurnal range, we switch between methods (e.g., HRM and MHR) based on the **PÃ©clet number**. First, we calibrate the secondary method to the corrected HRM scale.
+To capture the full diurnal range, we switch between methods (e.g., HRM and MHR) based on the **Peclet number**. First, we calibrate the secondary method to the corrected HRM scale.
 
-```{r sdma}
+```{r sdma, eval=FALSE}
 # 1. Calibrate MHR to HRM scale
 vh_results <- calibrate_secondary_method(
   vh_results,
@@ -158,9 +154,9 @@ For more details on method integration and sDMA, see [Advanced Corrections & Swi
 
 ## Step 9: Flux Density & Radial Integration
 
-We convert velocity ($V_h$) to sap flux density ($J_v$) and integrate over the sapwood area (using the two-annulus model).
+We convert velocity (Vh) to sap flux density (Jv) and integrate over the sapwood area (using the two-annulus model).
 
-```{r flux}
+```{r flux, eval=FALSE}
 # Calculate sapwood areas and convert to tree-level sap flux (Q)
 sap_flux <- calc_sap_flux(
   vh_results,
@@ -173,7 +169,7 @@ sap_flux <- calc_sap_flux(
 
 Finally, we aggregate the sub-daily flux into daily totals.
 
-```{r daily}
+```{r daily, eval=FALSE}
 # Aggregate to daily L/day
 daily_totals <- aggregate_daily(
   sap_flux,

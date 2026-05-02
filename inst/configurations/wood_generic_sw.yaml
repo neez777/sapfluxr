@@ -15,6 +15,14 @@ metadata:
   default: true
 
 # ============================================================================
+# SITE LOCATION - For SILO weather download and dawn time calculations
+# ============================================================================
+site_location:
+  latitude: null      # Decimal degrees, negative = south (e.g. -31.95)
+  longitude: null     # Decimal degrees, positive = east (e.g. 115.86)
+  timezone: null      # IANA timezone string (e.g. "Australia/Perth")
+
+# ============================================================================
 # USER INPUTS - Wood Measurements (provide ONE method)
 # ============================================================================
 wood_measurements:
@@ -22,31 +30,35 @@ wood_measurements:
   # Measure fresh and oven-dry weights, and fresh (green) volume
   fresh_weight_g: null        # Fresh weight of sapwood sample (g)
   dry_weight_g: null          # Oven-dry weight of sapwood sample (g)
-  fresh_volume_cm3: null      # Fresh (green) volume of sample (cm³)
+  fresh_volume_cm3: null      # Fresh (green) volume of sample (cm^3)
 
   # Method 2: Dual Density Input (RECOMMENDED - easier than Method 1)
   # Measure both densities on same sample (fresh volume assumed constant)
-  # Values optimised to give thermal_diffusivity_actual = 0.0025 cm²/s
-  density_dry_kg_m3: 540      # Oven-dry wood density (kg/m³) - typical softwood value
-  density_fresh_kg_m3: 1010   # Fresh (field-moist) wood density (kg/m³) - typical softwood value
+  # Values optimised to give thermal_diffusivity_actual = 0.0025 cm^2/s
+  density_dry_kg_m3: 540      # Oven-dry wood density (kg/m^3) - typical softwood value
+  density_fresh_kg_m3: 1010   # Fresh (field-moist) wood density (kg/m^3) - typical softwood value
 
 # ============================================================================
 # WOOD CONSTANTS - Physical properties (have defaults, can be modified)
 # ============================================================================
 wood_constants:
   # Thermal properties
-  thermal_diffusivity_default_cm2_s: 0.0025  # Default thermal diffusivity (cm²/s)
+  thermal_diffusivity_default_cm2_s: 0.0025  # Default thermal diffusivity (cm^2/s)
                                               # Used for initial HPV calculations
                                               # Will be refined from wood measurements if provided
 
-  # Water/sap properties (at 20°C)
-  rho_sap_kg_m3: 1000                 # Density of sap/water (kg/m³)
+  # Water/sap properties (at 20degC)
+  rho_sap_kg_m3: 1000                 # Density of sap/water (kg/m^3)
   c_sap_J_kg_K: 4186                  # Specific heat capacity of water (J/kg/K)
   K_sap_W_m_K: 0.5984                 # Thermal conductivity of water (W/m/K)
+  # Siau (1984) empirical thermal conductivity coefficient for the formula:
+  # Kdw_FSP = siau_thermal_conductivity_coef * (21 - 20*Fv_FSP)
+  # This is an independent empirical constant, NOT derived from c_sap_J_kg_K.
+  siau_thermal_conductivity_coef: 0.04186  # (W/m/K per unit fibre saturation)
 
   # Cell wall properties
-  rho_cell_wall_kg_m3: 1530           # Density of cell wall tissue (kg/m³)
-  c_dry_wood_J_kg_K: 1200             # Specific heat capacity of dry wood at 20°C (J/kg/K)
+  rho_cell_wall_kg_m3: 1530           # Density of cell wall tissue (kg/m^3)
+  c_dry_wood_J_kg_K: 1200             # Specific heat capacity of dry wood at 20degC (J/kg/K)
 
 # ============================================================================
 # WOOD PROPERTIES - Basic identifiers
@@ -64,7 +76,7 @@ tree_measurements:
   dbh: null                   # cm, diameter at breast height
   bark_thickness: null        # cm, bark thickness
   sapwood_depth: null         # cm, sapwood depth from cambium
-  sapwood_area: null          # cm², conducting sapwood area
+  sapwood_area: null          # cm^2, conducting sapwood area
   heartwood_radius: null      # cm, heartwood radius
 
 # ============================================================================
@@ -75,8 +87,8 @@ wound_correction:
   drill_bit_diameter_mm: 2.0        # Drill bit diameter (mm) used for probe installation
   wound_addition_mm: 0.3            # Wound tissue addition per side (mm)
                                     # Literature suggests ~0.3mm wound tissue forms on each side
-                                    # Initial wound = drill_bit + 2×wound_addition
-                                    # Example: 2.0mm drill + 2×0.3mm = 2.6mm initial wound
+                                    # Initial wound = drill_bit + 2*wound_addition
+                                    # Example: 2.0mm drill + 2*0.3mm = 2.6mm initial wound
 
   # Temporal wound expansion (optional - choose ONE approach below)
   # If not tracking wound expansion, only initial wound diameter is used (static)
@@ -87,12 +99,12 @@ wound_correction:
   # Use when you have initial and final measurements, want linear interpolation
   # Wound grows linearly from initial_date to final_date
   # If reinstallations occur, wound resets to initial size then grows at same rate
-  # Creates "sawtooth" pattern: reset → grow → reset → grow
+  # Creates "sawtooth" pattern: reset -> grow -> reset -> grow
   initial_date: null                # Date of sensor installation (YYYY-MM-DD)
   final_date: null                  # Date of final wound measurement (YYYY-MM-DD)
   final_diameter_mm: null           # Measured wound diameter at final_date (mm)
 
-  # Example Model A (commented): initial_date: "2024-01-01", final_date: "2024-12-31", 
+  # Example Model A (commented): initial_date: "2024-01-01", final_date: "2024-12-31",
   # final_diameter_mm: 3.2, reinstall_dates: ["2024-06-15"]
 
   # --------------------------------------------------------------------------
@@ -125,21 +137,21 @@ quality_thresholds:
 derived_properties:
   # Moisture and density (calculated from Method 2 densities)
   mc_kg_kg: 0.870370                          # Moisture content (kg water / kg dry wood)
-  rho_dw_kg_m3: 540.0                         # Dry wood density (kg/m³)
-  rho_fw_kg_m3: 1010.0                        # Fresh wood density (kg/m³)
-  basic_density_kg_m3: 540.0                  # Basic density = dry mass / fresh volume (kg/m³)
+  rho_dw_kg_m3: 540.0                         # Dry wood density (kg/m^3)
+  rho_fw_kg_m3: 1010.0                        # Fresh wood density (kg/m^3)
+  basic_density_kg_m3: 540.0                  # Basic density = dry mass / fresh volume (kg/m^3)
 
   # Fiber saturation point properties
   mc_FSP_kg_kg: 0.272166                      # Moisture content at fiber saturation point
-  specific_gravity: 0.540000                  # Specific gravity (dimensionless) = ρdw / ρsap
+  specific_gravity: 0.540000                  # Specific gravity (dimensionless) = rhodw / rhosap
   Fv_FSP: 0.500089                            # Void fraction at fiber saturation point
 
   # Thermal properties (calculated from default densities and constants)
   Kdw_FSP_W_m_K: 0.460385                     # Thermal conductivity of dry wood at FSP (W/m/K)
   Kfw_W_m_K: 0.653687                         # Thermal conductivity of fresh sapwood (W/m/K)
   cfw_J_kg_K: 2589.52                         # Specific heat capacity of fresh sapwood (J/kg/K)
-  thermal_diffusivity_actual_cm2_s: 0.00249936  # Actual thermal diffusivity (≈ default 0.0025)
+  thermal_diffusivity_actual_cm2_s: 0.00249936  # Actual thermal diffusivity (~ default 0.0025)
 
   # Conversion factors
-  thermal_diffusivity_correction_factor: 0.999743  # actual k / default k (≈ 1.0)
+  thermal_diffusivity_correction_factor: 0.999743  # actual k / default k (~ 1.0)
   sap_flux_conversion_factor: 0.624802        # For converting Vh to sap flux density

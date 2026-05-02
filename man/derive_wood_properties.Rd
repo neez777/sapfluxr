@@ -22,13 +22,13 @@ derive_wood_properties(
 
 \item{dry_weight}{Oven-dry weight of wood sample (g). Optional.}
 
-\item{fresh_volume}{Fresh/green volume of wood sample (cm³). Optional.}
+\item{fresh_volume}{Fresh/green volume of wood sample (cm^3). Optional.}
 
-\item{dry_volume}{Dry volume of wood sample (cm³). Optional.}
+\item{dry_volume}{Dry volume of wood sample (cm^3). Optional.}
 
-\item{fresh_density}{Basic density - dry mass / green volume (g/cm³ or kg/m³). Optional.}
+\item{fresh_density}{Basic density - dry mass / green volume (g/cm^3 or kg/m^3). Optional.}
 
-\item{dry_density}{Dry density - dry mass / dry volume (g/cm³ or kg/m³). Optional.}
+\item{dry_density}{Dry density - dry mass / dry volume (g/cm^3 or kg/m^3). Optional.}
 
 \item{moisture_content}{Moisture content on dry weight basis (\% or decimal). Optional.}
 
@@ -46,10 +46,10 @@ List containing:
 \describe{
 \item{fresh_weight}{Fresh weight (g)}
 \item{dry_weight}{Dry weight (g)}
-\item{fresh_volume}{Fresh volume (cm³)}
-\item{dry_volume}{Dry volume (cm³)}
-\item{fresh_density}{Basic density (g/cm³)}
-\item{dry_density}{Dry density (g/cm³)}
+\item{fresh_volume}{Fresh volume (cm^3)}
+\item{dry_volume}{Dry volume (cm^3)}
+\item{fresh_density}{Basic density (g/cm^3)}
+\item{dry_density}{Dry density (g/cm^3)}
 \item{moisture_content}{Moisture content (decimal)}
 \item{moisture_content_percent}{Moisture content (\%)}
 \item{water_weight}{Weight of water (g)}
@@ -84,8 +84,8 @@ and need to estimate moisture content.
 \strong{Minimum Required Inputs:}
 You must provide enough information to solve the system. Examples:
 \itemize{
-\item fresh_weight + dry_weight (→ can get MC, but not densities without volume)
-\item dry_weight + fresh_volume + fresh_density (→ can solve for most)
+\item fresh_weight + dry_weight (can get MC, but not densities without volume)
+\item dry_weight + fresh_volume + fresh_density (can solve for most)
 \item fresh_density + dry_density + any one mass or volume
 \item etc.
 }
@@ -101,8 +101,8 @@ result <- derive_wood_properties(
 
 # Example 2: From both densities (assuming no shrinkage)
 result <- derive_wood_properties(
-  fresh_density = 380,  # kg/m³
-  dry_density = 450,    # kg/m³
+  fresh_density = 380,  # kg/m^3
+  dry_density = 450,    # kg/m^3
   assume_no_shrinkage = TRUE
 )
 # Returns: Warning - conflicting densities under no-shrinkage assumption
@@ -117,7 +117,7 @@ result <- derive_wood_properties(
 
 # Example 4: From dry density and moisture content
 result <- derive_wood_properties(
-  dry_density = 450,     # kg/m³
+  dry_density = 450,     # kg/m^3
   moisture_content = 35, # \%
   dry_weight = 10        # g (for scaling)
 )

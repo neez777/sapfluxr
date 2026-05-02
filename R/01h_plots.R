@@ -322,125 +322,6 @@ if (sensor_position == "both") {    plot_title <- sprintf("Heat Pulse Trace - %s
 
         annotation_y_offset <- annotation_y_offset + 1
 
-      # Special handling for HRMXb: shows separate downstream and upstream windows
-      } else if (method == "HRMXb" &&
-                 !is.na(method_data$hrmxb_downstream_start_sec[1]) &&
-                 !is.na(method_data$hrmxb_upstream_start_sec[1])) {
-
-        # HRMXb uses two separate windows: one for downstream, one for upstream
-        downstream_start <- method_data$hrmxb_downstream_start_sec[1]
-        downstream_end <- method_data$hrmxb_downstream_end_sec[1]
-        upstream_start <- method_data$hrmxb_upstream_start_sec[1]
-        upstream_end <- method_data$hrmxb_upstream_end_sec[1]
-
-        # Colors for HRMXb - red for downstream, green for upstream
-        fill_color_down <- "#FFB6C6"  # Light red/pink for downstream
-        text_color_down <- "#DC143C"  # Crimson for downstream
-        fill_color_up <- "#90EE90"    # Light green for upstream
-        text_color_up <- "#228B22"    # Forest green for upstream
-
-        # Determine which sensors to use based on sensor_position
-        if (sensor_position == "outer") {
-          downstream_sensor <- "do"
-          upstream_sensor <- "uo"
-        } else if (sensor_position == "inner") {
-          downstream_sensor <- "di"
-          upstream_sensor <- "ui"
-        } else {
-          # For 'both', use outer sensors
-          downstream_sensor <- "do"
-          upstream_sensor <- "uo"
-        }
-
-        # Add downstream window
-        p <- p +
-          ggplot2::annotate("rect",
-                            xmin = downstream_start, xmax = downstream_end,
-                            ymin = -Inf, ymax = Inf,
-                            fill = fill_color_down, alpha = 0.3)
-
-        # Add vertical lines and dots for downstream window - use DOWNSTREAM sensor only
-        temp_at_down_start <- plot_data$deltaT[plot_data$time_sec == downstream_start & plot_data$sensor == downstream_sensor]
-        if (length(temp_at_down_start) == 0 || !is.finite(temp_at_down_start[1])) temp_at_down_start <- 0 else temp_at_down_start <- temp_at_down_start[1]
-
-        temp_at_down_end <- plot_data$deltaT[plot_data$time_sec == downstream_end & plot_data$sensor == downstream_sensor]
-        if (length(temp_at_down_end) == 0 || !is.finite(temp_at_down_end[1])) temp_at_down_end <- 0 else temp_at_down_end <- temp_at_down_end[1]
-
-        # Find max temp in downstream window for label positioning
-        downstream_window_temps <- plot_data$deltaT[plot_data$time_sec >= downstream_start &
-                                                     plot_data$time_sec <= downstream_end &
-                                                     plot_data$sensor == downstream_sensor]
-        downstream_max_temp <- if (length(downstream_window_temps) > 0) max(downstream_window_temps, na.rm = TRUE) else 0
-        if (!is.finite(downstream_max_temp)) downstream_max_temp <- 0
-
-        p <- p +
-          ggplot2::annotate("segment",
-                            x = downstream_start, xend = downstream_start,
-                            y = 0, yend = temp_at_down_start,
-                            linetype = "dashed", color = text_color_down, linewidth = 0.7) +
-          ggplot2::annotate("point",
-                            x = downstream_start, y = temp_at_down_start,
-                            size = 3, color = text_color_down) +
-          ggplot2::annotate("segment",
-                            x = downstream_end, xend = downstream_end,
-                            y = 0, yend = temp_at_down_end,
-                            linetype = "dashed", color = text_color_down, linewidth = 0.7) +
-          ggplot2::annotate("point",
-                            x = downstream_end, y = temp_at_down_end,
-                            size = 3, color = text_color_down) +
-          ggplot2::annotate("text",
-                            x = (downstream_start + downstream_end) / 2,
-                            y = downstream_max_temp * 1.15,  # Position 15% above max temp in window
-                            label = "HRMXb downstream",
-                            size = 2.5, fontface = "bold", color = text_color_down)
-
-        annotation_y_offset <- annotation_y_offset + 1
-
-        # Add upstream window
-        p <- p +
-          ggplot2::annotate("rect",
-                            xmin = upstream_start, xmax = upstream_end,
-                            ymin = -Inf, ymax = Inf,
-                            fill = fill_color_up, alpha = 0.3)
-
-        # Add vertical lines and dots for upstream window - use UPSTREAM sensor only
-        temp_at_up_start <- plot_data$deltaT[plot_data$time_sec == upstream_start & plot_data$sensor == upstream_sensor]
-        if (length(temp_at_up_start) == 0 || !is.finite(temp_at_up_start[1])) temp_at_up_start <- 0 else temp_at_up_start <- temp_at_up_start[1]
-
-        temp_at_up_end <- plot_data$deltaT[plot_data$time_sec == upstream_end & plot_data$sensor == upstream_sensor]
-        if (length(temp_at_up_end) == 0 || !is.finite(temp_at_up_end[1])) temp_at_up_end <- 0 else temp_at_up_end <- temp_at_up_end[1]
-
-        # Find max temp in upstream window for label positioning
-        upstream_window_temps <- plot_data$deltaT[plot_data$time_sec >= upstream_start &
-                                                   plot_data$time_sec <= upstream_end &
-                                                   plot_data$sensor == upstream_sensor]
-        upstream_max_temp <- if (length(upstream_window_temps) > 0) max(upstream_window_temps, na.rm = TRUE) else 0
-        if (!is.finite(upstream_max_temp)) upstream_max_temp <- 0
-
-        p <- p +
-          ggplot2::annotate("segment",
-                            x = upstream_start, xend = upstream_start,
-                            y = 0, yend = temp_at_up_start,
-                            linetype = "dashed", color = text_color_up, linewidth = 0.7) +
-          ggplot2::annotate("point",
-                            x = upstream_start, y = temp_at_up_start,
-                            size = 3, color = text_color_up) +
-          ggplot2::annotate("segment",
-                            x = upstream_end, xend = upstream_end,
-                            y = 0, yend = temp_at_up_end,
-                            linetype = "dashed", color = text_color_up, linewidth = 0.7) +
-          ggplot2::annotate("point",
-                            x = upstream_end, y = temp_at_up_end,
-                            size = 3, color = text_color_up) +
-          ggplot2::annotate("text",
-                            x = (upstream_start + upstream_end) / 2,
-                            y = upstream_max_temp * 1.15,  # Position 15% above max temp in window
-                            label = "HRMXb upstream",
-                            size = 2.5, fontface = "bold", color = text_color_up)
-
-        annotation_y_offset <- annotation_y_offset + 1
-
-
       # HRM: Averaging window (shaded region)
       } else if (method == "HRM" &&
                  !is.na(method_data$hrm_window_start_sec[1]) &&
@@ -459,52 +340,6 @@ if (sensor_position == "both") {    plot_title <- sprintf("Heat Pulse Trace - %s
                             y = y_max * (0.85 - annotation_y_offset * 0.05),
                             label = "HRM averaging window",
                             size = 3, fontface = "bold", color = "black")
-
-        annotation_y_offset <- annotation_y_offset + 1
-
-      # HRMXa: Dynamic window based on temperature thresholds (shaded region)
-      } else if (method == "HRMXa" &&
-                 !is.na(method_data$hrmxa_window_start_sec[1]) &&
-                 !is.na(method_data$hrmxa_window_end_sec[1])) {
-
-        window_start <- method_data$hrmxa_window_start_sec[1]
-        window_end <- method_data$hrmxa_window_end_sec[1]
-
-        fill_color <- "#4169E1"  # Royal blue
-        text_color <- "#0000CD"  # Medium blue
-
-        # Find the maximum deltaT across all sensors at window boundaries
-        temp_at_start <- max(plot_data$deltaT[plot_data$time_sec == window_start], na.rm = TRUE)
-        if (!is.finite(temp_at_start)) temp_at_start <- 0
-
-        temp_at_end <- max(plot_data$deltaT[plot_data$time_sec == window_end], na.rm = TRUE)
-        if (!is.finite(temp_at_end)) temp_at_end <- 0
-
-        # Add shaded window with boundary markers
-        p <- p +
-          ggplot2::annotate("rect",
-                            xmin = window_start, xmax = window_end,
-                            ymin = -Inf, ymax = Inf,
-                            fill = fill_color, alpha = 0.2) +
-          ggplot2::annotate("text",
-                            x = (window_start + window_end) / 2,
-                            y = y_max * (0.85 - annotation_y_offset * 0.05),
-                            label = "HRMXa window",
-                            size = 3, fontface = "bold", color = text_color) +
-          ggplot2::annotate("segment",
-                            x = window_start, xend = window_start,
-                            y = 0, yend = temp_at_start,
-                            linetype = "dashed", color = text_color, linewidth = 0.7) +
-          ggplot2::annotate("point",
-                            x = window_start, y = temp_at_start,
-                            size = 3, color = text_color) +
-          ggplot2::annotate("segment",
-                            x = window_end, xend = window_end,
-                            y = 0, yend = temp_at_end,
-                            linetype = "dashed", color = text_color, linewidth = 0.7) +
-          ggplot2::annotate("point",
-                            x = window_end, y = temp_at_end,
-                            size = 3, color = text_color)
 
         annotation_y_offset <- annotation_y_offset + 1
 
@@ -1221,8 +1056,12 @@ build_correction_status_label <- function(vh_data) {
 #' @param vh_data Data frame with vh_results structure containing both raw and
 #'   corrected values
 #' @param sensor Character, sensor position to plot. Default: "outer"
+#' @param sensor_position Alias for \code{sensor}.
 #' @param method Character, calculation method to plot. Default: "HRM"
 #' @param show_legend Logical, show legend explaining corrections. Default: TRUE
+#' @param title Optional custom plot title.
+#' @param correction_stage Ignored, kept for backward compatibility.
+#' @param ... Additional arguments passed to methods.
 #'
 #' @return ggplot2 object showing raw vs. corrected comparison
 #'

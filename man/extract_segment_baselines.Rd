@@ -2,46 +2,17 @@
 % Please edit documentation in R/03e_changepoint_detection.R
 \name{extract_segment_baselines}
 \alias{extract_segment_baselines}
-\title{Extract Segment Baseline Values}
+\title{Extract Segment Baselines from Changepoint Result}
 \usage{
-extract_segment_baselines(
-  changepoint_result,
-  use_quantile = FALSE,
-  quantile_prob = 0.05
-)
+extract_segment_baselines(cpt_result)
 }
 \arguments{
-\item{changepoint_result}{Output from \code{\link{detect_changepoints}}}
-
-\item{use_quantile}{Logical, whether to use quantile instead of minimum (default: FALSE)}
-
-\item{quantile_prob}{Quantile probability if \code{use_quantile = TRUE} (default: 0.05)}
+\item{cpt_result}{Result from \code{\link{detect_changepoints}}.}
 }
 \value{
-The segments data frame with added columns:
-\item{baseline_value}{Baseline velocity for that segment (cm/hr)}
-\item{mean_value}{Mean velocity for that segment}
-\item{sd_value}{Standard deviation of velocities}
+A named list where names are segment IDs and values are baselines.
 }
 \description{
-Calculates baseline (minimum or low quantile) value for each segment
-identified by changepoint detection.
+Helper function to extract baselines in a format compatible with
+\code{\link{apply_spacing_correction}}.
 }
-\examples{
-\dontrun{
-# Detect changepoints
-cpt_result <- detect_changepoints(daily_min)
-
-# Get segment baselines
-segments_with_baselines <- extract_segment_baselines(cpt_result)
-
-print(segments_with_baselines)
-}
-
-}
-\seealso{
-Other changepoint detection functions: 
-\code{\link{calculate_daily_minima}()},
-\code{\link{detect_changepoints}()}
-}
-\concept{changepoint detection functions}

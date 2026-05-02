@@ -54,7 +54,7 @@ Allows for clock drift and jitter (default: 5 seconds)}
 (default: 5, meaning 11-point window)}
 
 \item{rolling_threshold}{Numeric, SD multiplier for rolling mean outlier detection.
-Points deviating more than threshold × SD from rolling mean are flagged (default: 3)}
+Points deviating more than threshold * SD from rolling mean are flagged (default: 3)}
 
 \item{detect_rate_of_change}{Logical, whether to detect excessive rate of change (default: TRUE)}
 
@@ -123,7 +123,7 @@ applied to rows currently flagged as OK.
 \strong{Outlier Detection Methods:}
 \enumerate{
 \item \strong{Rolling Mean}: Compares each point to the mean of a sliding window.
-Points that deviate by more than \code{rolling_threshold × SD} from the local
+Points that deviate by more than \code{rolling_threshold * SD} from the local
 mean are flagged. This detects isolated spikes while respecting local
 trends and daily variation. Default threshold of 3 corresponds to 99.7\%
 confidence interval.
@@ -182,6 +182,6 @@ qc_results <- flag_vh_quality(
 
 }
 \seealso{
-\code{\link{interpolate_missing_vh}}
+\code{\link{detect_and_fill_missing_pulses}}
 }
 \concept{data quality functions}

@@ -43,7 +43,7 @@ A list containing:
 \description{
 Estimates thermal diffusivity (k) from time to maximum temperature during
 zero-flow periods. At zero flow, heat spreads symmetrically by conduction,
-allowing k to be calculated from: k = x² / (4 * t_max)
+allowing k to be calculated from: k = x^2 / (4 * t_max)
 }
 \details{
 \strong{Calculation Method:}

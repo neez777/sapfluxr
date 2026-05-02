@@ -38,7 +38,7 @@ correction). Must contain columns: pulse_id, method, sensor_position, Vh_cm_hr.}
 \item{threshold_step}{Increment between thresholds (cm/hr) (default: 0.5).}
 
 \item{fit_type}{Type of fit: "linear", "quadratic", or "auto" (default: "auto").
-"auto" tries both and selects based on R² improvement.}
+"auto" tries both and selects based on R^2 improvement.}
 
 \item{min_points}{Minimum number of points required for valid calibration (default: 50).}
 
@@ -49,13 +49,15 @@ correction). Must contain columns: pulse_id, method, sensor_position, Vh_cm_hr.}
 \item{manual_threshold}{Numeric value to manually specify threshold (cm/hr).
 If provided, skips automatic optimization and uses this threshold directly.
 Useful when you want to use a specific threshold based on domain knowledge
-or visual inspection of R² vs threshold plot. Default: NULL (automatic).}
+or visual inspection of R^2 vs threshold plot. Default: NULL (automatic).}
+
+\item{velocity_col}{Name of velocity column to use (default: "Vh_cm_hr").}
 }
 \value{
 A list with components \code{optimal_threshold} (velocity threshold
-with highest R²), \code{optimal_r_squared} (R² value at optimal threshold),
+with highest R^2), \code{optimal_r_squared} (R^2 value at optimal threshold),
 \code{optimal_calibration} (full calibration object), \code{threshold_results}
-(data frame of tested thresholds with R², RMSE, n_points), \code{plots}
+(data frame of tested thresholds with R^2, RMSE, n_points), \code{plots}
 (diagnostic plots if \code{create_plots = TRUE}), \code{primary_method},
 \code{secondary_method}, and \code{sensor_position}
 }
@@ -74,8 +76,8 @@ for method calibration:
 \code{threshold_step} (e.g., 0, 0.5, 1.0, 1.5, ..., 20 cm/hr)
 \item At each threshold, filters data to points where primary method <= threshold
 \item Fits relationship between primary and secondary methods on this valid region
-\item Records R², RMSE, and number of points
-\item Identifies the maximum threshold that maintains high R² (where methods still agree)
+\item Records R^2, RMSE, and number of points
+\item Identifies the maximum threshold that maintains high R^2 (where methods still agree)
 }
 
 \strong{Interpretation:}
@@ -91,7 +93,7 @@ values above the threshold (where the primary fails but secondary continues).
 
 When \code{create_plots = TRUE}, generates:
 \itemize{
-\item \strong{R² vs Threshold}: Shows how correlation changes with threshold
+\item \strong{R^2 vs Threshold}: Shows how correlation changes with threshold
 \item \strong{Calibration Scatter}: HRM vs MHR with line of best fit at optimal threshold
 }
 }

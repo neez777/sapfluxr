@@ -10,7 +10,8 @@ read_weather_data(
   temp_col = NULL,
   rh_col = NULL,
   pressure_col = NULL,
-  confirm = TRUE
+  confirm = TRUE,
+  timezone = NULL
 )
 }
 \arguments{
@@ -30,6 +31,12 @@ If NULL (default), function will attempt to auto-detect.}
 
 \item{confirm}{Logical. If TRUE and auto-detection is ambiguous, prompts user
 for confirmation. Default is TRUE.}
+
+\item{timezone}{IANA timezone string (e.g., \code{"Australia/Perth"}). When the
+weather station records local time but the file carries a UTC-format timestamp,
+supply the site timezone here. The datetime column will be re-labelled with
+\code{lubridate::force_tz()} — clock values are preserved, only the tz attribute
+is corrected. Leave \code{NULL} (default) to keep whatever timezone the parser assigns.}
 }
 \value{
 A tibble with standardised column names:
@@ -47,7 +54,7 @@ the appropriate columns.
 \details{
 The function uses the following heuristics for auto-detection:
 \itemize{
-\item Temperature: Values typically < 50°C, column names containing "temp", "air", "ta"
+\item Temperature: Values typically < 50degC, column names containing "temp", "air", "ta"
 \item Relative Humidity: Values 0-100, column names containing "rh", "humidity", "humid"
 \item Pressure: Values around 80-110 kPa, column names containing "pressure", "press", "pa", "kpa"
 \item Datetime: Column names containing "date", "time", "datetime", or parseable datetime values
@@ -71,6 +78,7 @@ weather <- read_weather_data(
 \seealso{
 Other weather data functions: 
 \code{\link{calc_vpd}()},
+\code{\link{download_silo_weather}()},
 \code{\link{read_silo_data}()}
 }
 \concept{weather data functions}

@@ -4,258 +4,305 @@
 
 #' Calculate Sapwood Area for Concentric Rings
 #'
-#' Calculates the cross-sectional area of sapwood rings based on tree
-#' dimensions and sensor positions. Follows the ring allocation approach
-#' for outer/inner sensor configurations.
+#' Calculates the cross-sectional area of sapwood rings (annuli) based on tree
+#' dimensions, probe geometry, and sensor positions. Implements the Hatton et al.
+#' (1990) weighted average method with probe-derived annulus boundaries.
 #'
-#' @param dbh Diameter at breast height (cm)
-#' @param bark_thickness Bark thickness (cm). Default: 0
-#' @param sapwood_depth Total sapwood depth from cambium (cm)
-#' @param sensor_positions Character vector of sensor positions.
-#'   Options: "outer" (5mm depth), "inner" (12.5mm depth).
-#'   Default: c("outer", "inner")
+#' @param dbh Diameter at breast height (cm).
+#' @param bark_thickness Bark thickness (cm). Default: 0.
+#' @param sapwood_depth Total depth from the **outer bark surface** to the
+#'   sapwood-heartwood boundary (cm). This matches the standard field measurement
+#'   convention (e.g., from a wood core). The actual conducting sapwood thickness
+#'   is \code{sapwood_depth - bark_thickness}.
+#' @param sensor_positions Character vector of sensor positions to include.
+#'   Options: \code{"outer"}, \code{"inner"}. Default: \code{c("outer", "inner")}.
+#' @param probe_config Optional probe configuration. Accepts:
+#'   \describe{
+#'     \item{NULL}{Uses standard ICT SFM1 defaults: probe length 35 mm,
+#'       outer sensor 22.5 mm from tip, inner sensor 7.5 mm from tip.}
+#'     \item{ProbeConfiguration}{Object from \code{\link{load_probe_config}()}.
+#'       Probe dimensions are read from the stored YAML data.}
+#'     \item{named list}{With fields \code{length}, \code{outer_sensor},
+#'       \code{inner_sensor} (all in mm, distances from probe tip).}
+#'   }
 #'
 #' @return List containing:
 #'   \describe{
-#'     \item{total_sapwood_area_cm2}{Total conducting sapwood area (cm^2)}
-#'     \item{rings}{Data frame with columns: sensor, ring_name,
-#'                  inner_radius_cm, outer_radius_cm, area_cm2,
-#'                  depth_from_cambium_cm}
-#'     \item{tree_dimensions}{List of tree dimensions used}
+#'     \item{total_sapwood_area_cm2}{Total conducting sapwood area (cm^2).}
+#'     \item{rings}{Data frame with one row per annulus and columns:
+#'       \code{sensor} (which sensor or "sensorless"),
+#'       \code{sensor_source} ("outer" or "inner" — which sensor's Jv to use),
+#'       \code{measured} (logical — TRUE if a sensor directly measures this ring),
+#'       \code{ring_name}, \code{inner_radius_cm}, \code{outer_radius_cm},
+#'       \code{area_cm2}, \code{depth_from_cambium_cm}.}
+#'     \item{tree_dimensions}{List of tree geometry values, including
+#'       \code{actual_sapwood_cm} (sapwood thickness from cambium).}
+#'     \item{probe_landmarks}{List of probe geometry depths from cambium:
+#'       outer and inner sensor positions, their midpoint, and the probe tip.}
 #'   }
 #'
 #' @details
-#' **Ring Allocation Rules (based on sapwood depth):**
+#' ## Measurement convention
 #'
-#' - **Sapwood < 1.0 cm:** Only outer ring (Aso), inner sensor in heartwood
-#' - **Sapwood 1.0-2.0 cm:** Outer ring (Aso) + partial inner ring (Asi)
-#' - **Sapwood 2.0-2.5 cm:** Outer ring (Aso) + full inner ring (Asi)
-#' - **Sapwood > 2.5 cm:** Outer (Aso) + inner (Asi) + innermost (Asim)
+#' \code{sapwood_depth} is measured from the **bark surface** (e.g., with a
+#' coring tool or increment borer), which is the standard field convention.
+#' The function subtracts \code{bark_thickness} internally to obtain the actual
+#' conducting sapwood thickness (\code{actual_sapwood_cm}).
 #'
-#' **Ring boundaries:**
-#' - Outer ring: 0-1.0 cm depth (outer sensor at 0.5 cm)
-#' - Inner ring: 1.0-2.0 cm depth (inner sensor at 1.25 cm)
-#' - Innermost ring: 2.0 cm to sapwood boundary
+#' ## Probe geometry and annulus boundaries
+#'
+#' Sensor depths from the cambium are derived from the probe configuration and
+#' the tree's bark thickness:
+#'
+#' \deqn{d_{sensor} = \frac{(\text{probe length} - \text{sensor from tip}) - \text{bark (mm)}}{10}}
+#'
+#' Three fixed probe landmarks (all from the cambium) determine the annulus
+#' boundaries:
+#' \describe{
+#'   \item{Midpoint}{Mean depth of outer and inner sensors. Always the boundary
+#'     between the outer annulus and the inner annulus (or sensorless zone).}
+#'   \item{Inner sensor depth}{Determines whether the inner annulus is directly
+#'     measured or estimated.}
+#'   \item{Probe tip depth}{If sapwood extends beyond the probe tip, a sensorless
+#'     annulus is added from the probe tip to the heartwood boundary.}
+#' }
+#'
+#' \strong{Annulus allocation} (example: standard ICT probe, bark = 0.5 cm)
+#'
+#' Probe landmarks from cambium: outer sensor 0.75 cm, midpoint 1.50 cm,
+#' inner sensor 2.25 cm, probe tip 3.00 cm.
+#'
+#' \describe{
+#'   \item{Actual sapwood < 0.75 cm}{Error — outer sensor is not within the sapwood.}
+#'   \item{Actual sapwood 0.75-1.50 cm}{1 annulus: outer sensor measures the full
+#'     sapwood depth (0 to sapwood boundary).}
+#'   \item{Actual sapwood 1.50-2.25 cm}{2 annuli: outer sensor (0 to 1.50 cm);
+#'     sensorless zone (1.50 cm to sapwood boundary, estimated as Jv_outer / 2).}
+#'   \item{Actual sapwood 2.25-3.00 cm}{2 annuli: outer sensor (0 to 1.50 cm);
+#'     inner sensor (1.50 cm to sapwood boundary).}
+#'   \item{Actual sapwood over 3.00 cm}{3 annuli: outer sensor (0 to 1.50 cm);
+#'     inner sensor (1.50 to 3.00 cm); sensorless zone (3.00 cm to sapwood
+#'     boundary, estimated as Jv_inner / 2).}
+#' }
+#'
+#' ## Sensorless annuli
+#'
+#' When an annulus has no direct sensor measurement (\code{measured = FALSE}),
+#' \code{\link{calc_sap_flux}} estimates its flux density as half that of the
+#' nearest measured sensor (\code{sensor_source}), following a linear decrease
+#' assumption.
 #'
 #' @examples
 #' \dontrun{
-#' # Tree with 3.5 cm sapwood depth, 30 cm DBH
+#' # Standard case: bark = 0.5 cm, sapwood measured from bark surface = 2.5 cm
+#' # => actual sapwood from cambium = 2.0 cm => 1 active sensor + 1 sensorless ring
 #' areas <- calc_sapwood_areas(
 #'   dbh = 30,
 #'   bark_thickness = 0.5,
-#'   sapwood_depth = 3.5
+#'   sapwood_depth = 2.5
 #' )
-#'
-#' # View ring allocation
 #' print(areas$rings)
-#'
-#' # Total sapwood area
 #' print(areas$total_sapwood_area_cm2)
+#'
+#' # Deep sapwood: both sensors active, no sensorless zone
+#' areas2 <- calc_sapwood_areas(
+#'   dbh = 30,
+#'   bark_thickness = 0.5,
+#'   sapwood_depth = 3.0   # actual sapwood = 2.5 cm, inner sensor at 2.25 cm
+#' )
+#' print(areas2$rings)
+#'
+#' # Use a loaded probe configuration
+#' probe <- load_probe_config("symmetrical")
+#' areas3 <- calc_sapwood_areas(dbh = 30, bark_thickness = 0.5,
+#'                               sapwood_depth = 2.5, probe_config = probe)
 #' }
 #'
 #' @references
 #' Hatton, T.J., Catchpole, E.A., & Vertessy, R.A. (1990). Integration of
 #' sapflow velocity to estimate plant water use. Tree Physiology, 6, 201-209.
 #'
+#' @seealso \code{\link{calc_sap_flux}}, \code{\link{plot_radial_velocity_profile}}
+#'
 #' @family sapwood integration functions
 #' @export
 calc_sapwood_areas <- function(dbh,
                                 bark_thickness = 0,
                                 sapwood_depth,
-                                sensor_positions = c("outer", "inner")) {
+                                sensor_positions = c("outer", "inner"),
+                                probe_config = NULL) {
 
-  # Input validation
+  # ── Input validation ────────────────────────────────────────────────────────
   if (!is.numeric(dbh) || dbh <= 0) {
     stop("dbh must be a positive number (cm)")
   }
-
   if (!is.numeric(bark_thickness) || bark_thickness < 0) {
     stop("bark_thickness must be a non-negative number (cm)")
   }
-
   if (!is.numeric(sapwood_depth) || sapwood_depth <= 0) {
     stop("sapwood_depth must be a positive number (cm)")
   }
-
-  if (sapwood_depth + bark_thickness > dbh / 2) {
+  if (sapwood_depth <= bark_thickness) {
+    stop(sprintf(
+      "sapwood_depth (%.2f cm) must be greater than bark_thickness (%.2f cm). ",
+      sapwood_depth, bark_thickness
+    ),
+    "sapwood_depth is the total depth from the bark surface to the heartwood boundary.")
+  }
+  if (sapwood_depth > dbh / 2) {
     warning(
-      "Sapwood depth (", sapwood_depth, " cm) + bark thickness (",
-      bark_thickness, " cm) exceeds stem radius (", dbh/2, " cm). ",
+      "sapwood_depth (", sapwood_depth, " cm) exceeds stem radius (", dbh / 2, " cm). ",
       "Check your measurements."
     )
   }
 
-  # Calculate radii
-  stem_radius_cm <- dbh / 2
-  cambium_radius_cm <- stem_radius_cm - bark_thickness
-  heartwood_radius_cm <- cambium_radius_cm - sapwood_depth
+  # ── Extract probe parameters ────────────────────────────────────────────────
+  if (is.null(probe_config)) {
+    probe_length_mm   <- 35
+    outer_from_tip_mm <- 22.5
+    inner_from_tip_mm <- 7.5
+  } else if (inherits(probe_config, "ProbeConfiguration")) {
+    # R6 ProbeConfiguration — pull dimensions from stored yaml_data
+    pc                <- probe_config$yaml_data$probe
+    probe_length_mm   <- pc$length       %||% 35
+    outer_from_tip_mm <- pc$outer_sensor %||% 22.5
+    inner_from_tip_mm <- pc$inner_sensor %||% 7.5
+  } else if (is.list(probe_config)) {
+    # Plain list: accept either top-level fields or nested under $probe
+    pc                <- probe_config$probe %||% probe_config
+    probe_length_mm   <- pc$length       %||% probe_config$probe_length %||% 35
+    outer_from_tip_mm <- pc$outer_sensor %||% 22.5
+    inner_from_tip_mm <- pc$inner_sensor %||% 7.5
+  } else {
+    stop("probe_config must be NULL, a named list, or a ProbeConfiguration object")
+  }
+
+  # ── Tree geometry ────────────────────────────────────────────────────────────
+  # sapwood_depth is measured from the bark surface; subtract bark to get the
+  # actual conducting sapwood thickness (from cambium to heartwood boundary)
+  actual_sapwood_cm   <- sapwood_depth - bark_thickness
+  stem_radius_cm      <- dbh / 2
+  cambium_radius_cm   <- stem_radius_cm - bark_thickness
+  heartwood_radius_cm <- cambium_radius_cm - actual_sapwood_cm
 
   if (heartwood_radius_cm < 0) {
     heartwood_radius_cm <- 0
     warning("Tree has no heartwood (sapwood extends to pith)")
   }
 
-  # Total sapwood area
   total_sapwood_area_cm2 <- pi * (cambium_radius_cm^2 - heartwood_radius_cm^2)
 
-  # Determine ring allocation based on sapwood depth
-  rings <- data.frame(
-    sensor = character(),
-    ring_name = character(),
-    inner_radius_cm = numeric(),
-    outer_radius_cm = numeric(),
-    area_cm2 = numeric(),
-    depth_from_cambium_cm = character(),
-    stringsAsFactors = FALSE
+  # ── Probe landmark depths from cambium (cm) ──────────────────────────────────
+  bark_mm         <- bark_thickness * 10
+  outer_sensor_cm <- ((probe_length_mm - outer_from_tip_mm) - bark_mm) / 10
+  inner_sensor_cm <- ((probe_length_mm - inner_from_tip_mm) - bark_mm) / 10
+  midpoint_cm     <- (outer_sensor_cm + inner_sensor_cm) / 2
+  probe_tip_cm    <- (probe_length_mm - bark_mm) / 10
+
+  # Active sensors = those in sensor_positions whose depth is within sapwood
+  all_sensor_depths <- c(outer = outer_sensor_cm, inner = inner_sensor_cm)
+  requested_depths  <- all_sensor_depths[names(all_sensor_depths) %in% sensor_positions]
+  active_sensors    <- names(requested_depths)[requested_depths < actual_sapwood_cm]
+
+  if (outer_sensor_cm >= actual_sapwood_cm) {
+    stop(sprintf(
+      "Outer sensor depth (%.2f cm from cambium) is at or beyond the sapwood (%.2f cm). ",
+      outer_sensor_cm, actual_sapwood_cm
+    ),
+    "Check sapwood_depth and bark_thickness.")
+  }
+
+  # ── Build annuli from probe landmarks ────────────────────────────────────────
+  # Three zones are defined by the midpoint and probe tip.
+  # Each zone becomes an annulus only if the sapwood reaches that depth.
+  zones <- list()
+
+  # Zone 1 — outer sensor zone: cambium to min(midpoint, heartwood)
+  zone1_end <- min(midpoint_cm, actual_sapwood_cm)
+  zones[[1]] <- list(
+    d_start       = 0,
+    d_end         = zone1_end,
+    sensor        = "outer",
+    sensor_source = "outer",
+    measured      = TRUE,
+    ring_name     = "outer_ring"
   )
 
-  # Ring boundary definitions (fixed detection zones)
-  outer_boundary_cm <- 1.0  # Outer ring: 0-10mm depth
-  inner_boundary_cm <- 2.0  # Inner ring: 10-20mm depth
-
-  # Case 1: Sapwood < 10mm (only outer ring)
-  if (sapwood_depth < outer_boundary_cm) {
-    # Outer ring: cambium to heartwood boundary
-    r_outer <- cambium_radius_cm
-    r_inner <- heartwood_radius_cm
-    area <- pi * (r_outer^2 - r_inner^2)
-
-    rings <- rbind(rings, data.frame(
-      sensor = "outer",
-      ring_name = "outer_ring",
-      inner_radius_cm = r_inner,
-      outer_radius_cm = r_outer,
-      area_cm2 = area,
-      depth_from_cambium_cm = sprintf("0.0-%.1f", sapwood_depth),
-      stringsAsFactors = FALSE
-    ))
+  # Zone 2 — inner sensor zone: midpoint to min(probe_tip, heartwood)
+  if (actual_sapwood_cm > midpoint_cm) {
+    zone2_end        <- min(probe_tip_cm, actual_sapwood_cm)
+    inner_measured   <- "inner" %in% active_sensors
+    zones[[length(zones) + 1]] <- list(
+      d_start       = midpoint_cm,
+      d_end         = zone2_end,
+      sensor        = if (inner_measured) "inner" else "sensorless",
+      sensor_source = if (inner_measured) "inner" else "outer",
+      measured      = inner_measured,
+      ring_name     = if (inner_measured) "inner_ring" else "inner_ring_estimated"
+    )
   }
 
-  # Case 2: Sapwood 10-20mm (outer + partial inner)
-  else if (sapwood_depth >= outer_boundary_cm && sapwood_depth < inner_boundary_cm) {
-    # Outer ring: cambium to 1.0cm depth
-    r_outer_out <- cambium_radius_cm
-    r_outer_in <- cambium_radius_cm - outer_boundary_cm
-    area_outer <- pi * (r_outer_out^2 - r_outer_in^2)
-
-    rings <- rbind(rings, data.frame(
-      sensor = "outer",
-      ring_name = "outer_ring",
-      inner_radius_cm = r_outer_in,
-      outer_radius_cm = r_outer_out,
-      area_cm2 = area_outer,
-      depth_from_cambium_cm = "0.0-1.0",
-      stringsAsFactors = FALSE
-    ))
-
-    # Inner ring: 1.0cm to heartwood boundary
-    r_inner_out <- cambium_radius_cm - outer_boundary_cm
-    r_inner_in <- heartwood_radius_cm
-    area_inner <- pi * (r_inner_out^2 - r_inner_in^2)
-
-    rings <- rbind(rings, data.frame(
-      sensor = "inner",
-      ring_name = "inner_ring",
-      inner_radius_cm = r_inner_in,
-      outer_radius_cm = r_inner_out,
-      area_cm2 = area_inner,
-      depth_from_cambium_cm = sprintf("1.0-%.1f", sapwood_depth),
-      stringsAsFactors = FALSE
-    ))
+  # Zone 3 — beyond probe: probe_tip to heartwood (if sapwood extends past probe)
+  if (actual_sapwood_cm > probe_tip_cm) {
+    zones[[length(zones) + 1]] <- list(
+      d_start       = probe_tip_cm,
+      d_end         = actual_sapwood_cm,
+      sensor        = "sensorless",
+      sensor_source = "inner",
+      measured      = FALSE,
+      ring_name     = "beyond_probe_ring"
+    )
   }
 
-  # Case 3: Sapwood 20-25mm (outer + full inner)
-  else if (sapwood_depth >= inner_boundary_cm && sapwood_depth < 2.5) {
-    # Outer ring: cambium to 1.0cm
-    r_outer_out <- cambium_radius_cm
-    r_outer_in <- cambium_radius_cm - outer_boundary_cm
-    area_outer <- pi * (r_outer_out^2 - r_outer_in^2)
+  # ── Convert zones to data frame with radii and areas ────────────────────────
+  n <- length(zones)
+  rings <- data.frame(
+    sensor                = character(n),
+    sensor_source         = character(n),
+    measured              = logical(n),
+    ring_name             = character(n),
+    inner_radius_cm       = numeric(n),
+    outer_radius_cm       = numeric(n),
+    area_cm2              = numeric(n),
+    depth_from_cambium_cm = character(n),
+    stringsAsFactors      = FALSE
+  )
 
-    rings <- rbind(rings, data.frame(
-      sensor = "outer",
-      ring_name = "outer_ring",
-      inner_radius_cm = r_outer_in,
-      outer_radius_cm = r_outer_out,
-      area_cm2 = area_outer,
-      depth_from_cambium_cm = "0.0-1.0",
-      stringsAsFactors = FALSE
-    ))
-
-    # Inner ring: 1.0-2.0cm
-    r_inner_out <- cambium_radius_cm - outer_boundary_cm
-    r_inner_in <- cambium_radius_cm - inner_boundary_cm
-    area_inner <- pi * (r_inner_out^2 - r_inner_in^2)
-
-    rings <- rbind(rings, data.frame(
-      sensor = "inner",
-      ring_name = "inner_ring",
-      inner_radius_cm = r_inner_in,
-      outer_radius_cm = r_inner_out,
-      area_cm2 = area_inner,
-      depth_from_cambium_cm = "1.0-2.0",
-      stringsAsFactors = FALSE
-    ))
+  for (k in seq_len(n)) {
+    z     <- zones[[k]]
+    r_out <- cambium_radius_cm - z$d_start
+    r_in  <- cambium_radius_cm - z$d_end
+    rings[k, ] <- list(
+      sensor                = z$sensor,
+      sensor_source         = z$sensor_source,
+      measured              = z$measured,
+      ring_name             = z$ring_name,
+      inner_radius_cm       = r_in,
+      outer_radius_cm       = r_out,
+      area_cm2              = pi * (r_out^2 - r_in^2),
+      depth_from_cambium_cm = sprintf("%.3f-%.3f", z$d_start, z$d_end)
+    )
   }
 
-  # Case 4: Sapwood > 25mm (outer + inner + innermost)
-  else {
-    # Outer ring: cambium to 1.0cm
-    r_outer_out <- cambium_radius_cm
-    r_outer_in <- cambium_radius_cm - outer_boundary_cm
-    area_outer <- pi * (r_outer_out^2 - r_outer_in^2)
-
-    rings <- rbind(rings, data.frame(
-      sensor = "outer",
-      ring_name = "outer_ring",
-      inner_radius_cm = r_outer_in,
-      outer_radius_cm = r_outer_out,
-      area_cm2 = area_outer,
-      depth_from_cambium_cm = "0.0-1.0",
-      stringsAsFactors = FALSE
-    ))
-
-    # Inner ring: 1.0-2.0cm
-    r_inner_out <- cambium_radius_cm - outer_boundary_cm
-    r_inner_in <- cambium_radius_cm - inner_boundary_cm
-    area_inner <- pi * (r_inner_out^2 - r_inner_in^2)
-
-    rings <- rbind(rings, data.frame(
-      sensor = "inner",
-      ring_name = "inner_ring",
-      inner_radius_cm = r_inner_in,
-      outer_radius_cm = r_inner_out,
-      area_cm2 = area_inner,
-      depth_from_cambium_cm = "1.0-2.0",
-      stringsAsFactors = FALSE
-    ))
-
-    # Innermost ring: 2.0cm to heartwood boundary
-    r_innermost_out <- cambium_radius_cm - inner_boundary_cm
-    r_innermost_in <- heartwood_radius_cm
-    area_innermost <- pi * (r_innermost_out^2 - r_innermost_in^2)
-
-    rings <- rbind(rings, data.frame(
-      sensor = "innermost",
-      ring_name = "innermost_ring",
-      inner_radius_cm = r_innermost_in,
-      outer_radius_cm = r_innermost_out,
-      area_cm2 = area_innermost,
-      depth_from_cambium_cm = sprintf("2.0-%.1f", sapwood_depth),
-      stringsAsFactors = FALSE
-    ))
-  }
-
-  # Return results
+  # ── Return ───────────────────────────────────────────────────────────────────
   list(
     total_sapwood_area_cm2 = total_sapwood_area_cm2,
-    rings = rings,
-    tree_dimensions = list(
-      dbh_cm = dbh,
-      bark_thickness_cm = bark_thickness,
-      stem_radius_cm = stem_radius_cm,
-      cambium_radius_cm = cambium_radius_cm,
-      sapwood_depth_cm = sapwood_depth,
+    rings                  = rings,
+    tree_dimensions        = list(
+      dbh_cm              = dbh,
+      bark_thickness_cm   = bark_thickness,
+      stem_radius_cm      = stem_radius_cm,
+      cambium_radius_cm   = cambium_radius_cm,
+      sapwood_depth_cm    = sapwood_depth,
+      actual_sapwood_cm   = actual_sapwood_cm,
       heartwood_radius_cm = heartwood_radius_cm
+    ),
+    probe_landmarks        = list(
+      outer_sensor_depth_cm = outer_sensor_cm,
+      inner_sensor_depth_cm = inner_sensor_cm,
+      midpoint_depth_cm     = midpoint_cm,
+      probe_tip_depth_cm    = probe_tip_cm,
+      active_sensors        = active_sensors
     )
   )
 }
@@ -285,31 +332,25 @@ calc_sapwood_areas <- function(dbh,
 #'   }
 #'
 #' @details
-#' **Velocity Assumptions for Unmeasured Regions:**
-#'
-#' Based on your spreadsheet specifications:
-#'
-#' 1. **Sapwood 10-20mm with inner sensor in heartwood:**
-#'    - Inner ring velocity = Outer velocity / 2
-#'    - (Linear decrease from outer boundary to heartwood)
-#'
-#' 2. **Sapwood > 25mm with innermost region beyond sensors:**
-#'    - Innermost ring velocity = Inner velocity / 2
-#'    - (Linear decrease from inner boundary to heartwood)
-#'
 #' **Integration Formula (Hatton et al. 1990):**
 #'
-#' Q = Sum(A_k * J_vk)
+#' \deqn{Q = \sum_{k} A_k \cdot J_{v,k}}
 #'
-#' Where:
-#' - A_k = area of ring k (cm^2)
-#' - J_vk = flux density for ring k (cm^3/cm^2/hr)
-#' - Sum over all sapwood rings
+#' Where \eqn{A_k} is the cross-sectional area of ring \eqn{k} (cm^2) and
+#' \eqn{J_{v,k}} is the sap flux density for that ring (cm^3/cm^2/hr).
+#'
+#' **Flux assignment per annulus:**
+#'
+#' Annulus boundaries and sensor assignments are determined entirely by
+#' \code{\link{calc_sapwood_areas}}. Each annulus in the \code{rings} data frame
+#' carries a \code{sensor_source} (which sensor's Jv to use) and a \code{measured}
+#' flag. For sensorless annuli (\code{measured = FALSE}), Jv is estimated as half
+#' the adjacent sensor's value, assuming a linear velocity decrease with depth.
 #'
 #' @examples
 #' \dontrun{
-#' # Calculate sapwood areas
-#' areas <- calc_sapwood_areas(dbh = 30, sapwood_depth = 3.5)
+#' # Calculate sapwood areas (sapwood_depth is from bark surface)
+#' areas <- calc_sapwood_areas(dbh = 30, bark_thickness = 0.5, sapwood_depth = 3.0)
 #'
 #' # Integrate flux density measurements
 #' flux_data <- calc_sap_flux(flux_data, areas)
@@ -321,6 +362,8 @@ calc_sapwood_areas <- function(dbh,
 #' @references
 #' Hatton, T.J., Catchpole, E.A., & Vertessy, R.A. (1990). Integration of
 #' sapflow velocity to estimate plant water use. Tree Physiology, 6, 201-209.
+#'
+#' @seealso \code{\link{calc_sapwood_areas}}
 #'
 #' @family sapwood integration functions
 #' @export
@@ -346,8 +389,6 @@ calc_sap_flux <- function(flux_data,
     stop("sapwood_areas must be output from calc_sapwood_areas()")
   }
 
-  # Get sapwood depth for determining velocity assumptions
-  sapwood_depth <- sapwood_areas$tree_dimensions$sapwood_depth_cm
   rings <- sapwood_areas$rings
 
   # Detect additional grouping columns (method, method_label, pulse_id)
@@ -361,10 +402,9 @@ calc_sap_flux <- function(flux_data,
     dplyr::summarise(
       Q_cm3_hr = calc_flux_single_timestamp(
         sensor_positions = sensor_position,
-        Jv_values = Jv_cm3_cm2_hr,
-        rings = rings,
-        sapwood_depth = sapwood_depth,
-        method = method
+        Jv_values        = Jv_cm3_cm2_hr,
+        rings            = rings,
+        method           = method
       ),
       .groups = "drop"
     )
@@ -382,55 +422,47 @@ calc_sap_flux <- function(flux_data,
 
 #' Calculate Flux for a Single Timestamp (Internal Helper)
 #'
-#' @param sensor_positions Vector of sensor positions at this timestamp
-#' @param Jv_values Vector of Jv values corresponding to sensors
-#' @param rings Sapwood rings data frame
-#' @param sapwood_depth Total sapwood depth (cm)
-#' @param method Integration method
+#' @param sensor_positions Vector of sensor positions at this timestamp.
+#' @param Jv_values Vector of Jv values corresponding to each sensor.
+#' @param rings Sapwood rings data frame (output from \code{calc_sapwood_areas}).
+#'   Must contain \code{sensor_source} (character) and \code{measured} (logical)
+#'   columns.
+#' @param method Integration method (currently unused; reserved for future methods).
 #'
-#' @return Total flux (cm^3/hr) for this timestamp
+#' @return Total flux (cm^3/hr) for this timestamp.
+#'
+#' @details
+#' For each annulus, the flux contribution is:
+#' \itemize{
+#'   \item \code{area * Jv_source} when \code{measured = TRUE}
+#'   \item \code{area * (Jv_source / 2)} when \code{measured = FALSE} (sensorless
+#'     annulus — assumes a linear velocity decrease to half the nearest sensor value)
+#' }
+#' The source sensor for each annulus is encoded in the \code{sensor_source} column
+#' of the rings data frame, set by \code{\link{calc_sapwood_areas}}.
+#'
 #' @keywords internal
 calc_flux_single_timestamp <- function(sensor_positions,
                                         Jv_values,
                                         rings,
-                                        sapwood_depth,
                                         method) {
 
-  # Get Jv for each sensor (handle missing values)
+  # Build a named Jv lookup from the sensor data at this timestamp
   Jv_outer <- Jv_values[sensor_positions == "outer"][1]
   Jv_inner <- Jv_values[sensor_positions == "inner"][1]
-
   if (is.na(Jv_outer)) Jv_outer <- 0
   if (is.na(Jv_inner)) Jv_inner <- 0
 
-  # Initialize flux components
+  Jv_lookup <- c(outer = Jv_outer, inner = Jv_inner)
+
+  # Integrate over each annulus
   Q_total <- 0
-
-  # Integrate over each ring
   for (i in seq_len(nrow(rings))) {
-    ring <- rings[i, ]
-    area <- ring$area_cm2
-
-    if (ring$sensor == "outer") {
-      # Outer ring always uses outer sensor measurement
-      Q_total <- Q_total + area * Jv_outer
-
-    } else if (ring$sensor == "inner") {
-      # Inner ring: depends on sapwood depth
-      # Use first value if vector (should be constant per tree)
-      sw_depth <- sapwood_depth[1]
-      if (sw_depth >= 1.0 && sw_depth < 2.0) {
-        # Case 2: Inner sensor in heartwood, assume Jv = outer/2
-        Q_total <- Q_total + area * (Jv_outer / 2)
-      } else {
-        # Case 3+: Inner sensor measures this ring directly
-        Q_total <- Q_total + area * Jv_inner
-      }
-
-    } else if (ring$sensor == "innermost") {
-      # Innermost ring (sapwood > 25mm): assume Jv = inner/2
-      Q_total <- Q_total + area * (Jv_inner / 2)
-    }
+    ring      <- rings[i, ]
+    Jv_source <- Jv_lookup[ring$sensor_source]
+    # Sensorless rings use half the adjacent sensor's value (linear decrease)
+    Jv_ring   <- if (isTRUE(ring$measured)) Jv_source else Jv_source / 2
+    Q_total   <- Q_total + ring$area_cm2 * Jv_ring
   }
 
   return(Q_total)

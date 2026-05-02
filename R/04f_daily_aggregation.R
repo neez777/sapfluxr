@@ -152,11 +152,29 @@ aggregate_daily <- function(data, datetime_col = "datetime",
   # Calculate expected measurements per day
   expected_per_day <- 24 / interval_hours
 
-  # Group by date and aggregate
+  # Determine grouping columns (method and sensor_position if present)
+  group_cols <- intersect(c("method", "sensor_position"), names(data))
+
+  # Build list of groups to iterate over
+  if (length(group_cols) == 0) {
+    groups <- list(list(data = data, prefix = ""))
+  } else {
+    group_keys <- unique(data[, group_cols, drop = FALSE])
+    groups <- lapply(seq_len(nrow(group_keys)), function(i) {
+      mask <- rep(TRUE, nrow(data))
+      for (col in group_cols) mask <- mask & data[[col]] == group_keys[[col]][i]
+      list(data = data[mask, , drop = FALSE],
+           keys = group_keys[i, , drop = FALSE])
+    })
+  }
+
+  # Group by date (and method/sensor_position) and aggregate
   daily_list <- list()
 
-  for (d in unique(data$date)) {
-    day_data <- data[data$date == d, ]
+  for (grp in groups) {
+    grp_data <- grp$data
+  for (d in unique(grp_data$date)) {
+    day_data <- grp_data[grp_data$date == d, ]
     n_obs <- nrow(day_data)
 
     # Check completeness requirements
@@ -183,6 +201,11 @@ aggregate_daily <- function(data, datetime_col = "datetime",
       n_measurements = n_obs,
       stringsAsFactors = FALSE
     )
+
+    # Attach group key columns (method, sensor_position) if present
+    if (length(group_cols) > 0) {
+      for (col in group_cols) result[[col]] <- grp$keys[[col]]
+    }
 
     # Calculate hours covered
     if (n_obs > 1) {
@@ -220,8 +243,14 @@ aggregate_daily <- function(data, datetime_col = "datetime",
       result$Qp_daily_L_day <- result$Qp_daily_cm3_day / 1000
     }
 
-    daily_list[[as.character(d)]] <- result
+    list_key <- if (length(group_cols) > 0) {
+      paste(c(as.character(d), unlist(grp$keys)), collapse = "_")
+    } else {
+      as.character(d)
+    }
+    daily_list[[list_key]] <- result
   }
+  } # end grp loop
 
   # Combine into dataframe
   if (length(daily_list) == 0) {

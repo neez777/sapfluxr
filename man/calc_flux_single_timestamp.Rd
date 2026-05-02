@@ -4,29 +4,33 @@
 \alias{calc_flux_single_timestamp}
 \title{Calculate Flux for a Single Timestamp (Internal Helper)}
 \usage{
-calc_flux_single_timestamp(
-  sensor_positions,
-  Jv_values,
-  rings,
-  sapwood_depth,
-  method
-)
+calc_flux_single_timestamp(sensor_positions, Jv_values, rings, method)
 }
 \arguments{
-\item{sensor_positions}{Vector of sensor positions at this timestamp}
+\item{sensor_positions}{Vector of sensor positions at this timestamp.}
 
-\item{Jv_values}{Vector of Jv values corresponding to sensors}
+\item{Jv_values}{Vector of Jv values corresponding to each sensor.}
 
-\item{rings}{Sapwood rings data frame}
+\item{rings}{Sapwood rings data frame (output from \code{calc_sapwood_areas}).
+Must contain \code{sensor_source} (character) and \code{measured} (logical)
+columns.}
 
-\item{sapwood_depth}{Total sapwood depth (cm)}
-
-\item{method}{Integration method}
+\item{method}{Integration method (currently unused; reserved for future methods).}
 }
 \value{
-Total flux (cm³/hr) for this timestamp
+Total flux (cm^3/hr) for this timestamp.
 }
 \description{
 Calculate Flux for a Single Timestamp (Internal Helper)
+}
+\details{
+For each annulus, the flux contribution is:
+\itemize{
+\item \code{area * Jv_source} when \code{measured = TRUE}
+\item \code{area * (Jv_source / 2)} when \code{measured = FALSE} (sensorless
+annulus — assumes a linear velocity decrease to half the nearest sensor value)
+}
+The source sensor for each annulus is encoded in the \code{sensor_source} column
+of the rings data frame, set by \code{\link{calc_sapwood_areas}}.
 }
 \keyword{internal}

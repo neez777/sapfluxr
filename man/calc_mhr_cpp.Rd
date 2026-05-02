@@ -24,7 +24,7 @@ calc_mhr_cpp(
 
 \item{deltaT_ui}{Numeric vector of delta temperatures (upstream inner)}
 
-\item{diffusivity}{Thermal diffusivity (cm²/s)}
+\item{diffusivity}{Thermal diffusivity (cm2/s)}
 
 \item{probe_spacing}{Probe spacing (cm)}
 

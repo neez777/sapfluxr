@@ -19,7 +19,7 @@ calc_tmax_klu_cpp(
 
 \item{deltaT_di}{Numeric vector of delta temperatures (downstream inner)}
 
-\item{diffusivity}{Thermal diffusivity (cm²/s)}
+\item{diffusivity}{Thermal diffusivity (cm2/s)}
 
 \item{probe_spacing}{Probe spacing (cm)}
 

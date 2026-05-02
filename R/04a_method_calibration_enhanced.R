@@ -9,6 +9,7 @@
 #' @param sensor_position Sensor position ("outer" or "inner")
 #' @param try_quadratic If TRUE, attempts quadratic fit for second segment
 #'   when U-shaped residuals are detected (default: TRUE)
+#' @param velocity_col Character. Name of velocity column to use (default: "Vh_cm_hr").
 #' @param ... Additional arguments passed to compare_methods_segmented()
 #'
 #' @return Enhanced segmented comparison result with additional diagnostics

@@ -8,6 +8,8 @@ apply_spacing_correction_both_sensors(
   vh_data,
   changepoints,
   method = "HRM",
+  vh_col = "Vh_cm_hr",
+  correction_type = c("burgess", "linear"),
   baseline_overrides_outer = NULL,
   baseline_overrides_inner = NULL,
   k_assumed = 0.0025,
@@ -28,7 +30,7 @@ apply_spacing_correction_both_sensors(
 
 \item{baseline_overrides_inner}{Optional named list of manual baselines for INNER sensor per segment}
 
-\item{k_assumed}{Assumed thermal diffusivity (cm²/s) (default: 0.0025)}
+\item{k_assumed}{Assumed thermal diffusivity (cm^2/s) (default: 0.0025)}
 
 \item{probe_spacing}{Probe spacing (cm) (default: 0.5)}
 
@@ -106,9 +108,9 @@ correction <- apply_spacing_correction_both_sensors(
 }
 \seealso{
 Other spacing correction functions: 
-\code{\link{apply_heartwood_reference_correction}()},
+\code{\link{apply_burgess_spacing_correction}()},
 \code{\link{apply_manual_spacing_correction}()},
-\code{\link{apply_spacing_correction}()},
+\code{\link{apply_spacing_correction_workflow}()},
 \code{\link{calculate_burgess_coefficients}()},
 \code{\link{calculate_zero_offset}()},
 \code{\link{get_correction_coefficients}()},

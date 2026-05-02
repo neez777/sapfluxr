@@ -865,6 +865,8 @@ plot_spacing_correction_report <- function(spacing_result,
 #' @param title Character, plot title (optional)
 #' @param show_baseline_values Logical, whether to show baseline values for each segment (default: TRUE)
 #' @param show_original_data Logical, whether to overlay original velocity data (default: FALSE)
+#' @param vpd_data Optional weather data frame with \code{date} and \code{min_value} (VPD) for overlay.
+#' @param show_vpd Logical, whether to show VPD data on a secondary axis (default: FALSE).
 #'
 #' @return A plotly object
 #'

@@ -7,16 +7,16 @@
 calc_leaf_area_flux(Qp, Al, Al_units = "m2")
 }
 \arguments{
-\item{Qp}{Numeric vector. Total tree sap flux in cm³/hr (from calc_sap_flux()).}
+\item{Qp}{Numeric vector. Total tree sap flux in cm^3/hr (from calc_sap_flux()).}
 
-\item{Al}{Numeric. Total plant leaf area in m² (or cm²). Should be a single
+\item{Al}{Numeric. Total plant leaf area in m^2 (or cm^2). Should be a single
 value or a vector matching the length of Qp.}
 
 \item{Al_units}{Character. Units of leaf area: "m2" (default) or "cm2".}
 }
 \value{
-Numeric vector of leaf-area-specific sap flux (Qpl) in cm³/hr/m²
-(if Al_units = "m2") or cm³/hr/cm² (if Al_units = "cm2").
+Numeric vector of leaf-area-specific sap flux (Qpl) in cm^3/hr/m^2
+(if Al_units = "m2") or cm^3/hr/cm^2 (if Al_units = "cm2").
 }
 \description{
 Calculates sap flux per unit of supported leaf area (Qpl) by dividing total
@@ -29,9 +29,9 @@ Qpl = Qp / Al
 
 Where:
 \itemize{
-\item Qp = total tree sap flux (cm³/hr)
-\item Al = total plant leaf area (m² or cm²)
-\item Qpl = leaf-area-specific flux (cm³/hr/m² or cm³/hr/cm²)
+\item Qp = total tree sap flux (cm^3/hr)
+\item Al = total plant leaf area (m^2 or cm^2)
+\item Qpl = leaf-area-specific flux (cm^3/hr/m^2 or cm^3/hr/cm^2)
 }
 
 Leaf-area-specific flux is conceptually similar to transpiration rate and
@@ -54,7 +54,7 @@ flux_results <- calc_sap_flux(flux_data, sapwood_areas)
 # Calculate leaf-area-specific flux
 Qpl <- calc_leaf_area_flux(
   Qp = flux_results$Q_cm3_hr,
-  Al = 12.5,  # m²
+  Al = 12.5,  # m^2
   Al_units = "m2"
 )
 }

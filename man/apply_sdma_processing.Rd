@@ -18,7 +18,7 @@ and at least one secondary method. \strong{FUTURE:} Will accept corrected veloci
 (Vc) after spacing and wound corrections.}
 
 \item{secondary_method}{Character string or vector specifying secondary method(s).
-Options: "MHR", "Tmax_Coh", "Tmax_Klu", "HRMXa", "HRMXb".
+Options: "MHR", "Tmax_Coh", "Tmax_Klu".
 Can provide multiple methods to create multiple sDMA variants.}
 
 \item{peclet_threshold}{Numeric threshold for switching between HRM and secondary
@@ -60,8 +60,8 @@ This will be applied AFTER wound correction and BEFORE flux density calculation:
 \enumerate{
 \item Calculate raw HPV (all methods)
 \item Apply spacing correction
-\item Apply wound correction → Vc (corrected velocities)
-\item \strong{Apply sDMA method selection} ← THIS FUNCTION
+\item Apply wound correction -> Vc (corrected velocities)
+\item \strong{Apply sDMA method selection} <- THIS FUNCTION
 \item Calculate flux density
 \item Calculate tree water use
 }

@@ -26,6 +26,8 @@ compare_methods_enhanced(
 \item{try_quadratic}{If TRUE, attempts quadratic fit for second segment
 when U-shaped residuals are detected (default: TRUE)}
 
+\item{velocity_col}{Character. Name of velocity column to use (default: "Vh_cm_hr").}
+
 \item{...}{Additional arguments passed to compare_methods_segmented()}
 }
 \value{
@@ -47,7 +49,7 @@ This function extends \code{compare_methods_segmented()} by:
 \itemize{
 \item When residuals show systematic patterns after the breakpoint
 \item When the relationship appears to curve at higher velocities
-\item When simple segmented regression R² is lower than expected
+\item When simple segmented regression R^2 is lower than expected
 }
 }
 \seealso{

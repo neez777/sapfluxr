@@ -22,7 +22,7 @@ calc_hrm_cpp(
 
 \item{tp}{Numeric vector of time after pulse (seconds)}
 
-\item{diffusivity}{Thermal diffusivity (cm²/s)}
+\item{diffusivity}{Thermal diffusivity (cm2/s)}
 
 \item{probe_spacing}{Probe spacing (cm)}
 }

@@ -129,6 +129,7 @@ get_hardcoded_wood_defaults <- function(config_name = "generic_sw") {
 #' tree measurements, and quality thresholds.
 #'
 #' @field config_name Name of the configuration
+#' @field site_location List with latitude, longitude, and timezone for the site
 #' @field wood_measurements List of user-provided measurements (Method 1 or Method 2)
 #' @field wood_constants List of physical constants (thermal/sap/cell wall properties)
 #' @field wood_property List of basic wood identifiers (species, type, temperature)
@@ -145,6 +146,7 @@ WoodProperties <- R6::R6Class(
 
   public = list(
     config_name = NULL,
+    site_location = NULL,
     wood_measurements = NULL,
     wood_constants = NULL,
     wood_property = NULL,
@@ -158,6 +160,7 @@ WoodProperties <- R6::R6Class(
     #' @description
     #' Initialize a new WoodProperties object
     #' @param config_name Name of the configuration
+    #' @param site_location List with latitude, longitude, timezone for predawn/SILO calculations
     #' @param wood_measurements List of measurements (Method 1 or Method 2)
     #' @param wood_constants List of physical constants
     #' @param wood_property List of basic wood properties
@@ -168,6 +171,7 @@ WoodProperties <- R6::R6Class(
     #' @param yaml_source Path to source YAML file
     #' @param yaml_data Raw YAML data
     initialize = function(config_name = "Custom Wood Properties",
+                         site_location = NULL,
                          wood_measurements = NULL,
                          wood_constants = NULL,
                          wood_property = NULL,
@@ -179,6 +183,12 @@ WoodProperties <- R6::R6Class(
                          yaml_data = NULL) {
 
       self$config_name <- config_name
+
+      if (is.null(site_location)) {
+        self$site_location <- list(latitude = NULL, longitude = NULL, timezone = NULL)
+      } else {
+        self$site_location <- site_location
+      }
 
       # Initialize wood measurements if not provided
       if (is.null(wood_measurements)) {
@@ -479,6 +489,42 @@ WoodProperties <- R6::R6Class(
       cat("\n")
 
       invisible(self)
+    },
+
+    #' @description
+    #' Check whether the site is located within Australia's bounding box.
+    #' @return Logical scalar; FALSE if site_location is not set.
+    is_australia = function() {
+      lat <- self$site_location$latitude
+      lon <- self$site_location$longitude
+      if (is.null(lat) || is.null(lon)) return(FALSE)
+      lat >= -44 && lat <= -10 && lon >= 113 && lon <= 154
+    },
+
+    #' @description
+    #' Calculate astronomical dawn times for a vector of dates.
+    #'
+    #' Requires the \pkg{suncalc} package (listed in Suggests).
+    #' \code{site_location$latitude} and \code{site_location$longitude} must be set.
+    #' @param dates A vector of \code{Date} objects.
+    #' @return A POSIXct vector of dawn times in \code{site_location$timezone} (defaults to UTC).
+    get_dawn_times = function(dates) {
+      if (!requireNamespace("suncalc", quietly = TRUE)) {
+        stop("Package 'suncalc' is required. Install with: install.packages('suncalc')")
+      }
+      lat <- self$site_location$latitude
+      lon <- self$site_location$longitude
+      if (is.null(lat) || is.null(lon)) {
+        stop("site_location$latitude and site_location$longitude must be set.")
+      }
+      tz <- if (!is.null(self$site_location$timezone)) self$site_location$timezone else "UTC"
+      suncalc::getSunlightTimes(
+        date = as.Date(dates),
+        lat  = lat,
+        lon  = lon,
+        keep = "dawn",
+        tz   = tz
+      )$dawn
     }
   ),
 
@@ -591,6 +637,12 @@ load_wood_properties <- function(config_name = NULL,
     yaml_source <- "hardcoded_defaults"
   }
 
+  # Extract site location
+  site_loc <- config_data$site_location
+  if (is.null(site_loc)) {
+    site_loc <- list(latitude = NULL, longitude = NULL, timezone = NULL)
+  }
+
   # Extract wood measurements
   wood_meas <- config_data$wood_measurements
   if (is.null(wood_meas)) {
@@ -693,6 +745,7 @@ load_wood_properties <- function(config_name = NULL,
   # Create WoodProperties object
   wood_config <- WoodProperties$new(
     config_name = config_data$metadata$config_name,
+    site_location = site_loc,
     wood_measurements = wood_meas,
     wood_constants = wood_const,
     wood_property = wood_prop,

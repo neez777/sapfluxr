@@ -8,25 +8,31 @@ calculate_burgess_coefficients(
   zero_vh_range = seq(-10, 10, by = 0.1),
   k = 0.0025,
   x = 0.5,
-  t = 80
+  t = 80,
+  zero_offset_range = NULL,
+  resolution = NULL
 )
 }
 \arguments{
 \item{zero_vh_range}{Numeric vector of zero offset values (cm/hr).
 Default: seq(-10, 10, by = 0.1)}
 
-\item{k}{Thermal diffusivity (cm²/s). Default: 0.0025}
+\item{k}{Thermal diffusivity (cm^2/s). Default: 0.0025}
 
 \item{x}{Probe spacing (cm). Default: 0.5}
 
 \item{t}{Measurement time (sec). Default: 80}
+
+\item{zero_offset_range}{Alias for zero_vh_range (for backward compatibility).}
+
+\item{resolution}{Step size for zero_vh_range if zero_offset_range is used.}
 }
 \value{
 A data frame with columns:
 \item{zero_vh}{Zero offset value (cm/hr)}
 \item{coef_a}{Slope coefficient}
 \item{coef_b}{Intercept coefficient}
-\item{range_type}{"modeled" (|zero_vh| ≤ 5) or "extrapolated" (|zero_vh| > 5)}
+\item{range_type}{"modeled" (|zero_vh| <= 5) or "extrapolated" (|zero_vh| > 5)}
 }
 \description{
 Implements the Burgess et al. (2001) correction methodology to calculate
@@ -39,7 +45,7 @@ correction coefficients (a, b) for a range of zero offsets.
 
 \strong{Coefficient Calculation:}
 
-For |zero_vh| ≤ 5 cm/hr (modeled range):
+For |zero_vh| <= 5 cm/hr (modeled range):
 \itemize{
 \item Uses Burgess equations to simulate probe misalignment
 \item Calculates corrected velocities for range of test values
@@ -57,8 +63,8 @@ For |zero_vh| > 5 cm/hr (extrapolated range):
 
 Based on ICT SFM1x standard configuration:
 \itemize{
-\item Probe spacing: ±0.5 cm
-\item Thermal diffusivity: 0.0025 cm²/s (typical sapwood)
+\item Probe spacing: +/-0.5 cm
+\item Thermal diffusivity: 0.0025 cm^2/s (typical sapwood)
 \item Measurement time: 80 seconds (HRM analysis window)
 }
 }
@@ -70,10 +76,10 @@ measure low and reverse rates of sap flow in woody plants.
 }
 \seealso{
 Other spacing correction functions: 
-\code{\link{apply_heartwood_reference_correction}()},
+\code{\link{apply_burgess_spacing_correction}()},
 \code{\link{apply_manual_spacing_correction}()},
-\code{\link{apply_spacing_correction}()},
 \code{\link{apply_spacing_correction_both_sensors}()},
+\code{\link{apply_spacing_correction_workflow}()},
 \code{\link{calculate_zero_offset}()},
 \code{\link{get_correction_coefficients}()},
 \code{\link{print_spacing_correction_summary}()},

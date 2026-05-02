@@ -36,6 +36,10 @@ haven't been confirmed yet. Shown in orange without baselines.}
 \item{show_baseline_values}{Logical, whether to show baseline values for each segment (default: TRUE)}
 
 \item{show_original_data}{Logical, whether to overlay original velocity data (default: FALSE)}
+
+\item{vpd_data}{Optional weather data frame with \code{date} and \code{min_value} (VPD) for overlay.}
+
+\item{show_vpd}{Logical, whether to show VPD data on a secondary axis (default: FALSE).}
 }
 \value{
 A plotly object

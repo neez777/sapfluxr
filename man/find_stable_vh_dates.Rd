@@ -7,6 +7,8 @@
 find_stable_vh_dates(
   vh_data,
   vh_col,
+  method = "HRM",
+  sensor_position = "outer",
   predawn_window = c(2, 6),
   vh_threshold = 2,
   stability_threshold = 0.5,
@@ -20,6 +22,13 @@ find_stable_vh_dates(
 \code{datetime} and a sap flow column (specified by \code{vh_col})}
 
 \item{vh_col}{Name of sap flow column (e.g., "Vh_cm_hr")}
+
+\item{method}{Character. Method to filter to when \code{vh_data} contains a
+\code{method} column. Default: \code{"HRM"}.}
+
+\item{sensor_position}{Character. Sensor position to filter to when
+\code{vh_data} contains a \code{sensor_position} column. Default:
+\code{"outer"}.}
 
 \item{predawn_window}{Vector of two integers defining predawn hours (e.g., c(2, 6))
 to analyse hours 2, 3, 4, 5. Default: c(2, 6)}
@@ -64,8 +73,8 @@ For each date:
 \enumerate{
 \item Extract predawn window data (e.g., 02:00-06:00)
 \item Calculate mean and SD of sap flow
-\item Check magnitude criterion: mean ≤ vh_threshold
-\item Check stability criterion: SD ≤ stability_threshold
+\item Check magnitude criterion: mean <= vh_threshold
+\item Check stability criterion: SD <= stability_threshold
 \item Require both criteria to pass
 }
 

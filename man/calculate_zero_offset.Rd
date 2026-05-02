@@ -52,7 +52,7 @@ Zero-flow periods should represent times when sap flow is genuinely zero:
 \item \strong{Ideal}: Extended periods of wet, cold, overcast weather
 \item \strong{Winter}: Leafless deciduous trees in winter
 \item \strong{Cut trees}: Freshly cut trees (first few hours)
-\item \strong{Night}: Extended night periods (less reliable - low flow ≠ zero flow)
+\item \strong{Night}: Extended night periods (less reliable - low flow <> zero flow)
 }
 
 \strong{Quality Indicators:}
@@ -100,10 +100,10 @@ measure low and reverse rates of sap flow in woody plants.
 }
 \seealso{
 Other spacing correction functions: 
-\code{\link{apply_heartwood_reference_correction}()},
+\code{\link{apply_burgess_spacing_correction}()},
 \code{\link{apply_manual_spacing_correction}()},
-\code{\link{apply_spacing_correction}()},
 \code{\link{apply_spacing_correction_both_sensors}()},
+\code{\link{apply_spacing_correction_workflow}()},
 \code{\link{calculate_burgess_coefficients}()},
 \code{\link{get_correction_coefficients}()},
 \code{\link{print_spacing_correction_summary}()},

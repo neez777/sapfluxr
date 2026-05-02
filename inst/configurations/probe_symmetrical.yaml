@@ -27,6 +27,7 @@ methods:
   compatible:
     - HRM
     - MHR
+    - DMA
     - Tmax_Coh
     - Tmax_Klu
     - HRMx
@@ -34,7 +35,9 @@ methods:
     - HRM
     - Tmax_Coh
     - MHR
+    - DMA
   priority_order:
     - HRM
     - Tmax_Coh
     - MHR
+    - DMA

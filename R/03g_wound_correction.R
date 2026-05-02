@@ -183,7 +183,9 @@ calc_wound_diameter <- function(timestamps, wound_config) {
 #' @param wound_diameter Wound diameter in cm (optional).
 #' @param probe_spacing Probe spacing: "5mm" or "6mm".
 #' @param wood_properties Optional WoodProperties object.
-#' @param use_spacing_corrected Logical. Default: TRUE
+#' @param velocity_col Name of velocity column to use as input. Default: \code{NULL}
+#'   (auto-detects in priority order: \code{Vs_cm_hr}, \code{Vh_cm_hr_sc},
+#'   \code{Vh_cm_hr_raw}).
 #' @param confirm_parameters Logical. Default: TRUE
 #' @param verbose Logical. Default: TRUE
 #' @return Corrected data frame.
@@ -192,7 +194,7 @@ apply_wound_correction <- function(vh_data,
                                    wound_diameter = NULL,
                                    probe_spacing = "5mm",
                                    wood_properties = NULL,
-                                   use_spacing_corrected = TRUE,
+                                   velocity_col = NULL,
                                    confirm_parameters = TRUE,
                                    verbose = TRUE) {
 
@@ -229,13 +231,22 @@ apply_wound_correction <- function(vh_data,
   B_vector <- get_wound_correction_coefficient(wound_diameter_vector, probe_spacing)
 
   if (!"Vh_cm_hr_raw" %in% names(vh_data)) vh_data$Vh_cm_hr_raw <- vh_data$Vh_cm_hr
-  has_sc <- "Vh_cm_hr_sc" %in% names(vh_data)
-  input_col <- if (has_sc && use_spacing_corrected) "Vh_cm_hr_sc" else "Vh_cm_hr_raw"
+  if (is.null(velocity_col)) {
+    velocity_col <- if ("Vs_cm_hr" %in% names(vh_data)) "Vs_cm_hr" else
+                    if ("Vh_cm_hr_sc" %in% names(vh_data)) "Vh_cm_hr_sc" else "Vh_cm_hr_raw"
+  }
+  if (!velocity_col %in% names(vh_data)) {
+    warning("velocity_col '", velocity_col, "' not found; falling back to Vh_cm_hr_raw.")
+    velocity_col <- "Vh_cm_hr_raw"
+  }
+  input_col <- velocity_col
 
   corrected_values <- vh_data[[input_col]] * B_vector
   vh_data$Vh_cm_hr_wc <- corrected_values
-  vh_data$Vh_cm_hr <- ifelse(is.na(corrected_values), vh_data$Vh_cm_hr, corrected_values)
-  vh_data$Vc_cm_hr <- vh_data$Vh_cm_hr # Legacy alias
+  # Vh_cm_hr is locked to raw — do not mutate it
+  if (!"Vs_cm_hr" %in% names(vh_data)) vh_data$Vs_cm_hr <- vh_data$Vh_cm_hr
+  vh_data$Vs_cm_hr <- ifelse(is.na(corrected_values), vh_data$Vs_cm_hr, corrected_values)
+  vh_data$Vc_cm_hr <- vh_data$Vs_cm_hr  # Legacy alias
   vh_data$wound_correction_applied <- TRUE
   vh_data$wound_correction_factor <- B_vector
   vh_data$wound_diameter_cm <- wound_diameter_vector
@@ -283,6 +294,15 @@ prompt_wound_diameter <- function() {
   return(input)
 }
 
+#' List Available Wound Correction Coefficients
+#'
+#' Returns the lookup tables for wound correction coefficients at different
+#' probe spacings (5mm and 6mm).
+#'
+#' @param probe_spacing Character, either "5mm", "6mm", or "both" (default).
+#'
+#' @return If "5mm" or "6mm", a data frame of coefficients. If "both", a list
+#'   containing both data frames.
 #' @export
 list_wound_coefficients <- function(probe_spacing = "both") {
   result <- if (probe_spacing == "5mm") {

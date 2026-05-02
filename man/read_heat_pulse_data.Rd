@@ -11,6 +11,7 @@ read_heat_pulse_data(
   trim_incomplete_days = FALSE,
   chunk_size = NULL,
   show_progress = NULL,
+  timezone = NULL,
   ...
 )
 }
@@ -26,6 +27,13 @@ read_heat_pulse_data(
 \item{chunk_size}{Integer specifying characters per chunk (default: auto-sized)}
 
 \item{show_progress}{Logical indicating whether to show progress (default: TRUE)}
+
+\item{timezone}{IANA timezone string (e.g., \code{"Australia/Perth"}) to apply to
+imported datetime values. Many loggers record local time but write files with a
+UTC-format timestamp (Z suffix). Supply the site timezone here and the datetime
+column will be re-labelled with \code{lubridate::force_tz()}, preserving the
+clock values while correcting the timezone attribute. Leave \code{NULL} (default)
+to keep the UTC label applied by the parser.}
 
 \item{...}{Additional arguments passed to specific import functions}
 }

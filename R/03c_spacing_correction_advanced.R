@@ -10,6 +10,29 @@
 NULL
 
 
+#' Apply Spacing Correction per Data Segment
+#'
+#' Applies Burgess spacing correction to each segment of data identified by
+#' changepoints. For each segment, a zero flow reference (offset) is determined
+#' and used to correct the readings.
+#'
+#' @param vh_data Data frame containing heat pulse velocity data.
+#' @param changepoints A list of changepoints as returned by \code{detect_changepoints()}.
+#' @param sensor_position Character, "inner" or "outer".
+#' @param method Character, HPV method to correct (default: "HRM").
+#' @param method_col Name of method column (default: "method").
+#' @param vh_col Name of velocity column (default: "Vh_cm_hr").
+#' @param k_assumed Assumed thermal diffusivity (cm^2/s, default: 0.0025).
+#' @param probe_spacing Probe spacing x (cm, default: 0.5).
+#' @param measurement_time Time after heat pulse (seconds, default: 80).
+#' @param lookup_table Pre-computed Burgess lookup table.
+#' @param baseline_overrides Optional list of manual offsets per segment.
+#' @param create_new_col If TRUE (default), creates new column with "_sc" suffix.
+#' @param correction_type Character, either "burgess" (default) or "linear".
+#'   Burgess uses physics-based coefficients; Linear uses a simple 1:1 offset.
+#' @param verbose Print messages (default: TRUE).
+#'
+#' @return A list containing corrected data frame and correction statistics.
 #' @export
 apply_spacing_correction_per_segment <- function(vh_data,
                                                   changepoints,
@@ -17,6 +40,7 @@ apply_spacing_correction_per_segment <- function(vh_data,
                                                   method = "HRM",
                                                   method_col = "method",
                                                   vh_col = "Vh_cm_hr",
+                                                  correction_type = c("burgess", "linear"),
                                                   k_assumed = 0.0025,
                                                   probe_spacing = 0.5,
                                                   measurement_time = 80,
@@ -24,6 +48,9 @@ apply_spacing_correction_per_segment <- function(vh_data,
                                                   baseline_overrides = NULL,
                                                   create_new_col = TRUE,
                                                   verbose = TRUE) {
+
+  # Match and validate correction type
+  correction_type <- match.arg(correction_type)
 
   # Input validation
   if (!is.data.frame(vh_data)) {
@@ -162,14 +189,30 @@ apply_spacing_correction_per_segment <- function(vh_data,
 
     # Get correction coefficients
     tryCatch({
-      coef_result <- get_correction_coefficients(
-        zero_vh = zero_vh,
-        lookup_table = lookup_table
-      )
+      if (correction_type == "linear") {
+        # Simple linear offset: a = 1, b = -zero_vh
+        coef_result <- list(
+          coef_a = 1.0,
+          coef_b = -zero_vh,
+          zero_vh = zero_vh,
+          range_type = "linear",
+          severity = "none",
+          warning = NULL,
+          correction_formula = paste0("Vh_corrected = 1.0 * Vh + (", -zero_vh, ")")
+        )
+      } else {
+        # Physics-based Burgess coefficients
+        coef_result <- get_correction_coefficients(
+          zero_vh = zero_vh,
+          lookup_table = lookup_table
+        )
+      }
 
       if (verbose) {
         cat("  Correction formula:", coef_result$correction_formula, "\n")
-        cat("  Severity:", toupper(coef_result$severity), "\n")
+        if (correction_type == "burgess") {
+          cat("  Severity:", toupper(coef_result$severity), "\n")
+        }
       }
 
       # Apply correction to this segment
@@ -397,12 +440,16 @@ apply_manual_spacing_correction <- function(vh_data,
                                              method = "HRM",
                                              method_col = "method",
                                              vh_col = "Vh_cm_hr",
+                                             correction_type = c("burgess", "linear"),
                                              k_assumed = 0.0025,
                                              probe_spacing = 0.5,
                                              measurement_time = 80,
                                              lookup_table = NULL,
                                              create_new_col = TRUE,
                                              verbose = TRUE) {
+
+  # Match and validate correction type
+  correction_type <- match.arg(correction_type)
 
   # Input validation
   if (!is.data.frame(vh_data)) {
@@ -434,11 +481,19 @@ apply_manual_spacing_correction <- function(vh_data,
     stop("No data found for sensor '", sensor_position, "' and method '", method, "'")
   }
 
-  # Convert manual changepoints to Date
-  if (is.character(manual_changepoints)) {
-    manual_changepoints <- as.Date(manual_changepoints)
-  } else if (!inherits(manual_changepoints, "Date")) {
-    stop("manual_changepoints must be character vector or Date objects")
+  # Convert manual changepoints to Date or POSIXct
+  if (is.null(manual_changepoints) || length(manual_changepoints) == 0) {
+    manual_changepoints <- as.Date(character(0))
+  } else if (is.character(manual_changepoints)) {
+    # Try to parse as POSIXct first, fall back to Date if no time provided
+    parsed_dt <- as.POSIXct(manual_changepoints, format = "%Y-%m-%d %H:%M:%S")
+    if (any(is.na(parsed_dt))) {
+      manual_changepoints <- as.Date(manual_changepoints)
+    } else {
+      manual_changepoints <- parsed_dt
+    }
+  } else if (!inherits(manual_changepoints, c("Date", "POSIXt"))) {
+    stop("manual_changepoints must be character vector, Date, or POSIXt objects")
   }
 
   # Parse baseline overrides if provided
@@ -490,10 +545,39 @@ apply_manual_spacing_correction <- function(vh_data,
     )
   }
 
+  # Identify sensor data mask relative to ORIGINAL vh_data
+  # This ensures surgical write-back works correctly
+  sensor_mask <- vh_data$sensor_position == sensor_position & 
+                 vh_data[[method_col]] == method
+
+  if (!any(sensor_mask)) {
+    stop("No data found for sensor_position='", sensor_position, "' and method='", method, "'")
+  }
+
+  # Work with a subset but maintain mask relationship
+  sensor_data <- vh_data[sensor_mask, ]
+
+  # Initialise storage (same length as sensor_data)
+  # Start with raw values, we will surgically update them
+  corrected_vh <- sensor_data[[vh_col]]
+
+  # Initialise correction factor tracking vectors (for transparency)
+  coef_a_vector <- rep(NA_real_, nrow(sensor_data))
+  coef_b_vector <- rep(NA_real_, nrow(sensor_data))
+  baseline_offset_vector <- rep(NA_real_, nrow(sensor_data))
+  applied_flag <- rep(FALSE, nrow(sensor_data))
+
   # Define segment boundaries from manual changepoints
-  cpt_datetimes <- as.POSIXct(as.character(manual_changepoints))
-  segment_starts <- c(min(sensor_data$datetime), cpt_datetimes)
-  segment_ends <- c(cpt_datetimes, max(sensor_data$datetime))
+  if (length(manual_changepoints) > 0) {
+    cpt_datetimes <- as.POSIXct(as.character(manual_changepoints))
+    # Add small buffer to ensure exact timestamp matches are included
+    segment_starts <- c(min(sensor_data$datetime, na.rm = TRUE) - 1, cpt_datetimes)
+    segment_ends <- c(cpt_datetimes, max(sensor_data$datetime, na.rm = TRUE) + 1)
+  } else {
+    # No changepoints - single segment covering the whole range
+    segment_starts <- min(sensor_data$datetime, na.rm = TRUE) - 1
+    segment_ends <- max(sensor_data$datetime, na.rm = TRUE) + 1
+  }
   n_segments <- length(segment_starts)
 
   if (verbose) {
@@ -510,29 +594,25 @@ apply_manual_spacing_correction <- function(vh_data,
     cat("\n")
   }
 
-  # Initialise storage
-  segment_results <- list()
-  corrected_vh <- numeric(nrow(sensor_data))
-
-  # Initialise correction factor tracking vectors (for transparency)
-  coef_a_vector <- rep(NA_real_, nrow(sensor_data))
-  coef_b_vector <- rep(NA_real_, nrow(sensor_data))
-  baseline_offset_vector <- rep(NA_real_, nrow(sensor_data))
-
   # Process each segment
+  segment_results <- list()
+
   for (seg_id in seq_len(n_segments)) {
+    # Define segment mask relative to sensor_data
+    seg_mask <- sensor_data$datetime > segment_starts[seg_id] & 
+                sensor_data$datetime <= segment_ends[seg_id]
+    
+    if (!any(seg_mask)) next
 
     if (verbose) {
       cat(strrep("-", 72), "\n")
       cat("Processing Segment", seg_id, "of", n_segments, "\n")
       cat(strrep("-", 72), "\n")
-      cat("Period:", format(segment_starts[seg_id], "%Y-%m-%d %H:%M"), "to",
-          format(segment_ends[seg_id], "%Y-%m-%d %H:%M"), "\n")
+      cat("Period:", format(segment_starts[seg_id] + 1, "%Y-%m-%d %H:%M"), "to",
+          format(segment_ends[seg_id] - 1, "%Y-%m-%d %H:%M"), "\n")
     }
 
     # Extract segment data
-    seg_mask <- sensor_data$datetime >= segment_starts[seg_id] &
-                sensor_data$datetime <= segment_ends[seg_id]
     seg_data <- sensor_data[seg_mask, ]
 
     if (nrow(seg_data) == 0) {
@@ -601,14 +681,30 @@ apply_manual_spacing_correction <- function(vh_data,
 
     # Get correction coefficients
     tryCatch({
-      coef_result <- get_correction_coefficients(
-        zero_vh = zero_vh,
-        lookup_table = lookup_table
-      )
+      if (correction_type == "linear") {
+        # Simple linear offset: a = 1, b = -zero_vh
+        coef_result <- list(
+          coef_a = 1.0,
+          coef_b = -zero_vh,
+          zero_vh = zero_vh,
+          range_type = "linear",
+          severity = "none",
+          warning = NULL,
+          correction_formula = paste0("Vh_corrected = 1.0 * Vh + (", -zero_vh, ")")
+        )
+      } else {
+        # Physics-based Burgess coefficients
+        coef_result <- get_correction_coefficients(
+          zero_vh = zero_vh,
+          lookup_table = lookup_table
+        )
+      }
 
       if (verbose) {
         cat("  Correction formula:", coef_result$correction_formula, "\n")
-        cat("  Severity:", toupper(coef_result$severity), "\n")
+        if (correction_type == "burgess") {
+          cat("  Severity:", toupper(coef_result$severity), "\n")
+        }
       }
 
       # Apply correction to this segment
@@ -724,91 +820,4 @@ apply_manual_spacing_correction <- function(vh_data,
 }
 
 
-# =============================================================================
-# HEARTWOOD REFERENCE CORRECTION
-# =============================================================================
-# Alternative zero-flow correction method using the inner sensor as a
-# continuous reference when it is positioned in the heartwood (no sap flow).
-# =============================================================================
 
-#' Check if Heartwood Reference Correction is Available
-#'
-#' Determines whether the inner temperature sensor is positioned deep enough
-#' in the heartwood to serve as a continuous zero-flow reference. This method
-#' relies on the principle that heartwood conducts no sap, so any heat pulse
-#' velocity measured at the inner sensor should theoretically be zero.
-#'
-#' @param probe_config Probe configuration object (ProbeConfig) or named list
-#'   containing probe geometry. Must include:
-#'   \itemize{
-#'     \item \code{length} or \code{probe_length}: Total probe length (mm)
-#'     \item \code{inner_sensor}: Distance from probe tip to inner sensor (mm)
-#'   }
-#' @param sapwood_depth Sapwood depth from cambium to heartwood boundary (cm).
-#'   This is the depth of conducting sapwood.
-#' @param bark_thickness Bark thickness (cm). Default is 0 (probe handle at
-#'   cambium surface).
-#' @param field_of_influence Radial extent of heat pulse influence (cm).
-#'   Default is 1.0 cm (10mm). The inner sensor must be at least half this
-#'   distance beyond the sapwood/heartwood boundary to avoid convective
-#'   influence from sap flow.
-#'
-#' @return A list with class \code{"heartwood_reference_check"} containing:
-#'   \item{available}{Logical: TRUE if inner sensor is in heartwood}
-#'   \item{inner_depth_cm}{Depth of inner sensor from cambium (cm)}
-#'   \item{sapwood_depth_cm}{Provided sapwood depth (cm)}
-#'   \item{margin_cm}{Safety margin (how far past sapwood boundary, cm)}
-#'   \item{required_margin_cm}{Minimum required margin (field_of_influence/2)}
-#'   \item{probe_config_used}{Summary of probe configuration}
-#'   \item{recommendation}{Text recommendation for user}
-#'
-#' @details
-#' **Scientific Basis:**
-#'
-#' Heat pulse velocity methods measure sap flow by tracking heat movement
-#' through the sapwood. In heartwood, there is no water transport, so heat
-#' transfer is purely conductive. If the inner sensor is positioned entirely
-#' in heartwood (beyond the influence of sapwood convection), it provides a
-#' continuous "true zero" reference.
-#'
-#' **Geometry Calculation:**
-#'
-#' The inner sensor depth from cambium is calculated as:
-#' \deqn{d_{inner} = (L_{probe} - d_{tip}) / 10 - t_{bark}}
-#'
-#' Where:
-#' \itemize{
-#'   \item \eqn{L_{probe}} = probe length (mm)
-#'   \item \eqn{d_{tip}} = inner sensor distance from probe tip (mm)
-#'   \item \eqn{t_{bark}} = bark thickness (cm)
-#' }
-#'
-#' **Field of Influence:**
-#'
-#' The heat pulse field of influence is typically ~10mm radially. To ensure
-#' the inner sensor is not affected by sapwood convection, it should be at
-#' least 5mm (half the field) beyond the sapwood/heartwood boundary.
-#'
-#' @examples
-#' \dontrun{
-#' # Check with explicit values
-#' check <- check_heartwood_reference_available(
-#'   probe_config = list(length = 35, inner_sensor = 7.5),
-#'   sapwood_depth = 2.0,  # 2 cm sapwood
-#'   bark_thickness = 0.3   # 3 mm bark
-#' )
-#'
-#' if (check$available) {
-#'   cat("Heartwood reference available!\n")
-#'   cat("Inner sensor is", check$margin_cm, "cm into heartwood\n")
-#' }
-#'
-#' # Using probe config object
-#' probe_config <- load_probe_config("symmetrical")
-#' check <- check_heartwood_reference_available(
-#'   probe_config = probe_config,
-#'   sapwood_depth = 1.5
-#' )
-#' }
-#'
-#' @family spacing correction functions

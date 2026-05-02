@@ -36,6 +36,7 @@ NULL
 #'   If provided, skips automatic optimization and uses this threshold directly.
 #'   Useful when you want to use a specific threshold based on domain knowledge
 #'   or visual inspection of R^2 vs threshold plot. Default: NULL (automatic).
+#' @param velocity_col Name of velocity column to use (default: "Vh_cm_hr").
 #'
 #' @return A list with components \code{optimal_threshold} (velocity threshold
 #'   with highest R^2), \code{optimal_r_squared} (R^2 value at optimal threshold),
@@ -462,6 +463,7 @@ find_optimal_calibration_threshold <- function(vh_corrected,
 #' @param sensor_position Sensor position ("outer" or "inner").
 #' @param threshold_velocity Minimum velocity for calibration (cm/hr).
 #'   This is the breakpoint where method switching occurs.
+#' @param velocity_col Name of velocity column to use (default: "Vh_cm_hr").
 #' @param handover_pct Proportion of threshold to use for handover window (default: 0.5).
 #'   Training data is filtered to points between \code{threshold * (1 - handover_pct)}
 #'   and \code{threshold}. This focuses calibration on the transition zone for
@@ -713,6 +715,7 @@ calibrate_method_to_primary <- function(vh_corrected,
 #'
 #' @param vh_corrected Corrected velocity data.
 #' @param calibration Calibration object from \code{\link{calibrate_method_to_primary}}.
+#' @param velocity_col Name of velocity column to use (default: "Vh_cm_hr").
 #'
 #' @return The \code{vh_corrected} data frame with transformed secondary method
 #'   values. A new column \code{calibration_applied} is added (TRUE for
@@ -743,7 +746,7 @@ calibrate_method_to_primary <- function(vh_corrected,
 #'
 #' @family method calibration functions
 #' @export
-transform_secondary_method <- function(vh_corrected, calibration, velocity_col = "Vh_cm_hr") {
+transform_secondary_method <- function(vh_corrected, calibration, velocity_col = "Vs_cm_hr") {
 
   # Input validation
   if (!inherits(calibration, "method_calibration")) {
@@ -770,6 +773,9 @@ transform_secondary_method <- function(vh_corrected, calibration, velocity_col =
 
   # Update values
   vh_corrected[[velocity_col]][secondary_rows] <- transformed_values
+  if ("Vs_cm_hr" %in% names(vh_corrected)) {
+    vh_corrected$Vs_cm_hr[secondary_rows] <- transformed_values
+  }
 
   # Add flag indicating transformation was applied
   if (!"calibration_applied" %in% names(vh_corrected)) {
@@ -796,7 +802,7 @@ transform_secondary_method <- function(vh_corrected, calibration, velocity_col =
 #' @param vh_corrected Corrected velocity data (after spacing correction).
 #' @param primary_method Primary method name (default: "HRM").
 #' @param secondary_methods Character vector of secondary method names to
-#'   calibrate (e.g., \code{c("MHR", "Tmax_Klu", "HRMXa")}).
+#'   calibrate (e.g., \code{c("MHR", "Tmax_Klu")}).
 #' @param sensor_position Sensor position ("outer" or "inner").
 #' @param threshold_start Minimum velocity threshold to test (cm/hr) (default: 0).
 #' @param threshold_max Maximum velocity threshold to test (cm/hr) (default: 20).
@@ -808,6 +814,7 @@ transform_secondary_method <- function(vh_corrected, calibration, velocity_col =
 #' @param manual_thresholds Optional named list of manual thresholds for specific
 #'   methods (e.g., \code{list(MHR = 10.5, Tmax_Klu = 15.0)}). Methods not in
 #'   this list will use automatic optimization. Default: NULL (all automatic).
+#' @param velocity_col Name of velocity column to use (default: "Vh_cm_hr").
 #'
 #' @return A named list where each element is a calibration result for one
 #'   secondary method. Each element contains:
@@ -850,7 +857,7 @@ transform_secondary_method <- function(vh_corrected, calibration, velocity_col =
 #' calibrations <- calibrate_multiple_methods(
 #'   vh_corrected,
 #'   primary_method = "HRM",
-#'   secondary_methods = c("MHR", "Tmax_Klu", "HRMXa"),
+#'   secondary_methods = c("MHR", "Tmax_Klu"),
 #'   sensor_position = "outer",
 #'   manual_thresholds = list(MHR = 8.5)  # MHR manual, others automatic
 #' )
@@ -1013,6 +1020,7 @@ calibrate_multiple_methods <- function(vh_corrected,
 #' @param calibrations Multi-method calibration object from
 #'   \code{\link{calibrate_multiple_methods}} (a named list of calibrations).
 #' @param verbose Logical indicating whether to print progress (default: TRUE).
+#' @param velocity_col Name of velocity column to use (default: "Vh_cm_hr").
 #'
 #' @return The \code{vh_corrected} data frame with all secondary methods
 #'   transformed to the primary method scale.
@@ -1043,7 +1051,7 @@ calibrate_multiple_methods <- function(vh_corrected,
 transform_multiple_methods <- function(vh_corrected,
                                         calibrations,
                                         verbose = TRUE,
-                                        velocity_col = "Vh_cm_hr") {
+                                        velocity_col = "Vs_cm_hr") {
 
   # Input validation
   if (!is.list(calibrations)) {
@@ -1359,6 +1367,7 @@ print.method_calibration <- function(x, ...) {
 #' @param min_points Minimum number of points required for valid analysis (default: 50).
 #' @param create_plots Logical indicating whether to create diagnostic plots (default: TRUE).
 #' @param verbose Logical indicating whether to print progress (default: TRUE).
+#' @param velocity_col Name of velocity column to use (default: "Vh_cm_hr").
 #'
 #' @return A list with components \code{breakpoint} (estimated breakpoint
 #'   velocity in cm/hr), \code{breakpoint_ci} (95\% confidence interval),
@@ -1672,15 +1681,15 @@ compare_methods_segmented <- function(vh_corrected,
 
   # Extract slopes before and after breakpoint
   slopes <- segmented::slope(seg_fit)
-  slope_before <- slopes$Vh_cm_hr_primary[1, 1]  # First segment slope
-  slope_after <- slopes$Vh_cm_hr_primary[2, 1]   # Second segment slope
+  slope_before <- slopes[[primary_col]][1, 1]  # First segment slope
+  slope_after <- slopes[[primary_col]][2, 1]   # Second segment slope
 
   # Calculate R^2 for segmented model
-  seg_r2 <- 1 - (sum(residuals(seg_fit)^2) / sum((merged_data$Vh_cm_hr_secondary - mean(merged_data$Vh_cm_hr_secondary))^2))
+  seg_r2 <- 1 - (sum(residuals(seg_fit)^2) / sum((merged_data[[secondary_col]] - mean(merged_data[[secondary_col]]))^2))
 
   # Davies test for significant breakpoint
   davies_test <- tryCatch({
-    davies_result <- segmented::davies.test(lm_fit, ~ Vh_cm_hr_primary)
+    davies_result <- segmented::davies.test(lm_fit, seg_formula)
     davies_result$p.value
   }, error = function(e) {
     if (verbose) {

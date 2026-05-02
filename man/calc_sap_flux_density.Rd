@@ -18,9 +18,17 @@ wound-corrected velocity. Use the most corrected version available.}
 
 \item{wood_properties}{WoodProperties R6 object with calculated Z factor
 (sap_flux_conversion_factor). Must have run calculate_wood_properties() first.}
+
+\item{vh_data}{Data frame containing velocity measurements.}
+
+\item{velocity_col}{Name of velocity column to convert. Default: "Vc_cm_hr"
+(wound-corrected velocity). Use "Vh_cm_hr_sc" for spacing-corrected,
+or "Vh_cm_hr" for raw velocity.}
+
+\item{...}{Additional arguments passed to methods.}
 }
 \value{
-Sap flux density (cm³/cm²/h) = sap velocity (cm/h)
+Sap flux density (cm^3/cm^2/h) = sap velocity (cm/h)
 }
 \description{
 Converts corrected heat pulse velocity to sap flux density using the
@@ -29,9 +37,9 @@ wood-specific conversion factor (Z) from Burgess et al. (2001).
 \details{
 \strong{Formula:}
 
-Jv = Z × Vh
+Jv = Z * Vh
 
-where Z = (ρdw/ρs) × ((cdw + mc×cs) / cs)
+where Z = (rho_dw/rho_s) \* ((cdw + mc * cs) / cs)
 
 This is the formula from Burgess et al. (2001), after Barrett et al. (1995).
 
@@ -39,9 +47,9 @@ This is the formula from Burgess et al. (2001), after Barrett et al. (1995).
 
 This conversion should be applied AFTER all velocity corrections:
 
-\code{Vh (raw) → Spacing Correction → Recalc with updated k → Wound Correction → Jv}
+\code{Vh (raw) -> Spacing Correction -> Recalc with updated k -> Wound Correction -> Jv}
 
-**Physical Interpretation:**
+\strong{Physical Interpretation:}
 
 Heat pulse velocity (Vh) measures the speed at which heat moves through
 sapwood. This includes heat carried by both the moving sap AND the wood matrix.

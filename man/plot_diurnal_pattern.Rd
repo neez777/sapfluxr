@@ -47,7 +47,7 @@ typical diurnal pattern averaged across all days in the dataset.
 
 Confidence intervals:
 \itemize{
-\item If stat = "mean": 95\% confidence interval (mean ± 1.96 × SE)
+\item If stat = "mean": 95\% confidence interval (mean +/- 1.96 * SE)
 \item If stat = "median": Interquartile range (25th-75th percentile)
 }
 }
@@ -66,7 +66,7 @@ plot_diurnal_pattern(
 plot_diurnal_pattern(
   flux_data,
   y_col = "Q_cm3_hr",
-  y_label = "Total Flux (cm³/hr)"
+  y_label = "Total Flux (cm^3/hr)"
 )
 }
 

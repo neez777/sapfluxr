@@ -9,6 +9,7 @@ preprocess_pulse_data_cpp(
   di_vec,
   uo_vec,
   ui_vec,
+  baseline_values,
   pre_pulse_rows,
   sampling_interval
 )
@@ -22,7 +23,12 @@ preprocess_pulse_data_cpp(
 
 \item{ui_vec}{Numeric vector of upstream inner temperatures}
 
-\item{pre_pulse_rows}{Integer, number of pre-pulse rows (NOT seconds)}
+\item{baseline_values}{Numeric vector of length 4: pre-pulse baseline
+temperatures in order do, di, uo, ui. Computed by
+\code{calculate_baseline()} using the configured baseline method.}
+
+\item{pre_pulse_rows}{Integer, number of pre-pulse rows (NOT seconds).
+Used as the time-origin marker for peak-time calculations.}
 
 \item{sampling_interval}{Double, seconds between consecutive measurements}
 }

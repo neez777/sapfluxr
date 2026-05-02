@@ -8,65 +8,132 @@ calc_sapwood_areas(
   dbh,
   bark_thickness = 0,
   sapwood_depth,
-  sensor_positions = c("outer", "inner")
+  sensor_positions = c("outer", "inner"),
+  probe_config = NULL
 )
 }
 \arguments{
-\item{dbh}{Diameter at breast height (cm)}
+\item{dbh}{Diameter at breast height (cm).}
 
-\item{bark_thickness}{Bark thickness (cm). Default: 0}
+\item{bark_thickness}{Bark thickness (cm). Default: 0.}
 
-\item{sapwood_depth}{Total sapwood depth from cambium (cm)}
+\item{sapwood_depth}{Total depth from the \strong{outer bark surface} to the
+sapwood-heartwood boundary (cm). This matches the standard field measurement
+convention (e.g., from a wood core). The actual conducting sapwood thickness
+is \code{sapwood_depth - bark_thickness}.}
 
-\item{sensor_positions}{Character vector of sensor positions.
-Options: "outer" (5mm depth), "inner" (12.5mm depth).
-Default: c("outer", "inner")}
+\item{sensor_positions}{Character vector of sensor positions to include.
+Options: \code{"outer"}, \code{"inner"}. Default: \code{c("outer", "inner")}.}
+
+\item{probe_config}{Optional probe configuration. Accepts:
+\describe{
+\item{NULL}{Uses standard ICT SFM1 defaults: probe length 35 mm,
+outer sensor 22.5 mm from tip, inner sensor 7.5 mm from tip.}
+\item{ProbeConfiguration}{Object from \code{\link{load_probe_config}()}.
+Probe dimensions are read from the stored YAML data.}
+\item{named list}{With fields \code{length}, \code{outer_sensor},
+\code{inner_sensor} (all in mm, distances from probe tip).}
+}}
 }
 \value{
 List containing:
 \describe{
-\item{total_sapwood_area_cm2}{Total conducting sapwood area (cm²)}
-\item{rings}{Data frame with columns: sensor, ring_name,
-inner_radius_cm, outer_radius_cm, area_cm2,
-depth_from_cambium_cm}
-\item{tree_dimensions}{List of tree dimensions used}
+\item{total_sapwood_area_cm2}{Total conducting sapwood area (cm^2).}
+\item{rings}{Data frame with one row per annulus and columns:
+\code{sensor} (which sensor or "sensorless"),
+\code{sensor_source} ("outer" or "inner" — which sensor's Jv to use),
+\code{measured} (logical — TRUE if a sensor directly measures this ring),
+\code{ring_name}, \code{inner_radius_cm}, \code{outer_radius_cm},
+\code{area_cm2}, \code{depth_from_cambium_cm}.}
+\item{tree_dimensions}{List of tree geometry values, including
+\code{actual_sapwood_cm} (sapwood thickness from cambium).}
+\item{probe_landmarks}{List of probe geometry depths from cambium:
+outer and inner sensor positions, their midpoint, and the probe tip.}
 }
 }
 \description{
-Calculates the cross-sectional area of sapwood rings based on tree
-dimensions and sensor positions. Follows the ring allocation approach
-for outer/inner sensor configurations.
+Calculates the cross-sectional area of sapwood rings (annuli) based on tree
+dimensions, probe geometry, and sensor positions. Implements the Hatton et al.
+(1990) weighted average method with probe-derived annulus boundaries.
 }
 \details{
-\strong{Ring Allocation Rules (based on sapwood depth):}
-\itemize{
-\item \strong{Sapwood < 1.0 cm:} Only outer ring (Aso), inner sensor in heartwood
-\item \strong{Sapwood 1.0-2.0 cm:} Outer ring (Aso) + partial inner ring (Asi)
-\item \strong{Sapwood 2.0-2.5 cm:} Outer ring (Aso) + full inner ring (Asi)
-\item \strong{Sapwood > 2.5 cm:} Outer (Aso) + inner (Asi) + innermost (Asim)
+\subsection{Measurement convention}{
+
+\code{sapwood_depth} is measured from the \strong{bark surface} (e.g., with a
+coring tool or increment borer), which is the standard field convention.
+The function subtracts \code{bark_thickness} internally to obtain the actual
+conducting sapwood thickness (\code{actual_sapwood_cm}).
 }
 
-\strong{Ring boundaries:}
-\itemize{
-\item Outer ring: 0-1.0 cm depth (outer sensor at 0.5 cm)
-\item Inner ring: 1.0-2.0 cm depth (inner sensor at 1.25 cm)
-\item Innermost ring: 2.0 cm to sapwood boundary
+\subsection{Probe geometry and annulus boundaries}{
+
+Sensor depths from the cambium are derived from the probe configuration and
+the tree's bark thickness:
+
+\deqn{d_{sensor} = \frac{(\text{probe length} - \text{sensor from tip}) - \text{bark (mm)}}{10}}
+
+Three fixed probe landmarks (all from the cambium) determine the annulus
+boundaries:
+\describe{
+\item{Midpoint}{Mean depth of outer and inner sensors. Always the boundary
+between the outer annulus and the inner annulus (or sensorless zone).}
+\item{Inner sensor depth}{Determines whether the inner annulus is directly
+measured or estimated.}
+\item{Probe tip depth}{If sapwood extends beyond the probe tip, a sensorless
+annulus is added from the probe tip to the heartwood boundary.}
+}
+
+\strong{Annulus allocation} (example: standard ICT probe, bark = 0.5 cm)
+
+Probe landmarks from cambium: outer sensor 0.75 cm, midpoint 1.50 cm,
+inner sensor 2.25 cm, probe tip 3.00 cm.
+
+\describe{
+\item{Actual sapwood < 0.75 cm}{Error — outer sensor is not within the sapwood.}
+\item{Actual sapwood 0.75-1.50 cm}{1 annulus: outer sensor measures the full
+sapwood depth (0 to sapwood boundary).}
+\item{Actual sapwood 1.50-2.25 cm}{2 annuli: outer sensor (0 to 1.50 cm);
+sensorless zone (1.50 cm to sapwood boundary, estimated as Jv_outer / 2).}
+\item{Actual sapwood 2.25-3.00 cm}{2 annuli: outer sensor (0 to 1.50 cm);
+inner sensor (1.50 cm to sapwood boundary).}
+\item{Actual sapwood over 3.00 cm}{3 annuli: outer sensor (0 to 1.50 cm);
+inner sensor (1.50 to 3.00 cm); sensorless zone (3.00 cm to sapwood
+boundary, estimated as Jv_inner / 2).}
+}
+}
+
+\subsection{Sensorless annuli}{
+
+When an annulus has no direct sensor measurement (\code{measured = FALSE}),
+\code{\link{calc_sap_flux}} estimates its flux density as half that of the
+nearest measured sensor (\code{sensor_source}), following a linear decrease
+assumption.
 }
 }
 \examples{
 \dontrun{
-# Tree with 3.5 cm sapwood depth, 30 cm DBH
+# Standard case: bark = 0.5 cm, sapwood measured from bark surface = 2.5 cm
+# => actual sapwood from cambium = 2.0 cm => 1 active sensor + 1 sensorless ring
 areas <- calc_sapwood_areas(
   dbh = 30,
   bark_thickness = 0.5,
-  sapwood_depth = 3.5
+  sapwood_depth = 2.5
 )
-
-# View ring allocation
 print(areas$rings)
-
-# Total sapwood area
 print(areas$total_sapwood_area_cm2)
+
+# Deep sapwood: both sensors active, no sensorless zone
+areas2 <- calc_sapwood_areas(
+  dbh = 30,
+  bark_thickness = 0.5,
+  sapwood_depth = 3.0   # actual sapwood = 2.5 cm, inner sensor at 2.25 cm
+)
+print(areas2$rings)
+
+# Use a loaded probe configuration
+probe <- load_probe_config("symmetrical")
+areas3 <- calc_sapwood_areas(dbh = 30, bark_thickness = 0.5,
+                              sapwood_depth = 2.5, probe_config = probe)
 }
 
 }
@@ -75,6 +142,8 @@ Hatton, T.J., Catchpole, E.A., & Vertessy, R.A. (1990). Integration of
 sapflow velocity to estimate plant water use. Tree Physiology, 6, 201-209.
 }
 \seealso{
+\code{\link{calc_sap_flux}}, \code{\link{plot_radial_velocity_profile}}
+
 Other sapwood integration functions: 
 \code{\link{apply_sap_flux_integration}()},
 \code{\link{calc_sap_flux}()}

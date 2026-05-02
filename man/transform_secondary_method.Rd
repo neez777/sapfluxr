@@ -7,13 +7,15 @@
 transform_secondary_method(
   vh_corrected,
   calibration,
-  velocity_col = "Vh_cm_hr"
+  velocity_col = "Vs_cm_hr"
 )
 }
 \arguments{
 \item{vh_corrected}{Corrected velocity data.}
 
 \item{calibration}{Calibration object from \code{\link{calibrate_method_to_primary}}.}
+
+\item{velocity_col}{Name of velocity column to use (default: "Vh_cm_hr").}
 }
 \value{
 The \code{vh_corrected} data frame with transformed secondary method

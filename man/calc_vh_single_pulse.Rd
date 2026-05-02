@@ -10,6 +10,7 @@ calc_vh_single_pulse(
   parameters,
   methods,
   plot_results = FALSE,
+  baseline_method = NULL,
   progress_fn = NULL,
   pulse_num = NULL,
   total_pulses = NULL

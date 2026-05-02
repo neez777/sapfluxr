@@ -169,7 +169,7 @@ List parse_ict_records_cpp(CharacterVector records,
   int total_numbers = max_numbers;
   int temp_values_per_pulse = total_numbers - expected_diagnostics;
 
-  // Calculate measurements per pulse (4 sensors × n measurements)
+  // Calculate measurements per pulse (4 sensors x n measurements)
   int n_measurements_per_pulse = temp_values_per_pulse / 4;
 
   if (n_measurements_per_pulse < 1) {

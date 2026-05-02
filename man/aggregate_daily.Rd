@@ -26,7 +26,7 @@ values. Default: "datetime".}
 will not be calculated. Default: "Qps_cm_hr".}
 
 \item{total_flux_col}{Character. Name of column containing total sap flux
-(Qp, cm³/hr) for calculating daily total flux. If NULL, Qp_daily will not
+(Qp, cm^3/hr) for calculating daily total flux. If NULL, Qp_daily will not
 be calculated. Default: "Q_cm3_hr".}
 
 \item{interval}{Character. Measurement interval: "auto" (detect from data),
@@ -45,9 +45,9 @@ Data frame with one row per day containing:
 \item date: Date (Date class)
 \item datetime: Start of day (POSIXct, for plotting)
 \item Jvm_daily_cm3_cm2_day: Daily total mean flux density (if flux_density_col provided)
-\item Jvm_daily_mm_day: Same as above but in mm/day units (1 cm³/cm² = 10 mm)
+\item Jvm_daily_mm_day: Same as above but in mm/day units (1 cm^3/cm^2 = 10 mm)
 \item Qp_daily_L_day: Daily total sap flux in L/day (if total_flux_col provided)
-\item Qp_daily_cm3_day: Daily total sap flux in cm³/day (if total_flux_col provided)
+\item Qp_daily_cm3_day: Daily total sap flux in cm^3/day (if total_flux_col provided)
 \item n_measurements: Number of measurements in this day
 \item hours_covered: Total hours spanned by measurements
 \item data_completeness: Fraction of expected measurements present (0-1)
@@ -73,14 +73,14 @@ Jvm_daily = sum(Qps_i) / 2 [cm/day]
 Qp_daily = sum(Q_i) / 2 / 1000 [L/day]
 
 General formula:
-Jvm_daily = sum(Qps_i) × (interval_hours / 1)
-Qp_daily = sum(Q_i) × (interval_hours / 1) / 1000
+Jvm_daily = sum(Qps_i) * (interval_hours / 1)
+Qp_daily = sum(Q_i) * (interval_hours / 1) / 1000
 
 Units conversion:
 \itemize{
-\item Qps in cm/hr → Jvm_daily in cm³/cm²/day (= cm/day)
-\item Q in cm³/hr → Qp_daily in L/day (divide by 1000)
-\item Jvm in cm/day → mm/day (multiply by 10)
+\item Qps in cm/hr -> Jvm_daily in cm^3/cm^2/day (= cm/day)
+\item Q in cm^3/hr -> Qp_daily in L/day (divide by 1000)
+\item Jvm in cm/day -> mm/day (multiply by 10)
 }
 }
 \examples{

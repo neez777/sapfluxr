@@ -7,15 +7,15 @@
 calc_mean_flux_density(Qp, As)
 }
 \arguments{
-\item{Qp}{Numeric vector. Total tree sap flux in cm³/hr (from calc_sap_flux()).}
+\item{Qp}{Numeric vector. Total tree sap flux in cm^3/hr (from calc_sap_flux()).}
 
-\item{As}{Numeric. Total sapwood cross-sectional area in cm² (from
+\item{As}{Numeric. Total sapwood cross-sectional area in cm^2 (from
 calc_sapwood_areas()$total_sapwood_area_cm2). Should be a single value
 or a vector matching the length of Qp.}
 }
 \value{
 Numeric vector of sapwood-area-weighted mean sap flux density (Qps)
-in cm³/hr/cm², which is equivalent to cm/hr (velocity units).
+in cm^3/hr/cm^2, which is equivalent to cm/hr (velocity units).
 }
 \description{
 Calculates the sapwood-area-weighted mean sap flux density (Qps) by dividing
@@ -31,9 +31,9 @@ Qps = Qp / As
 
 Where:
 \itemize{
-\item Qp = total tree sap flux (cm³/hr)
-\item As = total sapwood area (cm²)
-\item Qps = sapwood-area-weighted mean flux density (cm³/hr/cm² = cm/hr)
+\item Qp = total tree sap flux (cm^3/hr)
+\item As = total sapwood area (cm^2)
+\item Qps = sapwood-area-weighted mean flux density (cm^3/hr/cm^2 = cm/hr)
 }
 
 This metric is conceptually similar to a weighted average velocity across

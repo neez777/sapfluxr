@@ -22,7 +22,7 @@ and method compatibility checking.
 
 \item{\code{heat_pulse_duration}}{Heat pulse duration in seconds}
 
-\item{\code{thermal_diffusivity}}{Thermal diffusivity (cm²/s), NULL if estimated}
+\item{\code{thermal_diffusivity}}{Thermal diffusivity (cm^2/s), NULL if estimated}
 
 \item{\code{compatible_methods}}{List of compatible calculation methods}
 
@@ -92,7 +92,7 @@ Initialize a new ProbeConfiguration
 
 \item{\code{heat_pulse_duration}}{Heat pulse duration in seconds}
 
-\item{\code{thermal_diffusivity}}{Thermal diffusivity (cm²/s)}
+\item{\code{thermal_diffusivity}}{Thermal diffusivity (cm^2/s)}
 
 \item{\code{compatible_methods}}{Compatible calculation methods}
 

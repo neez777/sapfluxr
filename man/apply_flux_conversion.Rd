@@ -7,7 +7,7 @@
 apply_flux_conversion(
   data,
   wood_properties,
-  velocity_col = "Vc_cm_hr",
+  velocity_col = NULL,
   output_col = "Jv_cm3_cm2_hr"
 )
 }
@@ -16,9 +16,9 @@ apply_flux_conversion(
 
 \item{wood_properties}{WoodProperties R6 object with calculated Z factor}
 
-\item{velocity_col}{Name of velocity column to convert. Default: "Vc_cm_hr"
-(wound-corrected velocity). Use "Vh_cm_hr_sc" for spacing-corrected,
-or "Vh_cm_hr" for raw velocity.}
+\item{velocity_col}{Name of velocity column to convert. Default: \code{NULL}
+(auto-detects in priority order: \code{Vs_cm_hr}, \code{Vc_cm_hr},
+\code{Vh_cm_hr_sc}, \code{Vh_cm_hr}).}
 
 \item{output_col}{Name for output column. Default: "Jv_cm3_cm2_hr"}
 }
@@ -33,29 +33,30 @@ velocity measurements.
 This is a convenience wrapper around \code{\link{calc_sap_flux_density}}
 for data frame operations.
 
-\strong{Column Selection:}
+\strong{Column Selection (auto-detected in priority order):}
 \itemize{
-\item "Vc_cm_hr" - Wound-corrected velocity (RECOMMENDED)
-\item "Vh_cm_hr_sc" - Spacing-corrected velocity
-\item "Vh_cm_hr" - Raw heat pulse velocity
+\item \code{Vs_cm_hr} - Current best estimate (RECOMMENDED — updated at every correction step)
+\item \code{Vc_cm_hr} - Legacy alias for \code{Vs_cm_hr} after wound correction
+\item \code{Vh_cm_hr_sc} - Spacing-corrected velocity
+\item \code{Vh_cm_hr} - Raw heat pulse velocity
 }
-
-Use the most corrected velocity available.
 }
 \examples{
 \dontrun{
-# After wound correction
-vh_corrected <- apply_wound_correction(vh_data, ...)
+# After corrections — auto-detects Vs_cm_hr
+vh_corrected <- apply_flux_conversion(
+  vh_corrected,
+  wood_properties = wood_props
+)
 
-# Convert to flux density
+# Or explicitly
 vh_corrected <- apply_flux_conversion(
   vh_corrected,
   wood_properties = wood_props,
-  velocity_col = "Vc_cm_hr"
+  velocity_col = "Vs_cm_hr"
 )
 
-# Check results
-head(vh_corrected[, c("datetime", "Vh_cm_hr", "Vc_cm_hr", "Jv_cm3_cm2_hr")])
+head(vh_corrected[, c("datetime", "Vs_cm_hr", "Jv_cm3_cm2_hr")])
 }
 
 }

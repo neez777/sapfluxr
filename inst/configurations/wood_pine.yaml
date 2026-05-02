@@ -10,6 +10,14 @@ metadata:
   default: false
 
 # ============================================================================
+# SITE LOCATION - For SILO weather download and dawn time calculations
+# ============================================================================
+site_location:
+  latitude: null      # Decimal degrees, negative = south (e.g. -31.95)
+  longitude: null     # Decimal degrees, positive = east (e.g. 115.86)
+  timezone: null      # IANA timezone string (e.g. "Australia/Perth")
+
+# ============================================================================
 # USER INPUTS - Wood Measurements (provide ONE method)
 # ============================================================================
 wood_measurements:
@@ -32,6 +40,8 @@ wood_constants:
   K_sap_W_m_K: 0.5984
   rho_cell_wall_kg_m3: 1530
   c_dry_wood_J_kg_K: 1200
+  # Siau (1984) empirical thermal conductivity coefficient  - independent of c_sap_J_kg_K
+  siau_thermal_conductivity_coef: 0.04186
 
 # ============================================================================
 # WOOD PROPERTIES - Basic identifiers

@@ -1,0 +1,45 @@
+# sapfluxr Analysis Defaults
+# Package-level computation defaults for HPV analysis.
+# Override individual values by passing a custom YAML path to load_analysis_config().
+
+metadata:
+  config_name: sapfluxr Analysis Defaults
+  description: Package-level computation defaults for HPV analysis
+  version: "1.0"
+
+# Pre-pulse baseline calculation
+baseline:
+  method: mean_30s              # Options: mean_30s, mean_3s, slope_intercept
+  mean_window_seconds: 30       # Used if method = mean_30s
+  short_window_seconds: 3       # Used if method = mean_3s
+
+# HRM calculation window
+hrm:
+  start_seconds: 60
+  end_seconds: 100
+
+# Quality control  - computation thresholds (species-independent)
+# NOTE: species-specific physiological limits live in wood_*.yaml under quality_thresholds
+quality_calculation:
+  calc_extreme_vh_cm_hr: 200
+  hard_max_vh_cm_hr: 500
+  extreme_negative_vh_cm_hr: -50
+  interval_tolerance_seconds: 5
+  rolling_window_size: 5
+  rolling_outlier_threshold: 3
+  cross_sensor_threshold: 3
+  max_gap_to_fill_hours: 24
+
+# Burgess spacing correction
+burgess:
+  fallback_threshold_cm_hr: 5   # |zero_vh| above this reverts to simple offset
+  default_midpoint_time_s: 80
+
+# Predawn window  - used by detect_stable_vpd_periods, find_stable_vh_dates, find_dual_stable_periods
+predawn:
+  mode: static             # "static" (fixed clock hours) or "dynamic" (dawn-relative)
+  window: [2, 6]           # static:  c(start_hour, end_hour)  - inclusive start, exclusive end
+                           #          c(2, 6) yields hours 2, 3, 4, 5
+                           #          c(22, 4) wraps midnight: 22, 23, 0, 1, 2, 3
+                           # dynamic: c(hours_before_dawn, hours_after_dawn)
+                           #          c(4, 1) with dawn at 06:30 yields hours 2, 3, 4, 5

@@ -21,9 +21,9 @@ apply_sapwood_metrics(
 apply_sap_flux_integration(). Must contain a column with total flux values.}
 
 \item{flux_col}{Character. Name of column containing total sap flux (Qp) in
-cm³/hr. Default: "Q_cm3_hr".}
+cm^3/hr. Default: "Q_cm3_hr".}
 
-\item{sapwood_area}{Numeric. Total sapwood cross-sectional area (As) in cm².
+\item{sapwood_area}{Numeric. Total sapwood cross-sectional area (As) in cm^2.
 Can be a single value (assumes constant across all rows) or a vector
 matching the number of rows in data.}
 
@@ -37,7 +37,7 @@ Default: "global".}
 \item{Qps_max}{Numeric. Custom maximum for normalisation. Only used if
 normalise = TRUE and normalise_period = "custom". Default: NULL.}
 
-\item{leaf_area}{Numeric. Total plant leaf area in m² (or cm²). If provided,
+\item{leaf_area}{Numeric. Total plant leaf area in m^2 (or cm^2). If provided,
 calculates leaf-area-specific flux (Qpl). Default: NULL (not calculated).}
 
 \item{leaf_area_units}{Character. Units of leaf area: "m2" or "cm2".

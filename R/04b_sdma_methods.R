@@ -16,7 +16,7 @@
 # IMPORTANT: Column Structure Update Needed (2025-12-01)
 # This file uses OLD generic column names (peclet_number, calc_window_start_sec, etc.).
 # When re-integrating, update to use NEW method-specific columns:
-#   - peclet_number -> hrm_peclet_number
+#   - peclet_number (canonical column name; hrm_peclet_number alias removed)
 #   - calc_window_start_sec -> method-specific columns (hrm_window_start_sec, etc.)
 #   - See 01e_heat_pulse_velocity_core.R for current vh_results schema
 #
@@ -48,7 +48,7 @@
 #'   and at least one secondary method. **FUTURE:** Will accept corrected velocities
 #'   (Vc) after spacing and wound corrections.
 #' @param secondary_method Character string or vector specifying secondary method(s).
-#'   Options: "MHR", "Tmax_Coh", "Tmax_Klu", "HRMXa", "HRMXb".
+#'   Options: "MHR", "Tmax_Coh", "Tmax_Klu".
 #'   Can provide multiple methods to create multiple sDMA variants.
 #' @param peclet_threshold Numeric threshold for switching between HRM and secondary
 #'   method. Default: 1.0 (Pe < 1.0 uses HRM, Pe >= 1.0 uses secondary method).
@@ -130,8 +130,7 @@ apply_sdma_processing <- function(vh_results,
     stop("HRM results not found. vh_results must contain HRM data for sDMA processing.")
   }
 
-  # Determine Peclet column name
-  peclet_col <- if ("hrm_peclet_number" %in% names(hrm_data)) "hrm_peclet_number" else "peclet_number"
+  peclet_col <- "peclet_number"
 
   if (!peclet_col %in% names(hrm_data) || all(is.na(hrm_data[[peclet_col]]))) {
     stop("HRM results do not contain Peclet numbers.\n",
@@ -191,7 +190,7 @@ apply_sdma_processing <- function(vh_results,
 
   # Validate secondary methods exist
   available_methods <- unique(vh_results$method)
-  valid_secondary <- c("MHR", "Tmax_Coh", "Tmax_Klu", "HRMXa", "HRMXb")
+  valid_secondary <- c("MHR", "Tmax_Coh", "Tmax_Klu")
 
   for (sec_method in secondary_method) {
     if (sec_method == "HRM") {
@@ -308,8 +307,7 @@ apply_sdma_processing_internal <- function(vh_results, results_by_pulse, pulse_i
 
     # Process outer sensor if it has data
     if (nrow(hrm_outer) > 0) {
-      # Detect Peclet column name
-      peclet_col <- if ("hrm_peclet_number" %in% names(hrm_outer)) "hrm_peclet_number" else "peclet_number"
+      peclet_col <- "peclet_number"
       use_hrm_outer <- !is.na(hrm_outer[[peclet_col]]) & hrm_outer[[peclet_col]] < peclet_threshold
 
       # Build data frame
@@ -333,6 +331,7 @@ apply_sdma_processing_internal <- function(vh_results, results_by_pulse, pulse_i
       # Add required columns
       sdma_outer$selected_method <- ifelse(use_hrm_outer, "HRM", sec_method)
       sdma_outer$Vh_sdma <- sdma_outer$Vh_cm_hr
+      sdma_outer$Vs_cm_hr <- sdma_outer$Vh_cm_hr
       sdma_outer$peclet_number <- hrm_outer[[peclet_col]] # Always include for switching audit
 
       sdma_parts[["outer"]] <- sdma_outer
@@ -340,8 +339,7 @@ apply_sdma_processing_internal <- function(vh_results, results_by_pulse, pulse_i
 
     # Process inner sensor if it has data
     if (nrow(hrm_inner) > 0) {
-      # Detect Peclet column name
-      peclet_col <- if ("hrm_peclet_number" %in% names(hrm_inner)) "hrm_peclet_number" else "peclet_number"
+      peclet_col <- "peclet_number"
       use_hrm_inner <- !is.na(hrm_inner[[peclet_col]]) & hrm_inner[[peclet_col]] < peclet_threshold
 
       # Build data frame
@@ -365,6 +363,7 @@ apply_sdma_processing_internal <- function(vh_results, results_by_pulse, pulse_i
       # Add required columns
       sdma_inner$selected_method <- ifelse(use_hrm_inner, "HRM", sec_method)
       sdma_inner$Vh_sdma <- sdma_inner$Vh_cm_hr
+      sdma_inner$Vs_cm_hr <- sdma_inner$Vh_cm_hr
       sdma_inner$peclet_number <- hrm_inner[[peclet_col]] # Always include for switching audit
 
       sdma_parts[["inner"]] <- sdma_inner
@@ -465,11 +464,11 @@ parse_sdma_method <- function(method_string) {
   # Validate: cannot use HRM as secondary
   if (secondary == "HRM") {
     stop("sDMA cannot use HRM as secondary method. HRM is always the primary method in sDMA.\n",
-         "  Use one of: MHR, Tmax_Coh, Tmax_Klu, HRMXa, HRMXb")
+         "  Use one of: MHR, Tmax_Coh, Tmax_Klu")
   }
 
   # Validate: must be a recognised method
-  valid_secondary <- c("MHR", "Tmax_Coh", "Tmax_Klu", "HRMXa", "HRMXb")
+  valid_secondary <- c("MHR", "Tmax_Coh", "Tmax_Klu")
 
   if (!secondary %in% valid_secondary) {
     stop(sprintf("Invalid sDMA secondary method: '%s'\n  Valid options: %s",
@@ -599,3 +598,136 @@ plot_sdma_timeseries <- function(vh_results,
 # ==============================================================================
 # END OF PARKED sDMA CODE
 # ==============================================================================
+
+
+# ==============================================================================
+# PECLET RECALCULATION
+# ==============================================================================
+
+#' Recalculate Peclet Numbers Based on Corrected Velocity
+#'
+#' Recalculates Peclet numbers after spacing or wound corrections have been
+#' applied. This is essential before sDMA switching because corrections change
+#' velocity values, invalidating the original Peclet numbers from
+#' \code{calc_heat_pulse_velocity()}.
+#'
+#' @param vh_results Data frame with velocity results (output of
+#'   \code{calc_heat_pulse_velocity()} or any downstream correction function).
+#' @param probe_config Probe configuration object (\code{ProbeConfiguration}) or
+#'   path to a YAML file.
+#' @param wood_properties Wood properties object (\code{WoodProperties}) or path
+#'   to a YAML file.
+#' @param velocity_col Column name containing velocity values (cm/hr) to use for
+#'   Peclet calculation. If \code{NULL} (default), auto-detects in priority order:
+#'   \code{Vs_cm_hr} (current best estimate), \code{Vh_cm_hr_wc} (wound-corrected),
+#'   \code{Vh_cm_hr_sc} (spacing-corrected), \code{Vh_cm_hr} (raw).
+#' @param peclet_col Name for the output Peclet column. Default:
+#'   \code{"Pe_corrected"}.
+#'
+#' @return The input data frame with an additional column containing the
+#'   recalculated Peclet numbers.
+#'
+#' @details
+#' The Peclet number is calculated as:
+#' \deqn{Pe = \frac{V_h \times x}{D \times 3600}}
+#' where \eqn{V_h} is sap velocity (cm/hr), \eqn{x} is probe spacing (cm),
+#' \eqn{D} is thermal diffusivity (cm\eqn{^2}/s), and 3600 converts hours to
+#' seconds.
+#'
+#' sDMA switching uses the Peclet number to decide which method is valid
+#' (\eqn{Pe < 1}: HRM; \eqn{Pe \ge 1}: secondary method). If Peclet numbers
+#' are not updated after corrections, the switching decision will be based on
+#' raw velocities and may be incorrect.
+#'
+#' @examples
+#' \dontrun{
+#' vh_corrected <- recalculate_peclet(
+#'   vh_results      = vh_wound_corrected,
+#'   probe_config    = probe,
+#'   wood_properties = wood,
+#'   velocity_col    = "Vh_cm_hr_wc",
+#'   peclet_col      = "Pe_corrected"
+#' )
+#' }
+#'
+#' @family calibration functions
+#' @export
+recalculate_peclet <- function(vh_results,
+                               probe_config,
+                               wood_properties,
+                               velocity_col = NULL,
+                               peclet_col   = "Pe_corrected") {
+
+  if (is.character(probe_config)) {
+    probe_config <- load_probe_config(probe_config)
+  }
+  if (is.character(wood_properties)) {
+    wood_properties <- load_wood_properties(wood_properties)
+  }
+
+  if (!is.data.frame(vh_results)) {
+    stop("vh_results must be a data frame or tibble.")
+  }
+
+  # Auto-detect velocity column — Vs_cm_hr is highest priority as the current best estimate
+  if (is.null(velocity_col)) {
+    velocity_col <- if ("Vs_cm_hr" %in% names(vh_results)) {
+      "Vs_cm_hr"
+    } else if ("Vh_cm_hr_wc" %in% names(vh_results)) {
+      "Vh_cm_hr_wc"
+    } else if ("Vh_cm_hr_sc" %in% names(vh_results)) {
+      "Vh_cm_hr_sc"
+    } else if ("Vh_cm_hr" %in% names(vh_results)) {
+      "Vh_cm_hr"
+    } else {
+      stop(
+        "No velocity column found. Expected one of: ",
+        "Vs_cm_hr, Vh_cm_hr_wc, Vh_cm_hr_sc, Vh_cm_hr. ",
+        "Available columns: ", paste(names(vh_results), collapse = ", ")
+      )
+    }
+    message("recalculate_peclet: using velocity column '", velocity_col, "'.")
+  }
+
+  if (!velocity_col %in% names(vh_results)) {
+    stop("Velocity column '", velocity_col, "' not found in vh_results.")
+  }
+
+  # Extract physical parameters
+  x <- if (inherits(probe_config, "ProbeConfiguration")) {
+    probe_config$probe_spacing
+  } else if (is.list(probe_config)) {
+    probe_config$probe_spacing
+  } else {
+    stop("probe_config must be a ProbeConfiguration object or a named list.")
+  }
+
+  D <- if (inherits(wood_properties, "WoodProperties")) {
+    wood_properties$thermal_diffusivity
+  } else if (is.list(wood_properties)) {
+    wood_properties$thermal_diffusivity
+  } else {
+    stop("wood_properties must be a WoodProperties object or a named list.")
+  }
+
+  if (is.null(x) || is.na(x) || x <= 0) {
+    stop("Invalid probe spacing: ", x)
+  }
+  if (is.null(D) || is.na(D) || D <= 0) {
+    stop("Invalid thermal diffusivity: ", D)
+  }
+
+  # Pe = (Vh_cm_hr / 3600 * x) / D  [unitless]
+  v_cm_s <- vh_results[[velocity_col]] / 3600
+  vh_results[[peclet_col]] <- (v_cm_s * x) / D
+
+  pe_vals <- vh_results[[peclet_col]]
+  message(sprintf(
+    "recalculate_peclet: %d points recalculated. Pe range: %.3f to %.3f.",
+    nrow(vh_results),
+    min(pe_vals, na.rm = TRUE),
+    max(pe_vals, na.rm = TRUE)
+  ))
+
+  vh_results
+}

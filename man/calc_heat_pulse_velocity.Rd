@@ -14,6 +14,7 @@ calc_heat_pulse_velocity(
   diffusivity = NULL,
   probe_spacing = NULL,
   probe_corrections = NULL,
+  baseline_method = NULL,
   confirm_parameters = TRUE,
   plot_results = FALSE,
   show_progress = TRUE,
@@ -28,7 +29,7 @@ calc_heat_pulse_velocity(
 
 \item{pulse_ids}{Vector of pulse IDs to process. If NULL, processes all pulses.}
 
-\item{methods}{Character vector of methods to use. Options: "HRM", "MHR", "HRMXa", "HRMXb",
+\item{methods}{Character vector of methods to use. Options: "HRM", "MHR",
 "Tmax_Coh", "Tmax_Klu".
 
 Note: HRM results include Peclet numbers which can be used for method switching.
@@ -38,7 +39,6 @@ Examples:
 \itemize{
 \item \code{methods = c("HRM", "MHR")} - Basic comparison
 \item \code{methods = c("HRM", "MHR", "Tmax_Klu")} - Multiple methods for post-hoc DMA
-\item \code{methods = c("HRM", "HRMXa", "HRMXb")} - HRM variants
 }
 
 Default: c("HRM", "MHR")}
@@ -51,13 +51,18 @@ path to custom YAML, or NULL (uses default generic softwood)}
 
 \item{parameters}{List of calculation parameters. See details.}
 
-\item{diffusivity}{Thermal diffusivity override (cm²/s). If provided, overrides wood_properties value.}
+\item{diffusivity}{Thermal diffusivity override (cm^2/s). If provided, overrides wood_properties value.}
 
 \item{probe_spacing}{Probe spacing override (cm). If provided, overrides probe_config value.}
 
 \item{probe_corrections}{Optional output from apply_hpv_corrections(). If provided, corrections
 metadata will be attached to results. Note: This function calculates raw Vh; apply corrections
 afterwards using apply_hpv_corrections().}
+
+\item{baseline_method}{Character. Pre-pulse baseline calculation method: one of
+\code{"mean_30s"} (default), \code{"mean_3s"}, or \code{"slope_intercept"}. When
+\code{NULL} the value is read from the analysis configuration via
+\code{get_analysis_param("baseline.method")}.}
 
 \item{confirm_parameters}{Logical indicating whether to prompt for parameter confirmation
 in interactive mode (default: TRUE). Set to FALSE for non-interactive scripts.}
@@ -95,15 +100,9 @@ A tibble containing calculated heat pulse velocities with columns:
 \item{quality_flag}{Data quality indicator}
 \item{hrm_window_start_sec}{HRM: Start of averaging window (seconds after pulse). NA for other methods.}
 \item{hrm_window_end_sec}{HRM: End of averaging window (seconds after pulse). NA for other methods.}
-\item{hrm_peclet_number}{HRM: Peclet number (dimensionless). Pe = (Vh × x) / (D × 3600). Used for method switching. NA for other methods.}
+\item{peclet_number}{HRM: Peclet number (dimensionless). Pe = (Vh \* x) / (D \* 3600). Used for method switching. NA for other methods.}
 \item{mhr_upstream_peak_sec}{MHR: Time when upstream sensor reaches maximum (seconds after pulse). NA for other methods.}
 \item{mhr_downstream_peak_sec}{MHR: Time when downstream sensor reaches maximum (seconds after pulse). NA for other methods.}
-\item{hrmxa_window_start_sec}{HRMXa: Start of dynamic sampling window based on L threshold (seconds after pulse). NA for other methods.}
-\item{hrmxa_window_end_sec}{HRMXa: End of dynamic sampling window based on H threshold (seconds after pulse). NA for other methods.}
-\item{hrmxb_downstream_start_sec}{HRMXb: Start of downstream sensor sampling window (seconds after pulse). NA for other methods.}
-\item{hrmxb_downstream_end_sec}{HRMXb: End of downstream sensor sampling window (seconds after pulse). NA for other methods.}
-\item{hrmxb_upstream_start_sec}{HRMXb: Start of upstream sensor sampling window (seconds after pulse). NA for other methods.}
-\item{hrmxb_upstream_end_sec}{HRMXb: End of upstream sensor sampling window (seconds after pulse). NA for other methods.}
 \item{tmax_peak_time_sec}{Tmax (Coh/Klu): Time to downstream temperature peak (seconds after pulse). NA for other methods.}
 }
 \description{
@@ -116,7 +115,7 @@ Progress reporting works through the \code{progressr} package. Wrap calls in
 
 The parameters list should contain:
 \describe{
-\item{diffusivity}{Thermal diffusivity of sapwood (cm²/s), default: 0.0025}
+\item{diffusivity}{Thermal diffusivity of sapwood (cm^2/s), default: 0.0025}
 \item{probe_spacing}{Distance from heat source (cm), default: 0.5}
 \item{L}{Lower proportion of deltaTmax for HRMX sampling window, default: 0.5}
 \item{H}{Higher proportion of deltaTmax for HRMX sampling window, default: 0.8}

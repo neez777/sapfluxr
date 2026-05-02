@@ -260,10 +260,10 @@ test_that("add_quality_flags correctly identifies issues", {
   flagged_results <- add_quality_flags(results)
 
   expect_equal(flagged_results$quality_flag[1], "OK")
-  expect_equal(flagged_results$quality_flag[2], "HIGH_VELOCITY")
-  expect_equal(flagged_results$quality_flag[3], "NEGATIVE_FLOW")
-  expect_equal(flagged_results$quality_flag[4], "INFINITE")
-  expect_equal(flagged_results$quality_flag[5], "MISSING")
+  expect_equal(flagged_results$quality_flag[2], "CALC_EXTREME")
+  expect_equal(flagged_results$quality_flag[3], "CALC_EXTREME")
+  expect_equal(flagged_results$quality_flag[4], "CALC_INFINITE")
+  expect_equal(flagged_results$quality_flag[5], "CALC_FAILED")
 })
 
 # Integration tests
@@ -371,7 +371,7 @@ test_that("calc_heat_pulse_velocity handles edge cases", {
 
   # Results may have quality flags indicating problems
   if (nrow(result) > 0) {
-    expect_true(any(result$quality_flag %in% c("INFINITE", "MISSING", "OK")))
+    expect_true(any(result$quality_flag %in% c("INFINITE", "MISSING", "OK", "CALC_FAILED")))
   }
 })
 
@@ -495,7 +495,8 @@ test_that("apply_sdma_processing validates inputs correctly", {
 
   # Test missing Peclet numbers (simulate by removing them)
   vh_no_peclet <- vh_results
-  vh_no_peclet$peclet_number <- NA
+  if ("hrm_peclet_number" %in% names(vh_no_peclet)) vh_no_peclet$hrm_peclet_number <- NA_real_
+  if ("peclet_number" %in% names(vh_no_peclet)) vh_no_peclet$peclet_number <- NA_real_
   expect_error(
     apply_sdma_processing(vh_no_peclet, "MHR"),
     "do not contain Peclet numbers"
@@ -649,11 +650,36 @@ test_that("calc_heat_pulse_velocity auto-fills missing pulses by default", {
   measurements <- heat_pulse_data$measurements
   diagnostics <- heat_pulse_data$diagnostics
 
-  # Remove pulse_id 2 and 4 (creating gaps in 1,2,3,4,5 sequence)
-  measurements <- measurements[measurements$pulse_id != 2, ]
-  measurements <- measurements[measurements$pulse_id != 4, ]
-  diagnostics <- diagnostics[diagnostics$pulse_id != 2, ]
-  diagnostics <- diagnostics[diagnostics$pulse_id != 4, ]
+  # Add more pulses first (need at least 5 to create meaningful gaps)
+  base_measurements <- heat_pulse_data$measurements
+  base_diagnostics <- heat_pulse_data$diagnostics
+
+  all_measurements <- list()
+  all_diagnostics <- list()
+
+  for (i in 1:5) {
+    new_measurements <- base_measurements
+    new_measurements$pulse_id <- i
+    new_measurements$datetime <- new_measurements$datetime + (i-1) * 1800  # 30 min intervals
+    all_measurements[[i]] <- new_measurements
+
+    new_diagnostics <- base_diagnostics
+    new_diagnostics$pulse_id <- i
+    new_diagnostics$datetime <- new_diagnostics$datetime[1] + (i-1) * 1800
+    all_diagnostics[[i]] <- new_diagnostics
+  }
+
+  heat_pulse_data$measurements <- do.call(rbind, all_measurements)
+  heat_pulse_data$diagnostics <- do.call(rbind, all_diagnostics)
+  heat_pulse_data$metadata$n_pulses <- 5
+
+  # NOW remove ONE pulse to create a gap (keeping median at 0.5hr)
+  measurements <- heat_pulse_data$measurements
+  diagnostics <- heat_pulse_data$diagnostics
+
+  # Remove pulse_id 3 (creating 1hr gap between 2 and 4)
+  measurements <- measurements[measurements$pulse_id != 3, ]
+  diagnostics <- diagnostics[diagnostics$pulse_id != 3, ]
 
   heat_pulse_data$measurements <- measurements
   heat_pulse_data$diagnostics <- diagnostics
@@ -702,6 +728,7 @@ test_that("calc_heat_pulse_velocity can disable auto-fill", {
   vh_results <- calc_heat_pulse_velocity(
     heat_pulse_data,
     methods = "HRM",
+    parameters = list(expected_interval_hours = 0.5),
     fill_missing_pulses = FALSE,
     show_progress = FALSE
   )
@@ -834,7 +861,7 @@ test_that("max_gap_hours parameter controls gap filling", {
   )
 
   measurements <- data.frame(
-    pulse_id = 1:10,
+    pulse_id = rep(1:10, each = 30),
     datetime = rep(times, each = 30),
     seconds_since_pulse = rep(1:30, times = 10),
     do = rnorm(300, 18.5, 0.5),
@@ -870,6 +897,7 @@ test_that("max_gap_hours parameter controls gap filling", {
     heat_pulse_data,
     methods = "HRM",
     fill_missing_pulses = TRUE,
+    parameters = list(expected_interval_hours = 0.5),
     max_gap_hours = 2,  # Only fill gaps < 2 hours
     show_progress = FALSE
   )
@@ -879,6 +907,7 @@ test_that("max_gap_hours parameter controls gap filling", {
     heat_pulse_data,
     methods = "HRM",
     fill_missing_pulses = TRUE,
+    parameters = list(expected_interval_hours = 0.5),
     max_gap_hours = 10,  # Fill gaps < 10 hours
     show_progress = FALSE
   )
@@ -900,7 +929,7 @@ test_that("gap_report attribute contains correct information", {
   )
 
   measurements <- data.frame(
-    pulse_id = 1:6,
+    pulse_id = rep(1:6, each = 30),
     datetime = rep(times, each = 30),
     seconds_since_pulse = rep(1:30, times = 6),
     do = rnorm(180, 18.5, 0.5),
@@ -992,6 +1021,7 @@ test_that("missing_pulse_summary attribute is accurate", {
     heat_pulse_data,
     methods = "HRM",
     fill_missing_pulses = TRUE,
+    parameters = list(expected_interval_hours = 0.5),
     show_progress = FALSE
   )
 

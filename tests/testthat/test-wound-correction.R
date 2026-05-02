@@ -145,11 +145,11 @@ test_that("apply_wound_correction uses spacing-corrected velocities when availab
  expected_B <- 1.9216
  expect_equal(result$Vc_cm_hr, test_data$Vh_cm_hr_sc * expected_B)
 
- # Can force use of raw values
+ # Can force use of raw values via velocity_col
  result_raw <- apply_wound_correction(
    test_data,
    wound_diameter = 0.20,
-   use_spacing_corrected = FALSE,
+   velocity_col = "Vh_cm_hr_raw",
    confirm_parameters = FALSE
  )
 
@@ -203,13 +203,13 @@ test_that("apply_wound_correction warns for unusual wound diameters", {
  # Very small wound diameter
  expect_warning(
    apply_wound_correction(test_data, wound_diameter = 0.10, confirm_parameters = FALSE),
-   "outside typical range"
+   "below table minimum"
  )
 
  # Very large wound diameter
  expect_warning(
    apply_wound_correction(test_data, wound_diameter = 0.40, confirm_parameters = FALSE),
-   "outside typical range"
+   "above table maximum"
  )
 })
 

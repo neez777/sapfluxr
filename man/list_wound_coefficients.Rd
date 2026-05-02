@@ -2,21 +2,18 @@
 % Please edit documentation in R/03g_wound_correction.R
 \name{list_wound_coefficients}
 \alias{list_wound_coefficients}
-\title{List Available Wound Coefficients}
+\title{List Available Wound Correction Coefficients}
 \usage{
 list_wound_coefficients(probe_spacing = "both")
 }
 \arguments{
-\item{probe_spacing}{"5mm", "6mm", or "both" (default)}
+\item{probe_spacing}{Character, either "5mm", "6mm", or "both" (default).}
 }
 \value{
-Invisibly returns the coefficient table(s)
+If "5mm" or "6mm", a data frame of coefficients. If "both", a list
+containing both data frames.
 }
 \description{
-Shows the available wound diameter values in the lookup tables.
-}
-\examples{
-list_wound_coefficients()
-list_wound_coefficients("5mm")
-
+Returns the lookup tables for wound correction coefficients at different
+probe spacings (5mm and 6mm).
 }

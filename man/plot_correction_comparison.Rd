@@ -21,9 +21,17 @@ corrected values}
 
 \item{sensor}{Character, sensor position to plot. Default: "outer"}
 
+\item{sensor_position}{Alias for \code{sensor}.}
+
 \item{method}{Character, calculation method to plot. Default: "HRM"}
 
 \item{show_legend}{Logical, show legend explaining corrections. Default: TRUE}
+
+\item{title}{Optional custom plot title.}
+
+\item{correction_stage}{Ignored, kept for backward compatibility.}
+
+\item{...}{Additional arguments passed to methods.}
 }
 \value{
 ggplot2 object showing raw vs. corrected comparison

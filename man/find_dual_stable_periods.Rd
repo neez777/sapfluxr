@@ -8,8 +8,14 @@ find_dual_stable_periods(
   vh_data,
   weather_data,
   vh_col,
+  method = "HRM",
+  sensor_position = "outer",
   vpd_col = "vpd_kpa",
   predawn_window = c(2, 6),
+  mode = c("static", "dynamic"),
+  dawn_times = NULL,
+  timezone = NULL,
+  site_location = NULL,
   vpd_threshold = 0.5,
   vpd_stability = 0.1,
   vh_threshold = 2,
@@ -20,23 +26,59 @@ find_dual_stable_periods(
 )
 }
 \arguments{
-\item{vh_data}{Data frame with datetime and sap flow columns}
+\item{vh_data}{Data frame with datetime and sap flow columns. When this data
+frame contains \code{method} and/or \code{sensor_position} columns the
+function filters to the single stream specified by \code{method} and
+\code{sensor_position} before analysis.}
 
 \item{weather_data}{Data frame with datetime and VPD columns}
 
 \item{vh_col}{Name of sap flow column}
 
+\item{method}{Character. Method to filter to when \code{vh_data} contains a
+\code{method} column. Default: \code{"HRM"}.}
+
+\item{sensor_position}{Character. Sensor position to filter to when
+\code{vh_data} contains a \code{sensor_position} column. Default:
+\code{"outer"}.}
+
 \item{vpd_col}{Name of VPD column (default: "vpd_kpa")}
 
-\item{predawn_window}{Predawn hours window (default: c(2, 6))}
+\item{predawn_window}{Predawn hours window. In \code{"static"} mode: \code{c(start_hour,
+  end_hour)} inclusive start, exclusive end (e.g., \code{c(2, 6)} = 02:00–05:59).
+In \code{"dynamic"} mode: \code{c(hours_before_dawn, hours_after_dawn)}, both
+relative to astronomical dawn (e.g., \code{c(4, 1)} = 4 h before to 1 h before dawn).
+Default: \code{c(2, 6)}.}
 
-\item{vpd_threshold}{Maximum mean VPD (kPa, default: 0.5)}
+\item{mode}{Predawn window mode: \code{"static"} (default) uses fixed clock hours;
+\code{"dynamic"} uses dawn-relative hours computed from \code{dawn_times}.}
 
-\item{vpd_stability}{Maximum SD VPD (kPa, default: 0.1)}
+\item{dawn_times}{POSIXct vector of astronomical dawn times, one per unique date in the
+data. Required when \code{mode = "dynamic"}. Obtain via
+\code{wood_properties$get_dawn_times(dates)}.}
 
-\item{vh_threshold}{Maximum mean sap flow (cm/hr, default: 2.0)}
+\item{timezone}{IANA timezone string (e.g., \code{"Australia/Perth"}) used to
+interpret predawn hours. Logger data stored in UTC must be converted to local
+time before hour-based filtering — supply the site timezone here and the
+function handles the conversion internally. Defaults to \code{NULL} (no
+conversion; hours are extracted in whatever timezone the POSIXct columns carry).}
 
-\item{vh_stability}{Maximum SD sap flow (cm/hr, default: 0.5)}
+\item{vpd_threshold}{Maximum mean predawn VPD (kPa). A day is VPD-stable only if its
+predawn mean VPD is at or below this value. Default: \code{0.5}. This matches the
+default in the \code{shiny-sapfluxr} interface. Lower for drier climates;
+raise if very few stable nights are found.}
+
+\item{vpd_stability}{Maximum predawn VPD standard deviation (kPa). A day is VPD-stable
+only if its predawn VPD SD is at or below this value. Default: \code{0.1}. Matches
+the \code{shiny-sapfluxr} default. Tighten to \code{0.05} for high-quality datasets.}
+
+\item{vh_threshold}{Maximum mean predawn sap flow (cm/hr). Default: \code{2.0}. Matches
+the \code{shiny-sapfluxr} default. Typical species ranges:
+conifers / slow hardwoods \code{0.5–1.5}; fast-growing hardwoods \code{2.5–4.0}.}
+
+\item{vh_stability}{Maximum predawn sap flow standard deviation (cm/hr). Default:
+\code{0.5}. Matches the \code{shiny-sapfluxr} default. Lower to \code{0.3} for
+very stable species; raise to \code{0.8} for permissive detection.}
 
 \item{min_n_points}{Minimum observations per day (default: 4)}
 
@@ -92,17 +134,17 @@ Requiring BOTH low VPD AND stable sap flow ensures true hydraulic equilibrium.
 }
 \examples{
 \dontrun{
-# Find dual-stable periods
+# Find dual-stable periods (threshold defaults match shiny-sapfluxr interface)
 dual_results <- find_dual_stable_periods(
-  vh_data = vh_results,
-  weather_data = weather,
-  vh_col = "Vh_cm_hr",
-  vpd_col = "vpd_kpa",
+  vh_data        = vh_results,
+  weather_data   = vpd_data,
+  vh_col         = "Vs_cm_hr",
   predawn_window = c(2, 6),
-  vpd_threshold = 0.5,
-  vpd_stability = 0.1,
-  vh_threshold = 2.0,
-  vh_stability = 0.5
+  mode           = "static",
+  vpd_threshold  = 0.5,   # kPa  — Shiny default
+  vpd_stability  = 0.1,   # kPa SD
+  vh_threshold   = 2.0,   # cm/hr
+  vh_stability   = 0.5    # cm/hr SD
 )
 
 # View results

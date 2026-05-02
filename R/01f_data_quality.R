@@ -141,7 +141,7 @@ NULL
 #' )
 #' }
 #'
-#' @seealso \code{\link{interpolate_missing_vh}}
+#' @seealso \code{\link{detect_and_fill_missing_pulses}}
 #' @family data quality functions
 #' @export
 flag_vh_quality <- function(vh_results,

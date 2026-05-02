@@ -8,7 +8,7 @@ normalise_flux_density(Qps, period = "global", datetime = NULL, Qps_max = NULL)
 }
 \arguments{
 \item{Qps}{Numeric vector. Sapwood-area-weighted mean sap flux density
-(cm³/hr/cm²) from calc_mean_flux_density().}
+(cm^3/hr/cm^2) from calc_mean_flux_density().}
 
 \item{period}{Character. Period over which to calculate maximum:
 \itemize{

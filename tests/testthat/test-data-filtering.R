@@ -131,21 +131,15 @@ test_that("filter_and_interpolate_vh handles multiple interpolation methods", {
   )
   expect_true(all(!is.na(result_linear$Vh_cm_hr)))
 
-  # Test spline
-  result_spline <- filter_and_interpolate_vh(
+  # Test moving_average
+  result_ma <- filter_and_interpolate_vh(
     test_data,
-    interpolation_method = "spline",
+    interpolation_method = "moving_average",
     verbose = FALSE
   )
-  expect_true(all(!is.na(result_spline$Vh_cm_hr)))
+  expect_true(all(!is.na(result_ma$Vh_cm_hr)))
 
-  # Test approx
-  result_approx <- filter_and_interpolate_vh(
-    test_data,
-    interpolation_method = "approx",
-    verbose = FALSE
-  )
-  expect_true(all(!is.na(result_approx$Vh_cm_hr)))
+  # Already tested linear above
 })
 
 test_that("filter_and_interpolate_vh handles multiple flags", {
@@ -163,6 +157,7 @@ test_that("filter_and_interpolate_vh handles multiple flags", {
     test_data,
     flags_to_interpolate = c("DATA_MISSING", "DATA_OUTLIER", "DATA_ILLOGICAL"),
     flags_to_preserve = c("DATA_SUSPECT"),
+    max_gap_hours = 2,
     verbose = FALSE
   )
 

@@ -82,8 +82,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // preprocess_pulse_data_cpp
-List preprocess_pulse_data_cpp(NumericVector do_vec, NumericVector di_vec, NumericVector uo_vec, NumericVector ui_vec, int pre_pulse_rows, double sampling_interval);
-RcppExport SEXP _sapfluxr_preprocess_pulse_data_cpp(SEXP do_vecSEXP, SEXP di_vecSEXP, SEXP uo_vecSEXP, SEXP ui_vecSEXP, SEXP pre_pulse_rowsSEXP, SEXP sampling_intervalSEXP) {
+List preprocess_pulse_data_cpp(NumericVector do_vec, NumericVector di_vec, NumericVector uo_vec, NumericVector ui_vec, NumericVector baseline_values, int pre_pulse_rows, double sampling_interval);
+RcppExport SEXP _sapfluxr_preprocess_pulse_data_cpp(SEXP do_vecSEXP, SEXP di_vecSEXP, SEXP uo_vecSEXP, SEXP ui_vecSEXP, SEXP baseline_valuesSEXP, SEXP pre_pulse_rowsSEXP, SEXP sampling_intervalSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -91,9 +91,10 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< NumericVector >::type di_vec(di_vecSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type uo_vec(uo_vecSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type ui_vec(ui_vecSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type baseline_values(baseline_valuesSEXP);
     Rcpp::traits::input_parameter< int >::type pre_pulse_rows(pre_pulse_rowsSEXP);
     Rcpp::traits::input_parameter< double >::type sampling_interval(sampling_intervalSEXP);
-    rcpp_result_gen = Rcpp::wrap(preprocess_pulse_data_cpp(do_vec, di_vec, uo_vec, ui_vec, pre_pulse_rows, sampling_interval));
+    rcpp_result_gen = Rcpp::wrap(preprocess_pulse_data_cpp(do_vec, di_vec, uo_vec, ui_vec, baseline_values, pre_pulse_rows, sampling_interval));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -127,35 +128,6 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< int >::type pre_pulse_rows(pre_pulse_rowsSEXP);
     Rcpp::traits::input_parameter< double >::type sampling_interval(sampling_intervalSEXP);
     rcpp_result_gen = Rcpp::wrap(calc_tmax_klu_cpp(deltaT_do, deltaT_di, diffusivity, probe_spacing, tp_1, pre_pulse_rows, sampling_interval));
-    return rcpp_result_gen;
-END_RCPP
-}
-// calc_hrmx_cpp
-List calc_hrmx_cpp(NumericVector deltaT_do, NumericVector deltaT_di, NumericVector deltaT_uo, NumericVector deltaT_ui, NumericVector dTratio_douo, NumericVector dTratio_diui, NumericVector tp, double L, double H, double diffusivity, double probe_spacing, int idx_do_max, int idx_di_max, int idx_uo_max, int idx_ui_max, double dTdo_max, double dTdi_max, double dTuo_max, double dTui_max);
-RcppExport SEXP _sapfluxr_calc_hrmx_cpp(SEXP deltaT_doSEXP, SEXP deltaT_diSEXP, SEXP deltaT_uoSEXP, SEXP deltaT_uiSEXP, SEXP dTratio_douoSEXP, SEXP dTratio_diuiSEXP, SEXP tpSEXP, SEXP LSEXP, SEXP HSEXP, SEXP diffusivitySEXP, SEXP probe_spacingSEXP, SEXP idx_do_maxSEXP, SEXP idx_di_maxSEXP, SEXP idx_uo_maxSEXP, SEXP idx_ui_maxSEXP, SEXP dTdo_maxSEXP, SEXP dTdi_maxSEXP, SEXP dTuo_maxSEXP, SEXP dTui_maxSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericVector >::type deltaT_do(deltaT_doSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type deltaT_di(deltaT_diSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type deltaT_uo(deltaT_uoSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type deltaT_ui(deltaT_uiSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type dTratio_douo(dTratio_douoSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type dTratio_diui(dTratio_diuiSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type tp(tpSEXP);
-    Rcpp::traits::input_parameter< double >::type L(LSEXP);
-    Rcpp::traits::input_parameter< double >::type H(HSEXP);
-    Rcpp::traits::input_parameter< double >::type diffusivity(diffusivitySEXP);
-    Rcpp::traits::input_parameter< double >::type probe_spacing(probe_spacingSEXP);
-    Rcpp::traits::input_parameter< int >::type idx_do_max(idx_do_maxSEXP);
-    Rcpp::traits::input_parameter< int >::type idx_di_max(idx_di_maxSEXP);
-    Rcpp::traits::input_parameter< int >::type idx_uo_max(idx_uo_maxSEXP);
-    Rcpp::traits::input_parameter< int >::type idx_ui_max(idx_ui_maxSEXP);
-    Rcpp::traits::input_parameter< double >::type dTdo_max(dTdo_maxSEXP);
-    Rcpp::traits::input_parameter< double >::type dTdi_max(dTdi_maxSEXP);
-    Rcpp::traits::input_parameter< double >::type dTuo_max(dTuo_maxSEXP);
-    Rcpp::traits::input_parameter< double >::type dTui_max(dTui_maxSEXP);
-    rcpp_result_gen = Rcpp::wrap(calc_hrmx_cpp(deltaT_do, deltaT_di, deltaT_uo, deltaT_ui, dTratio_douo, dTratio_diui, tp, L, H, diffusivity, probe_spacing, idx_do_max, idx_di_max, idx_uo_max, idx_ui_max, dTdo_max, dTdi_max, dTuo_max, dTui_max));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -265,10 +237,9 @@ static const R_CallMethodDef CallEntries[] = {
     {"_sapfluxr_extract_datetimes_cpp", (DL_FUNC) &_sapfluxr_extract_datetimes_cpp, 1},
     {"_sapfluxr_calc_hrm_cpp", (DL_FUNC) &_sapfluxr_calc_hrm_cpp, 6},
     {"_sapfluxr_calc_mhr_cpp", (DL_FUNC) &_sapfluxr_calc_mhr_cpp, 8},
-    {"_sapfluxr_preprocess_pulse_data_cpp", (DL_FUNC) &_sapfluxr_preprocess_pulse_data_cpp, 6},
+    {"_sapfluxr_preprocess_pulse_data_cpp", (DL_FUNC) &_sapfluxr_preprocess_pulse_data_cpp, 7},
     {"_sapfluxr_calc_tmax_coh_cpp", (DL_FUNC) &_sapfluxr_calc_tmax_coh_cpp, 6},
     {"_sapfluxr_calc_tmax_klu_cpp", (DL_FUNC) &_sapfluxr_calc_tmax_klu_cpp, 7},
-    {"_sapfluxr_calc_hrmx_cpp", (DL_FUNC) &_sapfluxr_calc_hrmx_cpp, 19},
     {"_sapfluxr_detect_outliers_rolling_mean_cpp", (DL_FUNC) &_sapfluxr_detect_outliers_rolling_mean_cpp, 3},
     {"_sapfluxr_detect_rate_of_change_outliers_cpp", (DL_FUNC) &_sapfluxr_detect_rate_of_change_outliers_cpp, 2},
     {"_sapfluxr_identify_gaps_cpp", (DL_FUNC) &_sapfluxr_identify_gaps_cpp, 3},

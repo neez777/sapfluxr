@@ -33,7 +33,7 @@ inline void find_max_and_idx(const NumericVector& vec, double& max_val, int& max
 //' @param dTratio_diui Numeric vector of downstream/upstream temperature ratios (inner)
 //' @param HRM_period Logical vector indicating HRM sampling window
 //' @param tp Numeric vector of time after pulse (seconds)
-//' @param diffusivity Thermal diffusivity (cm²/s)
+//' @param diffusivity Thermal diffusivity (cm2/s)
 //' @param probe_spacing Probe spacing (cm)
 //'
 //' @return List containing HRM results for outer and inner sensors
@@ -165,7 +165,7 @@ List calc_hrm_cpp(NumericVector dTratio_douo,
 //' @param deltaT_di Numeric vector of delta temperatures (downstream inner)
 //' @param deltaT_uo Numeric vector of delta temperatures (upstream outer)
 //' @param deltaT_ui Numeric vector of delta temperatures (upstream inner)
-//' @param diffusivity Thermal diffusivity (cm²/s)
+//' @param diffusivity Thermal diffusivity (cm2/s)
 //' @param probe_spacing Probe spacing (cm)
 //' @param pre_pulse_rows Integer, number of pre-pulse rows (NOT seconds)
 //' @param sampling_interval Double, seconds between consecutive measurements
@@ -258,7 +258,11 @@ List calc_mhr_cpp(NumericVector deltaT_do,
 //' @param di_vec Numeric vector of downstream inner temperatures
 //' @param uo_vec Numeric vector of upstream outer temperatures
 //' @param ui_vec Numeric vector of upstream inner temperatures
-//' @param pre_pulse_rows Integer, number of pre-pulse rows (NOT seconds)
+//' @param baseline_values Numeric vector of length 4: pre-pulse baseline
+//'   temperatures in order do, di, uo, ui. Computed by
+//'   \code{calculate_baseline()} using the configured baseline method.
+//' @param pre_pulse_rows Integer, number of pre-pulse rows (NOT seconds).
+//'   Used as the time-origin marker for peak-time calculations.
 //' @param sampling_interval Double, seconds between consecutive measurements
 //'
 //' @return List containing delta temps, ratios, and peak info
@@ -270,38 +274,18 @@ List preprocess_pulse_data_cpp(NumericVector do_vec,
                                 NumericVector di_vec,
                                 NumericVector uo_vec,
                                 NumericVector ui_vec,
+                                NumericVector baseline_values,
                                 int pre_pulse_rows,
                                 double sampling_interval) {
 
   int n = do_vec.size();
 
-  // Calculate pre-pulse means
-  double do_mu_pre = 0.0, di_mu_pre = 0.0, uo_mu_pre = 0.0, ui_mu_pre = 0.0;
-  int count = 0;
-
-  int pre_pulse_end = std::min(pre_pulse_rows, n);
-  for (int i = 0; i < pre_pulse_end; i++) {
-    if (!NumericVector::is_na(do_vec[i])) {
-      do_mu_pre += do_vec[i];
-    }
-    if (!NumericVector::is_na(di_vec[i])) {
-      di_mu_pre += di_vec[i];
-    }
-    if (!NumericVector::is_na(uo_vec[i])) {
-      uo_mu_pre += uo_vec[i];
-    }
-    if (!NumericVector::is_na(ui_vec[i])) {
-      ui_mu_pre += ui_vec[i];
-    }
-    count++;
-  }
-
-  if (count > 0) {
-    do_mu_pre /= count;
-    di_mu_pre /= count;
-    uo_mu_pre /= count;
-    ui_mu_pre /= count;
-  }
+  // Baseline values computed in R (via calculate_baseline())
+  // baseline_values order: do, di, uo, ui
+  double do_mu_pre = baseline_values[0];
+  double di_mu_pre = baseline_values[1];
+  double uo_mu_pre = baseline_values[2];
+  double ui_mu_pre = baseline_values[3];
 
   // Calculate delta temperatures
   NumericVector deltaT_do(n);
@@ -374,7 +358,7 @@ List preprocess_pulse_data_cpp(NumericVector do_vec,
 //'
 //' @param deltaT_do Numeric vector of delta temperatures (downstream outer)
 //' @param deltaT_di Numeric vector of delta temperatures (downstream inner)
-//' @param diffusivity Thermal diffusivity (cm²/s)
+//' @param diffusivity Thermal diffusivity (cm2/s)
 //' @param probe_spacing Probe spacing (cm)
 //' @param pre_pulse_rows Number of pre-pulse rows
 //' @param sampling_interval Sampling interval in seconds (e.g. 1.0 for 1Hz, 0.5 for 2Hz)
@@ -410,7 +394,7 @@ List calc_tmax_coh_cpp(NumericVector deltaT_do,
   if (tmo > 0) {
     // Convert to meters for calculation
     double x_m = probe_spacing / 100.0;
-    double D_m = diffusivity / 10000.0;  // cm²/s to m²/s
+    double D_m = diffusivity / 10000.0;  // cm2/s to m2/s
 
     double discriminant_outer = x_m * x_m - 4.0 * D_m * tmo;
 
@@ -447,7 +431,7 @@ List calc_tmax_coh_cpp(NumericVector deltaT_do,
 //'
 //' @param deltaT_do Numeric vector of delta temperatures (downstream outer)
 //' @param deltaT_di Numeric vector of delta temperatures (downstream inner)
-//' @param diffusivity Thermal diffusivity (cm²/s)
+//' @param diffusivity Thermal diffusivity (cm2/s)
 //' @param probe_spacing Probe spacing (cm)
 //' @param tp_1 Heat pulse duration (seconds)
 //' @param pre_pulse_rows Number of pre-pulse rows
@@ -524,357 +508,5 @@ List calc_tmax_klu_cpp(NumericVector deltaT_do,
     Named("window_end_inner") = NA_REAL,
     Named("calc_time_outer") = tmo,
     Named("calc_time_inner") = tmi
-  );
-}
-
-
-//' Calculate HRMX (Modified Heat Ratio) - C++ Implementation
-//'
-//' @param deltaT_do Numeric vector of delta temperatures (downstream outer)
-//' @param deltaT_di Numeric vector of delta temperatures (downstream inner)
-//' @param deltaT_uo Numeric vector of delta temperatures (upstream outer)
-//' @param deltaT_ui Numeric vector of delta temperatures (upstream inner)
-//' @param dTratio_douo Numeric vector of temperature ratios (do/uo)
-//' @param dTratio_diui Numeric vector of temperature ratios (di/ui)
-//' @param tp Numeric vector of time after pulse (seconds)
-//' @param L Lower proportion of deltaTmax for sampling window
-//' @param H Higher proportion of deltaTmax for sampling window
-//' @param diffusivity Thermal diffusivity (cm²/s)
-//' @param probe_spacing Probe spacing (cm)
-//' @param idx_do_max Index of max for downstream outer (1-based from R)
-//' @param idx_di_max Index of max for downstream inner (1-based from R)
-//' @param idx_uo_max Index of max for upstream outer (1-based from R)
-//' @param idx_ui_max Index of max for upstream inner (1-based from R)
-//' @param dTdo_max Maximum value for downstream outer
-//' @param dTdi_max Maximum value for downstream inner
-//' @param dTuo_max Maximum value for upstream outer
-//' @param dTui_max Maximum value for upstream inner
-//'
-//' @return List containing HRMXa and HRMXb results
-//'
-//' @keywords internal
-//' @export
-// [[Rcpp::export]]
-List calc_hrmx_cpp(NumericVector deltaT_do,
-                   NumericVector deltaT_di,
-                   NumericVector deltaT_uo,
-                   NumericVector deltaT_ui,
-                   NumericVector dTratio_douo,
-                   NumericVector dTratio_diui,
-                   NumericVector tp,
-                   double L,
-                   double H,
-                   double diffusivity,
-                   double probe_spacing,
-                   int idx_do_max,
-                   int idx_di_max,
-                   int idx_uo_max,
-                   int idx_ui_max,
-                   double dTdo_max,
-                   double dTdi_max,
-                   double dTuo_max,
-                   double dTui_max) {
-
-  int n = deltaT_do.size();
-
-  // Convert R 1-based indices to C++ 0-based
-  int idx_do = idx_do_max - 1;
-  int idx_di = idx_di_max - 1;
-  int idx_uo = idx_uo_max - 1;
-  int idx_ui = idx_ui_max - 1;
-
-  // Calculate pre-max values (only on rising limb BEFORE maximum)
-  NumericVector dTdo_premax(n, NA_REAL);
-  NumericVector dTdi_premax(n, NA_REAL);
-  NumericVector dTuo_premax(n, NA_REAL);
-  NumericVector dTui_premax(n, NA_REAL);
-
-  // Identify rising limb points before peak
-  for (int i = 1; i < n; i++) {
-    if (i < idx_do && !NumericVector::is_na(deltaT_do[i]) && !NumericVector::is_na(deltaT_do[i-1])) {
-      if (deltaT_do[i] > deltaT_do[i-1]) {
-        dTdo_premax[i] = deltaT_do[i];
-      }
-    }
-    if (i < idx_di && !NumericVector::is_na(deltaT_di[i]) && !NumericVector::is_na(deltaT_di[i-1])) {
-      if (deltaT_di[i] > deltaT_di[i-1]) {
-        dTdi_premax[i] = deltaT_di[i];
-      }
-    }
-    if (i < idx_uo && !NumericVector::is_na(deltaT_uo[i]) && !NumericVector::is_na(deltaT_uo[i-1])) {
-      if (deltaT_uo[i] > deltaT_uo[i-1]) {
-        dTuo_premax[i] = deltaT_uo[i];
-      }
-    }
-    if (i < idx_ui && !NumericVector::is_na(deltaT_ui[i]) && !NumericVector::is_na(deltaT_ui[i-1])) {
-      if (deltaT_ui[i] > deltaT_ui[i-1]) {
-        dTui_premax[i] = deltaT_ui[i];
-      }
-    }
-  }
-
-  // Calculate window bounds
-  double dTdo_max_L = dTdo_max * L;
-  double dTdi_max_L = dTdi_max * L;
-  double dTuo_max_L = dTuo_max * L;
-  double dTui_max_L = dTui_max * L;
-
-  double dTdo_max_H = dTdo_max * H;
-  double dTdi_max_H = dTdi_max * H;
-  double dTuo_max_H = dTuo_max * H;
-  double dTui_max_H = dTui_max * H;
-
-  // Apply HRMX windows (filter to L-H range)
-  NumericVector dTdo_HRMX(n, NA_REAL);
-  NumericVector dTdi_HRMX(n, NA_REAL);
-  NumericVector dTuo_HRMX(n, NA_REAL);
-  NumericVector dTui_HRMX(n, NA_REAL);
-
-  for (int i = 0; i < n; i++) {
-    if (!NumericVector::is_na(dTdo_premax[i])) {
-      if (dTdo_premax[i] >= dTdo_max_L && dTdo_premax[i] <= dTdo_max_H) {
-        dTdo_HRMX[i] = dTdo_premax[i];
-      }
-    }
-    if (!NumericVector::is_na(dTdi_premax[i])) {
-      if (dTdi_premax[i] >= dTdi_max_L && dTdi_premax[i] <= dTdi_max_H) {
-        dTdi_HRMX[i] = dTdi_premax[i];
-      }
-    }
-    if (!NumericVector::is_na(dTuo_premax[i])) {
-      if (dTuo_premax[i] >= dTuo_max_L && dTuo_premax[i] <= dTuo_max_H) {
-        dTuo_HRMX[i] = dTuo_premax[i];
-      }
-    }
-    if (!NumericVector::is_na(dTui_premax[i])) {
-      if (dTui_premax[i] >= dTui_max_L && dTui_premax[i] <= dTui_max_H) {
-        dTui_HRMX[i] = dTui_premax[i];
-      }
-    }
-  }
-
-  // Calculate means
-  double dTdo_HRMX_mean = 0, dTdi_HRMX_mean = 0, dTuo_HRMX_mean = 0, dTui_HRMX_mean = 0;
-  int count_do = 0, count_di = 0, count_uo = 0, count_ui = 0;
-
-  for (int i = 0; i < n; i++) {
-    if (!NumericVector::is_na(dTdo_HRMX[i])) { dTdo_HRMX_mean += dTdo_HRMX[i]; count_do++; }
-    if (!NumericVector::is_na(dTdi_HRMX[i])) { dTdi_HRMX_mean += dTdi_HRMX[i]; count_di++; }
-    if (!NumericVector::is_na(dTuo_HRMX[i])) { dTuo_HRMX_mean += dTuo_HRMX[i]; count_uo++; }
-    if (!NumericVector::is_na(dTui_HRMX[i])) { dTui_HRMX_mean += dTui_HRMX[i]; count_ui++; }
-  }
-
-  if (count_do > 0) dTdo_HRMX_mean /= count_do; else dTdo_HRMX_mean = NA_REAL;
-  if (count_di > 0) dTdi_HRMX_mean /= count_di; else dTdi_HRMX_mean = NA_REAL;
-  if (count_uo > 0) dTuo_HRMX_mean /= count_uo; else dTuo_HRMX_mean = NA_REAL;
-  if (count_ui > 0) dTui_HRMX_mean /= count_ui; else dTui_HRMX_mean = NA_REAL;
-
-  // HRMXa: Calculate ratios within window, select method based on sensor means
-  double dTo_ratio_HRMX_mean = NA_REAL;
-  double dTi_ratio_HRMX_mean = NA_REAL;
-
-  // For outer sensors
-  if (!NumericVector::is_na(dTdo_HRMX_mean) && !NumericVector::is_na(dTuo_HRMX_mean)) {
-    double sum_ratio = 0.0;
-    int count_ratio = 0;
-
-    if (dTdo_HRMX_mean > dTuo_HRMX_mean) {
-      // Use downstream window
-      for (int i = 0; i < n; i++) {
-        if (!NumericVector::is_na(dTdo_HRMX[i]) && !NumericVector::is_na(dTratio_douo[i])) {
-          sum_ratio += dTratio_douo[i];
-          count_ratio++;
-        }
-      }
-    } else {
-      // Use upstream window
-      for (int i = 0; i < n; i++) {
-        if (!NumericVector::is_na(dTuo_HRMX[i]) && !NumericVector::is_na(dTratio_douo[i])) {
-          sum_ratio += dTratio_douo[i];
-          count_ratio++;
-        }
-      }
-    }
-
-    if (count_ratio > 0) {
-      dTo_ratio_HRMX_mean = sum_ratio / count_ratio;
-    }
-  }
-
-  // For inner sensors
-  if (!NumericVector::is_na(dTdi_HRMX_mean) && !NumericVector::is_na(dTui_HRMX_mean)) {
-    double sum_ratio = 0.0;
-    int count_ratio = 0;
-
-    if (dTdi_HRMX_mean > dTui_HRMX_mean) {
-      // Use downstream window
-      for (int i = 0; i < n; i++) {
-        if (!NumericVector::is_na(dTdi_HRMX[i]) && !NumericVector::is_na(dTratio_diui[i])) {
-          sum_ratio += dTratio_diui[i];
-          count_ratio++;
-        }
-      }
-    } else {
-      // Use upstream window
-      for (int i = 0; i < n; i++) {
-        if (!NumericVector::is_na(dTui_HRMX[i]) && !NumericVector::is_na(dTratio_diui[i])) {
-          sum_ratio += dTratio_diui[i];
-          count_ratio++;
-        }
-      }
-    }
-
-    if (count_ratio > 0) {
-      dTi_ratio_HRMX_mean = sum_ratio / count_ratio;
-    }
-  }
-
-  // HRMXb: Ratio of means
-  double dT_ratio_douo_HRMX_mean = NA_REAL;
-  double dT_ratio_diui_HRMX_mean = NA_REAL;
-
-  if (!NumericVector::is_na(dTdo_HRMX_mean) && !NumericVector::is_na(dTuo_HRMX_mean) && dTuo_HRMX_mean != 0) {
-    dT_ratio_douo_HRMX_mean = dTdo_HRMX_mean / dTuo_HRMX_mean;
-  }
-  if (!NumericVector::is_na(dTdi_HRMX_mean) && !NumericVector::is_na(dTui_HRMX_mean) && dTui_HRMX_mean != 0) {
-    dT_ratio_diui_HRMX_mean = dTdi_HRMX_mean / dTui_HRMX_mean;
-  }
-
-  // Calculate velocities
-  double Vho_HRMXa = NA_REAL;
-  double Vhi_HRMXa = NA_REAL;
-  double Vho_HRMXb = NA_REAL;
-  double Vhi_HRMXb = NA_REAL;
-
-  if (!NumericVector::is_na(dTo_ratio_HRMX_mean) && dTo_ratio_HRMX_mean > 0) {
-    Vho_HRMXa = (diffusivity / probe_spacing) * std::log(dTo_ratio_HRMX_mean) * 3600.0;
-  }
-  if (!NumericVector::is_na(dTi_ratio_HRMX_mean) && dTi_ratio_HRMX_mean > 0) {
-    Vhi_HRMXa = (diffusivity / probe_spacing) * std::log(dTi_ratio_HRMX_mean) * 3600.0;
-  }
-  if (!NumericVector::is_na(dT_ratio_douo_HRMX_mean) && dT_ratio_douo_HRMX_mean > 0) {
-    Vho_HRMXb = (diffusivity / probe_spacing) * std::log(dT_ratio_douo_HRMX_mean) * 3600.0;
-  }
-  if (!NumericVector::is_na(dT_ratio_diui_HRMX_mean) && dT_ratio_diui_HRMX_mean > 0) {
-    Vhi_HRMXb = (diffusivity / probe_spacing) * std::log(dT_ratio_diui_HRMX_mean) * 3600.0;
-  }
-
-  // Find window boundaries for HRMXa (depends on which sensor was used)
-  std::vector<int> hrmxa_outer_indices, hrmxa_inner_indices;
-
-  if (!NumericVector::is_na(dTdo_HRMX_mean) && !NumericVector::is_na(dTuo_HRMX_mean)) {
-    if (dTdo_HRMX_mean > dTuo_HRMX_mean) {
-      for (int i = 0; i < n; i++) if (!NumericVector::is_na(dTdo_HRMX[i])) hrmxa_outer_indices.push_back(i);
-    } else {
-      for (int i = 0; i < n; i++) if (!NumericVector::is_na(dTuo_HRMX[i])) hrmxa_outer_indices.push_back(i);
-    }
-  }
-
-  if (!NumericVector::is_na(dTdi_HRMX_mean) && !NumericVector::is_na(dTui_HRMX_mean)) {
-    if (dTdi_HRMX_mean > dTui_HRMX_mean) {
-      for (int i = 0; i < n; i++) if (!NumericVector::is_na(dTdi_HRMX[i])) hrmxa_inner_indices.push_back(i);
-    } else {
-      for (int i = 0; i < n; i++) if (!NumericVector::is_na(dTui_HRMX[i])) hrmxa_inner_indices.push_back(i);
-    }
-  }
-
-  double hrmxa_window_start_outer = NA_REAL, hrmxa_window_end_outer = NA_REAL;
-  double hrmxa_window_start_inner = NA_REAL, hrmxa_window_end_inner = NA_REAL;
-
-  if (hrmxa_outer_indices.size() > 0) {
-    hrmxa_window_start_outer = tp[*std::min_element(hrmxa_outer_indices.begin(), hrmxa_outer_indices.end())];
-    hrmxa_window_end_outer = tp[*std::max_element(hrmxa_outer_indices.begin(), hrmxa_outer_indices.end())];
-  }
-  if (hrmxa_inner_indices.size() > 0) {
-    hrmxa_window_start_inner = tp[*std::min_element(hrmxa_inner_indices.begin(), hrmxa_inner_indices.end())];
-    hrmxa_window_end_inner = tp[*std::max_element(hrmxa_inner_indices.begin(), hrmxa_inner_indices.end())];
-  }
-
-  // Find window boundaries for HRMXb (uses all valid points from both sensors)
-  std::vector<int> hrmxb_outer_indices, hrmxb_inner_indices;
-  std::vector<int> do_indices, uo_indices, di_indices, ui_indices;
-
-  for (int i = 0; i < n; i++) {
-    if (!NumericVector::is_na(dTdo_HRMX[i])) { hrmxb_outer_indices.push_back(i); do_indices.push_back(i); }
-    if (!NumericVector::is_na(dTuo_HRMX[i])) { hrmxb_outer_indices.push_back(i); uo_indices.push_back(i); }
-    if (!NumericVector::is_na(dTdi_HRMX[i])) { hrmxb_inner_indices.push_back(i); di_indices.push_back(i); }
-    if (!NumericVector::is_na(dTui_HRMX[i])) { hrmxb_inner_indices.push_back(i); ui_indices.push_back(i); }
-  }
-
-  // Remove duplicates and sort
-  std::sort(hrmxb_outer_indices.begin(), hrmxb_outer_indices.end());
-  hrmxb_outer_indices.erase(std::unique(hrmxb_outer_indices.begin(), hrmxb_outer_indices.end()), hrmxb_outer_indices.end());
-  std::sort(hrmxb_inner_indices.begin(), hrmxb_inner_indices.end());
-  hrmxb_inner_indices.erase(std::unique(hrmxb_inner_indices.begin(), hrmxb_inner_indices.end()), hrmxb_inner_indices.end());
-
-  double hrmxb_window_start_outer = NA_REAL, hrmxb_window_end_outer = NA_REAL;
-  double hrmxb_window_start_inner = NA_REAL, hrmxb_window_end_inner = NA_REAL;
-
-  if (hrmxb_outer_indices.size() > 0) {
-    hrmxb_window_start_outer = tp[hrmxb_outer_indices[0]];
-    hrmxb_window_end_outer = tp[hrmxb_outer_indices[hrmxb_outer_indices.size()-1]];
-  }
-  if (hrmxb_inner_indices.size() > 0) {
-    hrmxb_window_start_inner = tp[hrmxb_inner_indices[0]];
-    hrmxb_window_end_inner = tp[hrmxb_inner_indices[hrmxb_inner_indices.size()-1]];
-  }
-
-  // Separate downstream/upstream windows for HRMXb
-  double hrmxb_downstream_start_outer = NA_REAL, hrmxb_downstream_end_outer = NA_REAL;
-  double hrmxb_upstream_start_outer = NA_REAL, hrmxb_upstream_end_outer = NA_REAL;
-  double hrmxb_downstream_start_inner = NA_REAL, hrmxb_downstream_end_inner = NA_REAL;
-  double hrmxb_upstream_start_inner = NA_REAL, hrmxb_upstream_end_inner = NA_REAL;
-
-  if (do_indices.size() > 0) {
-    hrmxb_downstream_start_outer = tp[*std::min_element(do_indices.begin(), do_indices.end())];
-    hrmxb_downstream_end_outer = tp[*std::max_element(do_indices.begin(), do_indices.end())];
-  }
-  if (uo_indices.size() > 0) {
-    hrmxb_upstream_start_outer = tp[*std::min_element(uo_indices.begin(), uo_indices.end())];
-    hrmxb_upstream_end_outer = tp[*std::max_element(uo_indices.begin(), uo_indices.end())];
-  }
-  if (di_indices.size() > 0) {
-    hrmxb_downstream_start_inner = tp[*std::min_element(di_indices.begin(), di_indices.end())];
-    hrmxb_downstream_end_inner = tp[*std::max_element(di_indices.begin(), di_indices.end())];
-  }
-  if (ui_indices.size() > 0) {
-    hrmxb_upstream_start_inner = tp[*std::min_element(ui_indices.begin(), ui_indices.end())];
-    hrmxb_upstream_end_inner = tp[*std::max_element(ui_indices.begin(), ui_indices.end())];
-  }
-
-  // Return both HRMXa and HRMXb results
-  return List::create(
-    Named("HRMXa") = List::create(
-      Named("outer") = Vho_HRMXa,
-      Named("inner") = Vhi_HRMXa,
-      Named("temp_ratio_outer") = dTo_ratio_HRMX_mean,
-      Named("temp_ratio_inner") = dTi_ratio_HRMX_mean,
-      Named("window_start_outer") = hrmxa_window_start_outer,
-      Named("window_end_outer") = hrmxa_window_end_outer,
-      Named("window_start_inner") = hrmxa_window_start_inner,
-      Named("window_end_inner") = hrmxa_window_end_inner,
-      Named("calc_time_outer") = NA_REAL,
-      Named("calc_time_inner") = NA_REAL
-    ),
-    Named("HRMXb") = List::create(
-      Named("outer") = Vho_HRMXb,
-      Named("inner") = Vhi_HRMXb,
-      Named("temp_ratio_outer") = dT_ratio_douo_HRMX_mean,
-      Named("temp_ratio_inner") = dT_ratio_diui_HRMX_mean,
-      Named("window_start_outer") = hrmxb_window_start_outer,
-      Named("window_end_outer") = hrmxb_window_end_outer,
-      Named("window_start_inner") = hrmxb_window_start_inner,
-      Named("window_end_inner") = hrmxb_window_end_inner,
-      Named("calc_time_outer") = NA_REAL,
-      Named("calc_time_inner") = NA_REAL,
-      Named("downstream_window_start_outer") = hrmxb_downstream_start_outer,
-      Named("downstream_window_end_outer") = hrmxb_downstream_end_outer,
-      Named("upstream_window_start_outer") = hrmxb_upstream_start_outer,
-      Named("upstream_window_end_outer") = hrmxb_upstream_end_outer,
-      Named("downstream_window_start_inner") = hrmxb_downstream_start_inner,
-      Named("downstream_window_end_inner") = hrmxb_downstream_end_inner,
-      Named("upstream_window_start_inner") = hrmxb_upstream_start_inner,
-      Named("upstream_window_end_inner") = hrmxb_upstream_end_inner
-    )
   );
 }

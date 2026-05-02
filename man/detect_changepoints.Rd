@@ -2,55 +2,60 @@
 % Please edit documentation in R/03e_changepoint_detection.R
 \name{detect_changepoints}
 \alias{detect_changepoints}
-\title{Detect Changepoints in Daily Minimum Velocities}
+\title{Detect Changepoints in Sap Flow Data}
 \usage{
 detect_changepoints(
-  daily_min,
+  vh_data = NULL,
+  daily_min = NULL,
+  sensor_position = "outer",
+  hpv_method = "HRM",
   penalty = "MBIC",
   penalty_value = NULL,
   detection_type = "mean",
   min_segment_days = 7,
-  merge_short_segments = TRUE
+  merge_short_segments = TRUE,
+  method = NULL,
+  ...
 )
 }
 \arguments{
-\item{daily_min}{Data frame with columns \code{date} and \code{min_value}
-(typically from \code{\link{calculate_daily_minima}})}
+\item{vh_data}{Data frame containing velocity data (e.g., from \code{calc_heat_pulse_velocity()}).}
 
-\item{penalty}{Penalty type for PELT algorithm. Options:
-\itemize{
-\item "MBIC" - Modified Bayesian Information Criterion (default, most conservative)
-\item "BIC" - Bayesian Information Criterion (moderate)
-\item "Manual" - Manual penalty value (requires \code{penalty_value})
-}}
+\item{daily_min}{Optional. A data frame of pre-calculated daily minima. If NULL,
+this is automatically calculated from \code{vh_data}.}
 
-\item{penalty_value}{Numeric penalty value when \code{penalty = "Manual"}.
-Range typically 0-100. Higher values = fewer changepoints detected.}
+\item{sensor_position}{Character, "outer" or "inner" (default: "outer"). Used if calculating daily minima.}
 
-\item{detection_type}{Type of change to detect:
-\itemize{
-\item "mean" - Changes in mean only (default, recommended)
-\item "meanvar" - Changes in mean and/or variance
-}}
+\item{hpv_method}{Character, HPV method to use for detection (default: "HRM").}
 
-\item{min_segment_days}{Minimum number of days for a segment (default: 7).
+\item{penalty}{Penalty method for PELT algorithm: "MBIC" (default, most conservative),
+"BIC" (moderate), or "Manual" (custom value).}
+
+\item{penalty_value}{Numeric value required if \code{penalty = "Manual"}.}
+
+\item{detection_type}{What to detect: "mean" (shifts in baseline, default) or
+"meanvar" (shifts in baseline and variance).}
+
+\item{min_segment_days}{Minimum days required between changepoints (default: 7).
 Segments shorter than this will be merged with adjacent segments.}
 
 \item{merge_short_segments}{Logical, whether to merge segments shorter than
 \code{min_segment_days} (default: TRUE)}
+
+\item{method}{Deprecated argument (use hpv_method).}
+
+\item{...}{Additional arguments passed to \code{\link{calculate_daily_minima}}.}
 }
 \value{
-A list containing:
-\item{changepoints}{Vector of changepoint dates (Date class)}
-\item{changepoint_indices}{Vector of row indices in daily_min where changes occur}
-\item{segments}{Data frame describing segments between changepoints}
-\item{daily_min_with_segments}{Original daily_min with added \code{segment_id} column}
-\item{parameters}{List of detection parameters used}
+A list with class \code{"pelt_changepoints"} containing:
+\item{changepoints}{Vector of detected Date objects}
+\item{segments}{Data frame detailing each segment}
+\item{daily_min}{The daily minima data used for detection}
+\item{parameters}{List of detection parameters}
 }
 \description{
-Uses PELT (Pruned Exact Linear Time) changepoint detection to identify
-times when baseline sap flow velocities shift, indicating probe movement
-or alignment changes requiring separate zero-offset calibration.
+Automatically identifies dates where the baseline (zero-flow offset) shifts,
+which typically indicates physical probe movement or stem swelling/shrinkage.
 }
 \details{
 \strong{PELT Algorithm:}
@@ -86,11 +91,8 @@ Segments < min_segment_days are merged with adjacent segments because:
 }
 \examples{
 \dontrun{
-# Calculate daily minima
-daily_min <- calculate_daily_minima(vh_results)
-
-# Detect changepoints with default MBIC
-result <- detect_changepoints(daily_min)
+# Pass the full data directly - it will calculate minima automatically
+result <- detect_changepoints(vh_results)
 
 # View detected changepoints
 print(result$changepoints)
@@ -99,11 +101,11 @@ print(result$changepoints)
 print(result$segments)
 
 # Try BIC for more changepoints
-result_bic <- detect_changepoints(daily_min, penalty = "BIC")
+result_bic <- detect_changepoints(vh_results, penalty = "BIC")
 
 # Manual penalty for fine control
 result_manual <- detect_changepoints(
-  daily_min,
+  vh_results,
   penalty = "Manual",
   penalty_value = 50
 )
@@ -117,7 +119,6 @@ Statistical Association}, 107(500), 1590-1598.
 }
 \seealso{
 Other changepoint detection functions: 
-\code{\link{calculate_daily_minima}()},
-\code{\link{extract_segment_baselines}()}
+\code{\link{calculate_daily_minima}()}
 }
 \concept{changepoint detection functions}

@@ -21,6 +21,11 @@
 #'   If NULL (default), function will attempt to auto-detect.
 #' @param confirm Logical. If TRUE and auto-detection is ambiguous, prompts user
 #'   for confirmation. Default is TRUE.
+#' @param timezone IANA timezone string (e.g., \code{"Australia/Perth"}). When the
+#'   weather station records local time but the file carries a UTC-format timestamp,
+#'   supply the site timezone here. The datetime column will be re-labelled with
+#'   \code{lubridate::force_tz()} — clock values are preserved, only the tz attribute
+#'   is corrected. Leave \code{NULL} (default) to keep whatever timezone the parser assigns.
 #'
 #' @return A tibble with standardised column names:
 #'   \item{datetime}{POSIXct datetime}
@@ -58,7 +63,8 @@ read_weather_data <- function(file_path,
                               temp_col = NULL,
                               rh_col = NULL,
                               pressure_col = NULL,
-                              confirm = TRUE) {
+                              confirm = TRUE,
+                              timezone = NULL) {
 
   # Check file exists
   if (!file.exists(file_path)) {
@@ -126,6 +132,11 @@ read_weather_data <- function(file_path,
     humidity = rh_col,
     pressure = pressure_col
   )
+
+  # Re-label datetime timezone if requested (force_tz preserves clock values).
+  if (!is.null(timezone) && nzchar(timezone) && inherits(result$datetime, "POSIXct")) {
+    result$datetime <- lubridate::force_tz(result$datetime, timezone)
+  }
 
   class(result) <- c("weather_data", class(result))
 
@@ -822,4 +833,167 @@ print.silo_data <- function(x, ...) {
   cat("\nColumns:", paste(names(x), collapse = ", "), "\n\n")
 
   NextMethod()
+}
+
+
+#' Download Weather Data from the SILO Data Drill API
+#'
+#' Downloads gridded daily weather data for an Australian location from the
+#' SILO Data Drill service (Long Paddock, Queensland Government). No API key
+#' is required; only an email address is needed for attribution.
+#'
+#' @param latitude Numeric. Decimal degrees, negative for southern hemisphere
+#'   (e.g., \code{-31.95} for Perth). Must be within Australia's bounding box
+#'   (latitude -44 to -10, longitude 113 to 154).
+#' @param longitude Numeric. Decimal degrees, positive for east
+#'   (e.g., \code{115.86} for Perth).
+#' @param start_date Character or Date. Start date in \code{"YYYY-MM-DD"} format.
+#' @param end_date Character or Date. End date in \code{"YYYY-MM-DD"} format.
+#' @param email Character. Email address for SILO attribution.
+#'   Does not need to be a real address. Default: \code{"sapfluxr@sapfluxr.net"}.
+#' @param output_file Character or NULL. If provided, the raw downloaded text
+#'   is saved to this path before parsing. Useful for caching.
+#' @param verbose Logical. If TRUE, prints progress messages. Default: TRUE.
+#'
+#' @return A tibble (with class \code{"silo_data"}) containing daily weather
+#'   variables. Key columns include:
+#'   \itemize{
+#'     \item \code{date} Date
+#'     \item \code{daily_rain} Rainfall (mm)
+#'     \item \code{max_temp} Maximum air temperature (degC)
+#'     \item \code{min_temp} Minimum air temperature (degC)
+#'     \item \code{vp} Vapour pressure (hPa)
+#'     \item \code{vp_deficit} Vapour pressure deficit (hPa)
+#'     \item \code{radiation} Solar radiation (MJ/m2)
+#'   }
+#'   Attributes \code{latitude}, \code{longitude}, and \code{source_file} are
+#'   attached to the returned tibble.
+#'
+#' @details
+#' Uses the SILO Data Drill API. The service interpolates from the Australian
+#' Bureau of Meteorology station network to the requested grid point. Coverage
+#' is Australia only. If \code{output_file} is provided and already exists,
+#' the cached file is read instead of re-downloading.
+#'
+#' @examples
+#' \dontrun{
+#' weather <- download_silo_weather(
+#'   latitude   = -31.95,
+#'   longitude  = 115.86,
+#'   start_date = "2023-01-01",
+#'   end_date   = "2023-12-31"
+#' )
+#' }
+#'
+#' @family weather data functions
+#' @export
+download_silo_weather <- function(latitude,
+                                  longitude,
+                                  start_date,
+                                  end_date,
+                                  email       = "sapfluxr@sapfluxr.net",
+                                  output_file = NULL,
+                                  verbose     = TRUE) {
+
+  if (!is.numeric(latitude) || !is.numeric(longitude)) {
+    stop("latitude and longitude must be numeric.")
+  }
+  if (latitude < -44 || latitude > -10 || longitude < 113 || longitude > 154) {
+    stop(
+      "Coordinates are outside Australia's bounding box ",
+      "(latitude -44 to -10, longitude 113 to 154). ",
+      "SILO only covers Australia."
+    )
+  }
+
+  start_fmt <- format(as.Date(start_date), "%Y%m%d")
+  end_fmt   <- format(as.Date(end_date),   "%Y%m%d")
+
+  silo_url <- sprintf(
+    paste0(
+      "https://www.longpaddock.qld.gov.au/cgi-bin/silo/",
+      "DataDrillDataset.php?lat=%s&lon=%s&start=%s&finish=%s",
+      "&format=alldata&comment=sapflow&username=%s&password=api"
+    ),
+    latitude, longitude, start_fmt, end_fmt, email
+  )
+
+  if (!is.null(output_file) && file.exists(output_file)) {
+    if (verbose) message("Using cached SILO file: ", output_file)
+    raw_file <- output_file
+  } else {
+    raw_file <- if (!is.null(output_file)) output_file else tempfile(fileext = ".txt")
+    if (verbose) message("Downloading SILO data for (", latitude, ", ", longitude, ")...")
+    utils::download.file(silo_url, raw_file, mode = "w", quiet = !verbose)
+    if (verbose) message("Download complete.")
+  }
+
+  silo_lines <- readLines(raw_file, warn = FALSE)
+
+  header_idx <- grep("^Date\\s+Day\\s+Date2", silo_lines)
+  if (length(header_idx) == 0) {
+    stop(
+      "Could not find SILO header line in downloaded file. ",
+      "The download may have failed. Check network access and credentials."
+    )
+  }
+  header_idx <- header_idx[1]
+
+  col_names  <- strsplit(trimws(silo_lines[header_idx]), "\\s+")[[1]]
+  data_lines <- silo_lines[(header_idx + 2):length(silo_lines)]
+  data_lines <- data_lines[nzchar(trimws(data_lines))]
+
+  silo_raw <- utils::read.table(
+    text             = data_lines,
+    header           = FALSE,
+    stringsAsFactors = FALSE
+  )
+
+  n_assign <- min(length(col_names), ncol(silo_raw))
+  names(silo_raw)[seq_len(n_assign)] <- col_names[seq_len(n_assign)]
+
+  result <- tibble::tibble(
+    date        = as.Date(as.character(silo_raw$Date), format = "%Y%m%d"),
+    day_of_year = as.integer(silo_raw$Day)
+  )
+
+  standard_cols <- c(
+    "daily_rain" = "Rain",
+    "max_temp"   = "Tmax",
+    "min_temp"   = "Tmin",
+    "vp"         = "VP",
+    "vp_deficit" = "VPD",
+    "radiation"  = "Rad",
+    "rh_max"     = "RHmax",
+    "rh_min"     = "RHmin",
+    "fao56_eto"  = "FAO56",
+    "mslp"       = "MSLP",
+    "wind_speed" = "Wind"
+  )
+
+  for (tidy_name in names(standard_cols)) {
+    silo_name <- standard_cols[[tidy_name]]
+    if (silo_name %in% names(silo_raw)) {
+      result[[tidy_name]] <- as.numeric(silo_raw[[silo_name]])
+    }
+  }
+
+  result <- result[!is.na(result$date), ]
+
+  attr(result, "latitude")    <- latitude
+  attr(result, "longitude")   <- longitude
+  attr(result, "source_file") <- raw_file
+
+  class(result) <- c("silo_data", class(result))
+
+  if (verbose) {
+    message(sprintf(
+      "SILO data: %d days (%s to %s)",
+      nrow(result),
+      format(min(result$date), "%d %b %Y"),
+      format(max(result$date), "%d %b %Y")
+    ))
+  }
+
+  result
 }

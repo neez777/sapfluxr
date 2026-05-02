@@ -10,9 +10,9 @@ recalc_vh_with_k(vh_results, k_new, k_old = NULL, probe_spacing = NULL)
 \item{vh_results}{A vh_results object from calc_heat_pulse_velocity() containing
 the temp_ratio column}
 
-\item{k_new}{New thermal diffusivity value (cm²/s)}
+\item{k_new}{New thermal diffusivity value (cm^2/s)}
 
-\item{k_old}{Original thermal diffusivity value used in initial calculation (cm²/s).
+\item{k_old}{Original thermal diffusivity value used in initial calculation (cm^2/s).
 If NULL, attempts to extract from attributes.}
 
 \item{probe_spacing}{Probe spacing (cm). If NULL, attempts to extract from attributes.}
@@ -29,13 +29,13 @@ particularly useful for Phase 3 corrections when estimated k differs from assume
 This function uses stored temperature ratios and times to recalculate velocities:
 
 \strong{For ratio-based methods (HRM, MHR, HRMX):}
-\code{Vh_new = (k_new / x) × ln(temp_ratio) × 3600}
+\code{Vh_new = (k_new / x) \* ln(temp_ratio) \* 3600}
 
 \strong{For Tmax_Coh:}
-\code{Vh_new = sqrt(x² - 4×k_new×t_max) / t_max × 3600}
+\code{Vh_new = sqrt(x^2 - 4 \* k_new \*t_max) / t_max \* 3600}
 
-**For Tmax_Klu:**
-\code{Vh_new = (x/t_max - sqrt(k_new/t_max)) × 3600}
+\strong{For Tmax_Klu:}
+\code{Vh_new = (x/t_max - sqrt(k_new/t_max)) \* 3600}
 
 Peclet numbers are automatically recalculated for HRM results.
 }

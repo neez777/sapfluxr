@@ -91,6 +91,8 @@ NULL
 apply_spacing_correction_both_sensors <- function(vh_data,
                                                    changepoints,
                                                    method = "HRM",
+                                                   vh_col = "Vh_cm_hr",
+                                                   correction_type = c("burgess", "linear"),
                                                    baseline_overrides_outer = NULL,
                                                    baseline_overrides_inner = NULL,
                                                    k_assumed = 0.0025,
@@ -98,6 +100,9 @@ apply_spacing_correction_both_sensors <- function(vh_data,
                                                    measurement_time = 80,
                                                    create_new_col = FALSE,
                                                    verbose = TRUE) {
+
+  # Match and validate
+  correction_type <- match.arg(correction_type)
 
   if (verbose) {
     cat("\n")
@@ -134,6 +139,8 @@ apply_spacing_correction_both_sensors <- function(vh_data,
     changepoints = changepoints,
     sensor_position = "outer",
     method = method,
+    vh_col = vh_col,
+    correction_type = correction_type,
     k_assumed = k_assumed,
     probe_spacing = probe_spacing,
     measurement_time = measurement_time,
@@ -156,6 +163,8 @@ apply_spacing_correction_both_sensors <- function(vh_data,
     changepoints = changepoints,
     sensor_position = "inner",
     method = method,
+    vh_col = vh_col,
+    correction_type = correction_type,
     k_assumed = k_assumed,
     probe_spacing = probe_spacing,
     measurement_time = measurement_time,

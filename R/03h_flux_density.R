@@ -9,8 +9,13 @@
 #'
 #' @param Vh Heat pulse velocity (cm/h). Can be raw, spacing-corrected, or
 #'   wound-corrected velocity. Use the most corrected version available.
+#' @param vh_data Data frame containing velocity measurements.
 #' @param wood_properties WoodProperties R6 object with calculated Z factor
 #'   (sap_flux_conversion_factor). Must have run calculate_wood_properties() first.
+#' @param velocity_col Name of velocity column to convert. Default: "Vc_cm_hr"
+#'   (wound-corrected velocity). Use "Vh_cm_hr_sc" for spacing-corrected,
+#'   or "Vh_cm_hr" for raw velocity.
+#' @param ... Additional arguments passed to methods.
 #'
 #' @return Sap flux density (cm^3/cm^2/h) = sap velocity (cm/h)
 #'
@@ -66,7 +71,7 @@ calc_sap_flux_density <- function(Vh,
   if (!is.null(vh_data)) {
     # User provided a data frame - delegate to apply_flux_conversion
     if (is.null(velocity_col)) {
-      velocity_col <- "Vh_cm_hr"  # Default
+      velocity_col <- if ("Vs_cm_hr" %in% names(vh_data)) "Vs_cm_hr" else "Vh_cm_hr"
     }
     return(apply_flux_conversion(
       data = vh_data,
@@ -105,9 +110,9 @@ calc_sap_flux_density <- function(Vh,
 #'
 #' @param data Data frame with velocity measurements
 #' @param wood_properties WoodProperties R6 object with calculated Z factor
-#' @param velocity_col Name of velocity column to convert. Default: "Vc_cm_hr"
-#'   (wound-corrected velocity). Use "Vh_cm_hr_sc" for spacing-corrected,
-#'   or "Vh_cm_hr" for raw velocity.
+#' @param velocity_col Name of velocity column to convert. Default: \code{NULL}
+#'   (auto-detects in priority order: \code{Vs_cm_hr}, \code{Vc_cm_hr},
+#'   \code{Vh_cm_hr_sc}, \code{Vh_cm_hr}).
 #' @param output_col Name for output column. Default: "Jv_cm3_cm2_hr"
 #'
 #' @return Data frame with added Jv column
@@ -116,39 +121,47 @@ calc_sap_flux_density <- function(Vh,
 #' This is a convenience wrapper around \code{\link{calc_sap_flux_density}}
 #' for data frame operations.
 #'
-#' **Column Selection:**
-#' - "Vc_cm_hr" - Wound-corrected velocity (RECOMMENDED)
-#' - "Vh_cm_hr_sc" - Spacing-corrected velocity
-#' - "Vh_cm_hr" - Raw heat pulse velocity
-#'
-#' Use the most corrected velocity available.
+#' **Column Selection (auto-detected in priority order):**
+#' - \code{Vs_cm_hr} - Current best estimate (RECOMMENDED — updated at every correction step)
+#' - \code{Vc_cm_hr} - Legacy alias for \code{Vs_cm_hr} after wound correction
+#' - \code{Vh_cm_hr_sc} - Spacing-corrected velocity
+#' - \code{Vh_cm_hr} - Raw heat pulse velocity
 #'
 #' @examples
 #' \dontrun{
-#' # After wound correction
-#' vh_corrected <- apply_wound_correction(vh_data, ...)
+#' # After corrections — auto-detects Vs_cm_hr
+#' vh_corrected <- apply_flux_conversion(
+#'   vh_corrected,
+#'   wood_properties = wood_props
+#' )
 #'
-#' # Convert to flux density
+#' # Or explicitly
 #' vh_corrected <- apply_flux_conversion(
 #'   vh_corrected,
 #'   wood_properties = wood_props,
-#'   velocity_col = "Vc_cm_hr"
+#'   velocity_col = "Vs_cm_hr"
 #' )
 #'
-#' # Check results
-#' head(vh_corrected[, c("datetime", "Vh_cm_hr", "Vc_cm_hr", "Jv_cm3_cm2_hr")])
+#' head(vh_corrected[, c("datetime", "Vs_cm_hr", "Jv_cm3_cm2_hr")])
 #' }
 #'
 #' @family flux density functions
 #' @export
 apply_flux_conversion <- function(data,
                                    wood_properties,
-                                   velocity_col = "Vc_cm_hr",
+                                   velocity_col = NULL,
                                    output_col = "Jv_cm3_cm2_hr") {
 
   # Input validation
   if (!is.data.frame(data)) {
     stop("data must be a data frame")
+  }
+
+  if (is.null(velocity_col)) {
+    velocity_col <- if ("Vs_cm_hr" %in% names(data)) "Vs_cm_hr" else
+                    if ("Vc_cm_hr" %in% names(data)) "Vc_cm_hr" else
+                    if ("Vh_cm_hr_sc" %in% names(data)) "Vh_cm_hr_sc" else
+                    "Vh_cm_hr"
   }
 
   if (!velocity_col %in% names(data)) {

@@ -15,7 +15,7 @@ Returns a list of default calculation parameters for heat pulse velocity calcula
 \details{
 Default parameters are:
 \describe{
-\item{diffusivity}{Thermal diffusivity of sapwood (0.0025 cm²/s)}
+\item{diffusivity}{Thermal diffusivity of sapwood (0.0025 cm^2/s)}
 \item{probe_spacing}{Distance from heat source (0.5 cm)}
 \item{L}{Lower proportion of deltaTmax for HRMX sampling window (0.5)}
 \item{H}{Higher proportion of deltaTmax for HRMX sampling window (0.8)}

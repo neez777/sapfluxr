@@ -12,9 +12,7 @@ Data frame with columns:
 \item{c}{Polynomial coefficient c}
 \item{d}{Polynomial coefficient d}
 \item{B_linear}{Linear correction coefficient (recommended)}
-\item{r_squared}{R² for linear approximation}
-\item{reinstall_dates}{POSIXct vector of reinstallation dates, optional}
-\item{reinstall_measured_diameters}{Numeric vector of measured wound diameters at each reinstallation (mm), optional. Enables Segmented Sawtooth Model with period-specific growth rates.}
+\item{r_squared}{R^2 for linear approximation}
 }
 }
 \usage{
@@ -22,10 +20,10 @@ wound_coefficients_5mm
 }
 \description{
 Lookup table for wound correction coefficients at standard 5mm probe spacing.
-Linear coefficient (B) provides excellent fit (r² > 0.998) for most applications.
+Linear coefficient (B) provides excellent fit (r^2 > 0.998) for most applications.
 }
 \details{
-Coefficients apply correction: Vc = B × Vh (linear) or Vc = b×Vh + c×Vh² + d×Vh³ (polynomial)
+Coefficients apply correction: Vc = B \* Vh (linear) or Vc = b\*Vh + c\*Vh^2 + d\*Vh^3 (polynomial)
 }
 \references{
 Burgess, S.S.O., Adams, M.A., Turner, N.C., et al. (2001). Tree Physiology 21: 589-598.

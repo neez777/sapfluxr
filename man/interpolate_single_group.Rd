@@ -14,7 +14,7 @@ interpolate_single_group(
 )
 }
 \arguments{
-\item{group_data}{Data frame for a single group (one method × sensor combination)}
+\item{group_data}{Data frame for a single group (one method * sensor combination)}
 
 \item{flags_to_interpolate}{Quality flags to interpolate}
 

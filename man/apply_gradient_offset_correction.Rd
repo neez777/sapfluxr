@@ -9,7 +9,9 @@ apply_gradient_offset_correction(
   changepoints,
   vh_col,
   new_col_suffix = "_gradient_corrected",
-  edge_handling = "extend"
+  edge_handling = c("extend", "zero", "na"),
+  correction_type = c("linear", "burgess"),
+  lookup_table = NULL
 )
 }
 \arguments{
@@ -22,11 +24,25 @@ columns: timestamp, vh_value}
 
 \item{new_col_suffix}{Suffix for corrected column name (default: "_gradient_corrected")}
 
-\item{edge_handling}{How to handle edges before first/after last changepoint.
-Options: "extend" (use nearest), "zero" (no correction). Default: "extend"}
+\item{edge_handling}{Character, how to handle data before the first and after
+the last changepoint. One of:
+\itemize{
+\item \strong{"extend"} (default) - Use the value of the nearest changepoint
+\item \strong{"zero"} - Assume zero offset (no correction)
+\item \strong{"na"} - Set to NA (exclude from analysis)
+}}
+
+\item{correction_type}{Character, either "linear" (default) or "burgess".
+Linear uses a 1:1 offset; Burgess uses physics-based coefficients derived
+continuously from the interpolated baseline.}
+
+\item{lookup_table}{Optional pre-calculated Burgess lookup table. Required if
+\code{correction_type = "burgess"}.}
 }
 \value{
 Data frame with additional column containing gradient-corrected values
+
+A data frame containing the corrected velocity data.
 }
 \description{
 Applies a gradient-based zero offset correction by linearly interpolating
@@ -69,6 +85,24 @@ The gradient represents:
 \item More accurate integration for daily/seasonal water use totals
 \item Slope between changepoints has physical meaning
 }
+
+\strong{Continuous vs. Segmented Correction:}
+
+Traditional spacing correction divides the time series into discrete segments,
+applying a single constant offset to all data points within a segment. This
+can create artificial "jumps" in sap flow at segment boundaries.
+
+Gradient interpolation eliminates these jumps by calculating a unique zero-flow
+offset for every timestamp. It linearly interpolates the baseline between
+identified zero-flow points (changepoints).
+
+\strong{Correction Math:}
+\itemize{
+\item \strong{Linear:} \eqn{V_c(t) = V_h(t) - zero\_vh(t)}
+\item \strong{Burgess:} \eqn{V_c(t) = a(t) \times V_h(t) + b(t)}, where
+\eqn{a(t)} and \eqn{b(t)} are derived from \eqn{zero\_vh(t)} via the
+Burgess physics model.
+}
 }
 \examples{
 \dontrun{
@@ -91,9 +125,39 @@ vh_corrected <- apply_gradient_offset_correction(
 head(vh_corrected[, c("datetime", "Vh_cm_hr", "Vh_cm_hr_gradient_corrected")])
 }
 
+\dontrun{
+# Identify stable periods
+dual_result <- find_dual_stable_periods(vh_data, weather_data)
+
+# Apply gradient correction (Linear)
+vh_corrected <- apply_gradient_offset_correction(
+  vh_data = vh_data,
+  changepoints = dual_result$changepoints,
+  vh_col = "Vh_cm_hr",
+  correction_type = "linear"
+)
+
+# Apply gradient correction (Burgess)
+# Requires a lookup table generated from wood properties
+lookup <- calculate_burgess_coefficients(k = 0.0025, x = 0.5)
+vh_corrected_burgess <- apply_gradient_offset_correction(
+  vh_data = vh_data,
+  changepoints = dual_result$changepoints,
+  vh_col = "Vh_cm_hr",
+  correction_type = "burgess",
+  lookup_table = lookup
+)
+}
+
 }
 \seealso{
 \code{\link{find_dual_stable_periods}} for identifying changepoints
+
+\code{\link{find_dual_stable_periods}} for identifying changepoints
+
+Other dual stability functions: 
+\code{\link{find_dual_stable_periods}()},
+\code{\link{find_stable_vh_dates}()}
 
 Other dual stability functions: 
 \code{\link{find_dual_stable_periods}()},

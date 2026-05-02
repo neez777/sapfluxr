@@ -53,7 +53,7 @@
 #'
 #' **Applicability:**
 #'
-#' Works for all methods: HRM, MHR, HRMXa, HRMXb, Tmax_Coh, Tmax_Klu
+#' Works for all methods: HRM, MHR, Tmax_Coh, Tmax_Klu
 #'
 #' **Alternative:**
 #'

@@ -495,78 +495,6 @@ apply_burgess_spacing_correction <- function(vh_data,
 }
 
 
-#' Apply Spacing Correction Workflow
-#'
-#' Complete workflow for spacing correction using zero-flow calibration.
-#' Orchestrates zero offset calculation, coefficient lookup, and correction application.
-#'
-#' @param vh_data Data frame containing validated/filtered velocity data
-#' @param zero_periods List of zero-flow periods (see \code{\link{calculate_zero_offset}})
-#' @param sensors Vector of sensor positions to process (default: c("outer", "inner"))
-#' @param method Method to correct (default: "HRM")
-#' @param method_col Name of method column (default: "method")
-#' @param vh_col Name of velocity column (default: "Vh_cm_hr")
-#' @param k_assumed Assumed thermal diffusivity (cm^2/s) (default: 0.0025)
-#' @param probe_spacing Probe spacing (cm) (default: 0.5)
-#' @param measurement_time Measurement time (sec) (default: 80)
-#' @param lookup_table Optional pre-calculated Burgess lookup table. If NULL,
-#'   will calculate using \code{\link{calculate_burgess_coefficients}}
-#' @param create_new_col Logical, whether to create new corrected column (default: TRUE)
-#' @param verbose Logical, whether to print progress messages (default: TRUE)
-#'
-#' @return A list containing:
-#'   \item{vh_corrected}{Data frame with spacing corrections applied}
-#'   \item{zero_offset_results}{List of zero offset results per sensor}
-#'   \item{correction_coefficients}{List of correction coefficients per sensor}
-#'   \item{metadata}{List containing correction metadata}
-#'
-#' @details
-#' **Workflow Steps:**
-#'
-#' For each sensor position:
-#' \enumerate{
-#'   \item Calculate zero offset from zero-flow periods
-#'   \item Look up Burgess correction coefficients
-#'   \item Apply linear correction to all data
-#'   \item Store metadata for reproducibility
-#' }
-#'
-#' **Metadata Stored:**
-#' \itemize{
-#'   \item Zero-flow period specifications
-#'   \item Zero offset values and quality metrics (CV)
-#'   \item Correction coefficients (a, b)
-#'   \item Thermal diffusivity assumed
-#'   \item Date/time of correction
-#' }
-#'
-#' @examples
-#' \dontrun{
-#' # Complete spacing correction workflow
-#' zero_periods <- list(
-#'   list(start = "2024-05-01 00:00:00", end = "2024-05-05 23:59:59"),
-#'   list(start = "2024-08-15 00:00:00", end = "2024-08-18 23:59:59")
-#' )
-#'
-#' correction_result <- apply_spacing_correction_workflow(
-#'   vh_data = vh_cleaned,
-#'   zero_periods = zero_periods,
-#'   sensors = c("outer", "inner"),
-#'   method = "HRM",
-#'   k_assumed = 0.0025
-#' )
-#'
-#' # Extract corrected data
-#' vh_corrected <- correction_result$vh_corrected
-#'
-#' # View correction summary
-#' print_spacing_correction_summary(correction_result)
-#'
-#' # Check zero offset quality
-#' print(correction_result$zero_offset_results$outer$overall_cv)
-#' }
-
-
 #' Validate Zero-Flow Offset for Burgess Correction
 #'
 #' Validates that a detected zero-flow offset is within the physically possible
@@ -640,6 +568,71 @@ validate_zero_offset <- function(offset,
 }
 
 
+#' Apply Spacing Correction Workflow
+#'
+#' Complete workflow for spacing correction using zero-flow calibration.
+#' Orchestrates zero offset calculation, coefficient lookup, and correction application.
+#'
+#' @param vh_data Data frame containing validated/filtered velocity data
+#' @param zero_periods List of zero-flow periods (see \code{\link{calculate_zero_offset}})
+#' @param sensors Vector of sensor positions to process (default: c("outer", "inner"))
+#' @param method Method to correct (default: "HRM")
+#' @param method_col Name of method column (default: "method")
+#' @param vh_col Name of velocity column (default: "Vh_cm_hr")
+#' @param k_assumed Assumed thermal diffusivity (cm^2/s) (default: 0.0025)
+#' @param probe_spacing Probe spacing (cm) (default: 0.5)
+#' @param measurement_time Measurement time (sec) (default: 80)
+#' @param lookup_table Optional pre-calculated Burgess lookup table. If NULL,
+#'   will calculate using \code{\link{calculate_burgess_coefficients}}
+#' @param create_new_col Logical, whether to create new corrected column (default: TRUE)
+#' @param verbose Logical, whether to print progress messages (default: TRUE)
+#'
+#' @return A list containing:
+#'   \item{vh_corrected}{Data frame with spacing corrections applied}
+#'   \item{zero_offset_results}{List of zero offset results per sensor}
+#'   \item{correction_coefficients}{List of correction coefficients per sensor}
+#'   \item{metadata}{List containing correction metadata}
+#'
+#' @details
+#' **Workflow Steps:**
+#'
+#' For each sensor position:
+#' \enumerate{
+#'   \item Calculate zero offset from zero-flow periods
+#'   \item Look up Burgess correction coefficients
+#'   \item Apply linear correction to all data
+#'   \item Store metadata for reproducibility
+#' }
+#'
+#' **Metadata Stored:**
+#' \itemize{
+#'   \item Zero-flow period specifications
+#'   \item Zero offset values and quality metrics (CV)
+#'   \item Correction coefficients (a, b)
+#'   \item Thermal diffusivity assumed
+#'   \item Date/time of correction
+#' }
+#'
+#' @examples
+#' \dontrun{
+#' # Complete spacing correction workflow
+#' zero_periods <- list(
+#'   list(start = "2024-05-01 00:00:00", end = "2024-05-05 23:59:59"),
+#'   list(start = "2024-08-15 00:00:00", end = "2024-08-18 23:59:59")
+#' )
+#'
+#' correction_result <- apply_spacing_correction_workflow(
+#'   vh_data = vh_cleaned,
+#'   zero_periods = zero_periods,
+#'   sensors = c("outer", "inner"),
+#'   method = "HRM",
+#'   k_assumed = 0.0025
+#' )
+#'
+#' # Extract corrected data
+#' vh_corrected <- correction_result$vh_corrected
+#' }
+#'
 #' @references
 #' Burgess, S.S.O., Adams, M.A., Turner, N.C., Beverly, C.R., Ong, C.K.,
 #'   Khan, A.A.H., & Bleby, T.M. (2001). An improved heat pulse method to

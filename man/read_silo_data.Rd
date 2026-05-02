@@ -28,10 +28,10 @@ are removed.
 
 Site metadata is stored as attributes:
 \itemize{
-\item \code{latitude}, \code{longitude} — site coordinates
-\item \code{elevation} — site elevation (if present in metadata)
-\item \code{silo_dataset} — SILO dataset name
-\item \code{silo_extracted} — extraction date
+\item \code{latitude}, \code{longitude} - site coordinates
+\item \code{elevation} - site elevation (if present in metadata)
+\item \code{silo_dataset} - SILO dataset name
+\item \code{silo_extracted} - extraction date
 }
 }
 \description{
@@ -71,6 +71,7 @@ silo[silo$rain_7d > 20, ]
 \seealso{
 Other weather data functions: 
 \code{\link{calc_vpd}()},
+\code{\link{download_silo_weather}()},
 \code{\link{read_weather_data}()}
 }
 \concept{weather data functions}

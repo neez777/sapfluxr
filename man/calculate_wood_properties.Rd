@@ -19,7 +19,7 @@ formulas from Burgess et al. (2001) and Barrett et al. (1995).
 \details{
 This function implements the complete calculation chain:
 \enumerate{
-\item Unit conversions (g → kg, cm³ → m³)
+\item Unit conversions (g -> kg, cm^3 -> m^3)
 \item Base densities (dry, fresh, basic)
 \item Moisture content
 \item Fiber saturation point properties
@@ -35,7 +35,7 @@ This function implements the complete calculation chain:
 
 Must provide ONE method. Both methods calculate all derived properties
 including Y and Z factors. Method 2 back-calculates moisture content from
-the density ratio: mc = (ρfw/ρdw) - 1.
+the density ratio: mc = (rho_fw/rho_dw) - 1.
 }
 \references{
 Burgess, S.S.O., Adams, M.A., Turner, N.C., et al. (2001). Tree Physiology 21: 589-598.

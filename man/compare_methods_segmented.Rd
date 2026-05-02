@@ -35,13 +35,15 @@ If NULL, uses midpoint of data range. Default: NULL.}
 \item{create_plots}{Logical indicating whether to create diagnostic plots (default: TRUE).}
 
 \item{verbose}{Logical indicating whether to print progress (default: TRUE).}
+
+\item{velocity_col}{Name of velocity column to use (default: "Vh_cm_hr").}
 }
 \value{
 A list with components \code{breakpoint} (estimated breakpoint
 velocity in cm/hr), \code{breakpoint_ci} (95\\% confidence interval),
 \code{breakpoint_se} (standard error), \code{slope_before} (slope before
 breakpoint), \code{slope_after} (slope after breakpoint), \code{r_squared}
-(overall R² of segmented model), \code{davies_test} (p-value from Davies
+(overall R^2 of segmented model), \code{davies_test} (p-value from Davies
 test), \code{n_points} (number of points), \code{segmented_model} (full
 model object), \code{merged_data} (paired measurements data frame),
 \code{plots} (list of diagnostic plots if \code{create_plots = TRUE}),
@@ -79,7 +81,7 @@ begins to underestimate compared to the secondary method. This identifies:
 \item The calibration region for aligning methods
 }
 
-\strong{Advantages over R² Optimization:}
+\strong{Advantages over R^2 Optimization:}
 
 \itemize{
 \item \strong{Statistical rigor}: Confidence intervals and significance testing

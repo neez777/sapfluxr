@@ -9,124 +9,31 @@ apply_wound_correction(
   wound_diameter = NULL,
   probe_spacing = "5mm",
   wood_properties = NULL,
-  use_spacing_corrected = TRUE,
+  velocity_col = NULL,
   confirm_parameters = TRUE,
   verbose = TRUE
 )
 }
 \arguments{
-\item{vh_data}{Data frame containing velocity measurements. Must have columns:
-\describe{
-\item{datetime}{POSIXct timestamp}
-\item{Vh_cm_hr}{Heat pulse velocity (cm/hr) - raw or after spacing correction}
-\item{method}{Calculation method used}
-\item{sensor_position}{"inner" or "outer"}
-}
-If spacing correction was applied, should also have \code{Vh_cm_hr_sc} column.}
+\item{vh_data}{Data frame containing velocity measurements.}
 
-\item{wound_diameter}{Wound diameter in cm (typically 0.17-0.30 cm, i.e., 1.7-3.0 mm).
-This is usually the drill bit diameter used for probe installation.
-DEPRECATED: Use wood_properties parameter instead for temporal wound tracking.
-If NULL, will use wood_properties. Default: NULL}
+\item{wound_diameter}{Wound diameter in cm (optional).}
 
-\item{probe_spacing}{Probe spacing: "5mm" (standard, default) or "6mm" (legacy).
-Determines which coefficient lookup table to use.}
+\item{probe_spacing}{Probe spacing: "5mm" or "6mm".}
 
-\item{wood_properties}{Optional WoodProperties object.
-If provided, uses wound configuration for temporal wound diameter calculation.
-Supports both static and time-varying wound diameters.}
+\item{wood_properties}{Optional WoodProperties object.}
 
-\item{use_spacing_corrected}{Logical. If TRUE and \code{Vh_cm_hr_sc} column exists,
-applies wound correction to spacing-corrected velocities. Default: TRUE}
+\item{velocity_col}{Name of velocity column to use as input. Default: \code{NULL}
+(auto-detects in priority order: \code{Vs_cm_hr}, \code{Vh_cm_hr_sc},
+\code{Vh_cm_hr_raw}).}
 
-\item{confirm_parameters}{Logical. If TRUE and in interactive mode, prompts user
-to confirm parameters before applying correction. Default: TRUE}
+\item{confirm_parameters}{Logical. Default: TRUE}
 
-\item{verbose}{Logical. If TRUE, prints progress messages and summary.
-Default: TRUE}
+\item{verbose}{Logical. Default: TRUE}
 }
 \value{
-Data frame with original columns plus:
-\describe{
-\item{Vh_cm_hr_raw}{Original raw velocities (preserved)}
-\item{Vh_cm_hr_sc}{Spacing correction results (preserved if it existed)}
-\item{Vh_cm_hr_wc}{Wound correction results (new audit column)}
-\item{Vh_cm_hr}{Current best available velocity (hybrid)}
-\item{Vc_cm_hr}{Alias for current best (legacy, same as Vh_cm_hr)}
-\item{wound_correction_factor}{Linear correction factor B applied}
-\item{wound_diameter_cm}{Wound diameter used for correction (cm)}
-\item{wound_correction_applied}{Logical flag indicating correction was applied}
-}
+Corrected data frame.
 }
 \description{
-Corrects heat pulse velocity measurements for the systematic underestimation
-caused by wound tissue around probe insertion holes. Uses linear correction
-coefficients from Burgess et al. (2001) lookup tables.
+Apply Wound Correction to Heat Pulse Velocity Data
 }
-\details{
-\strong{Why Wound Correction is Needed:}
-
-When probes are inserted into sapwood, they create wound tissue that:
-\itemize{
-\item Has different thermal properties than healthy sapwood
-\item Causes systematic underestimation of sap velocity
-\item Effect increases with wound size and flow rate
-}
-
-\strong{Correction Method:}
-
-Uses linear approximation: \code{Vc = B × Vh}
-
-Where B is the correction factor from lookup tables (r² > 0.998).
-B typically ranges from ~1.7 (small wounds) to ~2.6 (large wounds).
-
-\strong{Wound Diameter:}
-
-The wound diameter depends on drill bit size:
-\itemize{
-\item 1.7 mm drill → 0.17 cm wound diameter
-\item 2.0 mm drill → 0.20 cm wound diameter (common for ICT probes)
-\item 2.5 mm drill → 0.25 cm wound diameter
-\item 3.0 mm drill → 0.30 cm wound diameter
-}
-
-\strong{Workflow Position:}
-
-Wound correction should be applied AFTER spacing correction but BEFORE
-flux density calculation:
-
-\code{Vh (raw) → Spacing Correction → Wound Correction → Vc → Flux Density}
-}
-\examples{
-\dontrun{
-# After spacing correction
-vh_sc <- apply_spacing_correction(vh_results, ...)
-
-# Apply wound correction with 2.0 mm drill bit
-vh_corrected <- apply_wound_correction(
-  vh_sc,
-  wound_diameter = 0.20
-)
-
-# Or read wound diameter from wood properties
-vh_corrected <- apply_wound_correction(
-  vh_sc,
-  wood_properties = "eucalyptus"
-)
-
-# Check correction factor applied
-unique(vh_corrected$wound_correction_factor)
-}
-
-}
-\references{
-Burgess, S.S.O., Adams, M.A., Turner, N.C., Beverly, C.R., Ong, C.K.,
-Khan, A.A.H., Bleby, T.M. (2001). An improved heat pulse method to measure
-low and reverse rates of sap flow in woody plants. Tree Physiology 21: 589-598.
-
-Swanson, R.H., Whitfield, D.W.A. (1981). A numerical analysis of heat pulse
-velocity theory and practice. Journal of Experimental Botany 32: 221-239.
-
-ICT International (2020). SFM1 Sap Flow Meter User Manual Version 5.2.
-}
-\concept{correction functions}

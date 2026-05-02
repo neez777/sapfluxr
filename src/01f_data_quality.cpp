@@ -20,9 +20,9 @@ using namespace Rcpp;
 //'
 //' @details
 //' For each point i, calculates mean and SD of window `(i-window):(i+window)`.
-//' Points deviating by more than threshold × SD from the local mean are flagged.
+//' Points deviating by more than threshold x SD from the local mean are flagged.
 //'
-//' **Performance:** O(n × window) but with fast C++ loops and minimal overhead.
+//' **Performance:** O(n x window) but with fast C++ loops and minimal overhead.
 //' Typically 10-50x faster than pure R implementation for large datasets.
 //'
 //' @keywords internal

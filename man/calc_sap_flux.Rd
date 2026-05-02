@@ -11,7 +11,7 @@ calc_sap_flux(flux_data, sapwood_areas, method = "weighted_average")
 \describe{
 \item{datetime}{Timestamp}
 \item{sensor_position}{Sensor position ("outer", "inner")}
-\item{Jv_cm3_cm2_hr}{Sap flux density (cm³/cm²/hr)}
+\item{Jv_cm3_cm2_hr}{Sap flux density (cm^3/cm^2/hr)}
 }}
 
 \item{sapwood_areas}{Output from \code{\link{calc_sapwood_areas}}}
@@ -22,7 +22,7 @@ Hatton 1990) or "simple" (uniform weighting)}
 \value{
 Data frame with added columns:
 \describe{
-\item{Q_cm3_hr}{Total sap flux (cm³/hr) per timestamp}
+\item{Q_cm3_hr}{Total sap flux (cm^3/hr) per timestamp}
 \item{Q_L_hr}{Total sap flux (L/hr) per timestamp}
 \item{Q_L_day}{Total sap flux (L/day) per timestamp}
 }
@@ -33,37 +33,25 @@ over the sapwood cross-sectional area to calculate total sap flux (Q).
 Implements the weighted average method from Hatton et al. (1990).
 }
 \details{
-\strong{Velocity Assumptions for Unmeasured Regions:}
-
-Based on your spreadsheet specifications:
-\enumerate{
-\item \strong{Sapwood 10-20mm with inner sensor in heartwood:}
-\itemize{
-\item Inner ring velocity = Outer velocity / 2
-\item (Linear decrease from outer boundary to heartwood)
-}
-\item \strong{Sapwood > 25mm with innermost region beyond sensors:}
-\itemize{
-\item Innermost ring velocity = Inner velocity / 2
-\item (Linear decrease from inner boundary to heartwood)
-}
-}
-
 \strong{Integration Formula (Hatton et al. 1990):}
 
-Q = Σ (Aₖ × Jvₖ)
+\deqn{Q = \sum_{k} A_k \cdot J_{v,k}}
 
-Where:
-\itemize{
-\item Aₖ = area of ring k (cm²)
-\item Jvₖ = flux density for ring k (cm³/cm²/hr)
-\item Sum over all sapwood rings
-}
+Where \eqn{A_k} is the cross-sectional area of ring \eqn{k} (cm^2) and
+\eqn{J_{v,k}} is the sap flux density for that ring (cm^3/cm^2/hr).
+
+\strong{Flux assignment per annulus:}
+
+Annulus boundaries and sensor assignments are determined entirely by
+\code{\link{calc_sapwood_areas}}. Each annulus in the \code{rings} data frame
+carries a \code{sensor_source} (which sensor's Jv to use) and a \code{measured}
+flag. For sensorless annuli (\code{measured = FALSE}), Jv is estimated as half
+the adjacent sensor's value, assuming a linear velocity decrease with depth.
 }
 \examples{
 \dontrun{
-# Calculate sapwood areas
-areas <- calc_sapwood_areas(dbh = 30, sapwood_depth = 3.5)
+# Calculate sapwood areas (sapwood_depth is from bark surface)
+areas <- calc_sapwood_areas(dbh = 30, bark_thickness = 0.5, sapwood_depth = 3.0)
 
 # Integrate flux density measurements
 flux_data <- calc_sap_flux(flux_data, areas)
@@ -78,6 +66,8 @@ Hatton, T.J., Catchpole, E.A., & Vertessy, R.A. (1990). Integration of
 sapflow velocity to estimate plant water use. Tree Physiology, 6, 201-209.
 }
 \seealso{
+\code{\link{calc_sapwood_areas}}
+
 Other sapwood integration functions: 
 \code{\link{apply_sap_flux_integration}()},
 \code{\link{calc_sapwood_areas}()}

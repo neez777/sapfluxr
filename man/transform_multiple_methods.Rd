@@ -8,7 +8,7 @@ transform_multiple_methods(
   vh_corrected,
   calibrations,
   verbose = TRUE,
-  velocity_col = "Vh_cm_hr"
+  velocity_col = "Vs_cm_hr"
 )
 }
 \arguments{
@@ -18,6 +18,8 @@ transform_multiple_methods(
 \code{\link{calibrate_multiple_methods}} (a named list of calibrations).}
 
 \item{verbose}{Logical indicating whether to print progress (default: TRUE).}
+
+\item{velocity_col}{Name of velocity column to use (default: "Vh_cm_hr").}
 }
 \value{
 The \code{vh_corrected} data frame with all secondary methods

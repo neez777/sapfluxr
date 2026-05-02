@@ -1,676 +1,230 @@
 # R/03k_spacing_correction_unified.R
 # Unified Spacing Correction Interface
-# Provides a single entry point for all spacing correction methods
+# Provides a single entry point for applying spacing corrections
 
 #' Apply Spacing Correction (Unified Interface)
 #'
-#' **Unified interface for all spacing correction methods.** This function provides
-#' a single entry point for applying spacing corrections using any of four detection
-#' methods: Manual, PELT, VPD-based, or Heartwood continuous reference.
+#' **Unified interface for applying spacing corrections.** This function focus purely
+#' on applying corrections based on pre-identified zero-flow points (changepoints).
+#' It separates the model used to connect these points from the math used to
+#' calculate the corrected velocity.
 #'
 #' @param vh_data Data frame containing velocity data with columns:
 #'   \code{datetime}, \code{sensor_position}, \code{method}, \code{Vh_cm_hr}
-#' @param method Character string specifying the detection method. One of:
+#' @param changepoints Identified zero-flow points.
 #'   \itemize{
-#'     \item \strong{"manual"} - User-specified changepoint dates
-#'     \item \strong{"pelt"} - Automatic PELT changepoint detection from daily minima
-#'     \item \strong{"vpd"} - Environmental suitability based on low VPD periods
-#'     \item \strong{"heartwood"} - Continuous correction using heartwood inner sensor
+#'     \item For \code{offset_model = "segment"}: A vector of \code{Date} or character dates.
+#'     \item For \code{offset_model = "gradient"}: A data frame with \code{timestamp} and \code{vh_value} columns.
 #'   }
+#' @param offset_model Character string specifying how to connect zero-flow points.
+#'   \itemize{
+#'     \item \strong{"segment"} - Constant offset between changepoints (step-wise).
+#'     \item \strong{"gradient"} - Linear interpolation between points (continuous).
+#'   }
+#' @param correction_math Character string specifying the math used for correction.
+#'   \itemize{
+#'     \item \strong{"burgess"} - Physics-based coefficients (Burgess et al. 2001).
+#'     \item \strong{"linear"} - Simple 1:1 offset subtraction.
+#'   }
+#' @param sensor_position Character, which sensor(s) to correct: \code{"both"}, \code{"outer"}, or \code{"inner"}.
 #' @param hpv_method Character, velocity calculation method to correct (default: "HRM").
-#'   Burgess spacing correction is only validated for HRM.
-#' @param wood_properties Wood properties object or list containing:
-#'   \itemize{
-#'     \item \code{derived_properties$thermal_diffusivity_actual_cm2_s} - Thermal diffusivity (cm^2/s)
-#'     \item \code{tree_measurements$sapwood_depth} - Sapwood depth (cm, required for heartwood method)
-#'     \item \code{tree_measurements$bark_thickness} - Bark thickness (cm, optional)
-#'   }
-#' @param probe_config Probe configuration object (required for heartwood method)
-#' @param weather_data Weather data frame with \code{datetime} and \code{vpd_kpa} columns
-#'   (required for VPD method)
-#' @param ... Additional method-specific parameters. See Details.
+#' @param wood_properties Wood properties object or list containing thermal diffusivity.
+#' @param ... Additional method-specific parameters.
 #' @param verbose Logical, whether to print progress messages (default: TRUE)
 #'
-#' @return A list with class \code{"spacing_correction_result"} containing:
-#'   \item{vh_corrected}{Data frame with corrected velocities, including:
-#'     \itemize{
-#'       \item \code{Vh_cm_hr_raw} - Original raw values
-#'       \item \code{Vh_cm_hr_sc} - Spacing-corrected results
-#'       \item \code{Vh_cm_hr} - Current best available (hybrid)
-#'       \item \code{spacing_correction_a} - Slope coefficient (a) applied
-#'       \item \code{spacing_correction_b} - Intercept coefficient (b) applied
-#'       \item \code{baseline_offset_cm_hr} - Zero-flow baseline (cm/hr)
-#'       \item \code{spacing_correction_applied} - Logical flag
-#'     }
+#' @return A data frame containing
+#'   the corrected velocity data. Correction metadata is stored as R attributes:
+#'   \itemize{
+#'     \item \code{Vh_cm_hr_raw} - Original raw values (preserved, locked)
+#'     \item \code{Vh_cm_hr_sc} - Spacing-corrected results (NA where not applied)
+#'     \item \code{Vs_cm_hr} - Current best estimate (hybrid of raw + corrections)
+#'     \item \code{Vh_cm_hr} - Restored to raw after Vs_cm_hr is captured
 #'   }
-#'   \item{method_used}{Character, which detection method was used}
-#'   \item{changepoints}{Detected or specified changepoints (Date vector)}
-#'   \item{segments}{Data frame describing correction segments}
-#'   \item{correction_info}{Method-specific correction information}
-#'   \item{metadata}{Metadata about correction parameters}
-#'
-#' @details
-#' ## Method-Specific Parameters
-#'
-#' ### Manual Method (\code{method = "manual"})
-#'
-#' **Required:**
-#' \itemize{
-#'   \item \code{manual_changepoints} - Vector of changepoint dates (Date or character "YYYY-MM-DD")
-#' }
-#'
-#' **Optional:**
-#' \itemize{
-#'   \item \code{baseline_overrides_outer} - Named list of manual baselines for outer sensor per segment
-#'   \item \code{baseline_overrides_inner} - Named list of manual baselines for inner sensor per segment
-#' }
-#'
-#' **Example:**
-#' \preformatted{
-#' result <- apply_spacing_correction(
-#'   vh_data,
-#'   method = "manual",
-#'   manual_changepoints = c("2024-03-15", "2024-06-10"),
-#'   baseline_overrides_outer = list("1" = 0.8, "2" = 1.2)
-#' )
-#' }
-#'
-#' ### PELT Method (\code{method = "pelt"})
-#'
-#' **Automatic changepoint detection from daily velocity minima.**
-#'
-#' **Optional:**
-#' \itemize{
-#'   \item \code{sensor_position} - Which sensor to use for detection ("outer" or "inner", default: "outer")
-#'   \item \code{penalty} - PELT penalty: "MBIC" (most conservative), "BIC", or numeric value (default: "MBIC")
-#'   \item \code{min_segment_days} - Minimum days per segment (default: 7)
-#'   \item \code{merge_short_segments} - Whether to merge short segments (default: TRUE)
-#' }
-#'
-#' **Example:**
-#' \preformatted{
-#' result <- apply_spacing_correction(
-#'   vh_data,
-#'   method = "pelt",
-#'   penalty = "BIC",
-#'   min_segment_days = 10
-#' )
-#' }
-#'
-#' ### VPD Method (\code{method = "vpd"})
-#'
-#' **Identifies suitable correction dates based on low VPD (stable environmental conditions).**
-#'
-#' **Required:**
-#' \itemize{
-#'   \item \code{weather_data} - Data frame with \code{datetime} and \code{vpd_kpa} columns
-#' }
-#'
-#' **Optional:**
-#' \itemize{
-#'   \item \code{vpd_threshold} - Maximum VPD for changepoints (kPa, default: 0.5)
-#'     \itemize{
-#'       \item 0.3 kPa - Very conservative, low VPD only
-#'       \item 0.5 kPa - Moderate (recommended)
-#'       \item 0.8 kPa - Permissive
-#'     }
-#'   \item \code{min_segment_days} - Minimum days between changepoints (default: 7)
-#'   \item \code{require_consecutive} - Require consecutive low-VPD days (default: FALSE)
-#'   \item \code{min_consecutive_days} - If require_consecutive, how many days (default: 3)
-#'   \item \code{max_changepoints} - Maximum number of changepoints (default: NULL, no limit)
-#' }
-#'
-#' **Example:**
-#' \preformatted{
-#' result <- apply_spacing_correction(
-#'   vh_data,
-#'   method = "vpd",
-#'   weather_data = weather,
-#'   vpd_threshold = 0.5,
-#'   min_segment_days = 10
-#' )
-#' }
-#'
-#' ### Heartwood Method (\code{method = "heartwood"})
-#'
-#' **Continuous correction using inner sensor as heartwood reference (no segmentation).**
-#'
-#' **Required:**
-#' \itemize{
-#'   \item \code{wood_properties} - Must contain \code{tree_measurements$sapwood_depth}
-#'   \item \code{probe_config} - Probe configuration with geometry information
-#' }
-#'
-#' **Optional:**
-#' \itemize{
-#'   \item \code{field_of_influence} - Radial extent of heat pulse (cm, default: 1.0)
-#' }
-#'
-#' **Example:**
-#' \preformatted{
-#' result <- apply_spacing_correction(
-#'   vh_data,
-#'   method = "heartwood",
-#'   wood_properties = wood,
-#'   probe_config = probe
-#' )
-#' }
-#'
-#' ## Method Comparison
-#'
-#' | Method | When to Use | Pros | Cons |
-#' |--------|-------------|------|------|
-#' | **Manual** | Known probe movement events | Full control, custom baselines | Requires prior knowledge |
-#' | **PELT** | Unknown baseline shifts | Automatic, statistically rigorous | May detect spurious changes |
-#' | **VPD** | Environmentally-driven baseline | Uses stable conditions | Requires weather data |
-#' | **Heartwood** | Deep heartwood sensor | Continuous, no segmentation | Requires specific probe depth |
-#'
-#' ## Scientific Basis
-#'
-#' ### Spacing Correction (Burgess et al. 2001)
-#'
-#' All methods apply the Burgess correction equation:
-#' \deqn{V_c = a \times V_h + b}
-#'
-#' Where coefficients \eqn{a} and \eqn{b} depend on the zero-flow offset detected.
-#'
-#' ### Segmentation vs Continuous
-#'
-#' - **Segmented** (manual, PELT, VPD): Divides time series into periods with
-#'   separate corrections per segment
-#' - **Continuous** (heartwood): Single correction using heartwood sensor as
-#'   continuous zero reference
-#'
-#' @examples
-#' \dontrun{
-#' # ===== MANUAL METHOD =====
-#' result_manual <- apply_spacing_correction(
-#'   vh_data,
-#'   method = "manual",
-#'   hpv_method = "HRM",
-#'   wood_properties = wood,
-#'   manual_changepoints = c("2024-03-15", "2024-06-10")
-#' )
-#'
-#' # ===== PELT METHOD =====
-#' result_pelt <- apply_spacing_correction(
-#'   vh_data,
-#'   method = "pelt",
-#'   hpv_method = "HRM",
-#'   wood_properties = wood,
-#'   penalty = "MBIC",
-#'   min_segment_days = 7
-#' )
-#'
-#' # ===== VPD METHOD =====
-#' result_vpd <- apply_spacing_correction(
-#'   vh_data,
-#'   method = "vpd",
-#'   hpv_method = "HRM",
-#'   wood_properties = wood,
-#'   weather_data = weather,
-#'   vpd_threshold = 0.5
-#' )
-#'
-#' # ===== HEARTWOOD METHOD =====
-#' result_heartwood <- apply_spacing_correction(
-#'   vh_data,
-#'   method = "heartwood",
-#'   hpv_method = "HRM",
-#'   wood_properties = wood,
-#'   probe_config = probe
-#' )
-#'
-#' # View results
-#' print(result_pelt)
-#' plot_spacing_correction_comparison(result_pelt, sensor_position = "outer")
-#' }
-#'
-#' @family spacing correction functions
-#' @seealso
-#' \code{\link{apply_spacing_correction_both_sensors}} for PELT method details,
-#' \code{\link{apply_manual_spacing_correction}} for manual method,
-#' \code{\link{detect_vpd_changepoints}} for VPD method,
-#' \code{\link{check_heartwood_reference_available}} for heartwood method
 #'
 #' @export
 apply_spacing_correction <- function(vh_data,
-                                      method = c("pelt", "manual", "vpd", "heartwood"),
+                                      changepoints,
+                                      offset_model = c("segment", "gradient"),
+                                      correction_math = c("burgess", "linear"),
+                                      sensor_position = c("both", "outer", "inner"),
                                       hpv_method = "HRM",
                                       wood_properties = NULL,
-                                      probe_config = NULL,
-                                      weather_data = NULL,
                                       ...,
                                       verbose = TRUE) {
 
-  # Match and validate method
-  method <- match.arg(method)
+  # Match and validate arguments
+  offset_model <- match.arg(offset_model)
+  correction_math <- match.arg(correction_math)
+  sensor_position <- match.arg(sensor_position)
 
   if (verbose) {
     cat("\n")
     cat(strrep("=", 72), "\n")
     cat("UNIFIED SPACING CORRECTION\n")
     cat(strrep("=", 72), "\n")
-    cat(sprintf("Detection method: %s\n", toupper(method)))
-    cat(sprintf("HPV method to correct: %s\n", hpv_method))
+    cat(sprintf("Offset Model:    %s\n", toupper(offset_model)))
+    cat(sprintf("Correction Math: %s\n", toupper(correction_math)))
+    cat(sprintf("Sensor(s):       %s\n", toupper(sensor_position)))
+    cat(sprintf("Method to correct: %s\n", hpv_method))
     cat("\n")
   }
 
   # Extract additional parameters
   dots <- list(...)
 
-  # Get thermal diffusivity from wood properties, dots, or attributes
+  # Resolve thermal diffusivity (k)
   k_assumed <- if (!is.null(wood_properties)) {
     if ("derived_properties" %in% names(wood_properties)) {
       wood_properties$derived_properties$thermal_diffusivity_actual_cm2_s
     } else if ("thermal_diffusivity" %in% names(wood_properties)) {
       wood_properties$thermal_diffusivity
     } else {
-      0.0025  # Default fallback
+      0.0025
     }
   } else if (!is.null(dots$k_assumed)) {
     dots$k_assumed
-  } else if (!is.null(attr(vh_data, "diffusivity"))) {
-    attr(vh_data, "diffusivity")
   } else {
-    0.0025  # Default
+    0.0025
   }
 
-  if (verbose) {
-    cat(sprintf("Thermal diffusivity: %.6f cm^2/s\n", k_assumed))
-    cat("\n")
+  # Resolve probe spacing (x)
+  probe_spacing <- dots$probe_spacing %||% 0.5
+
+  # Handle multiple sensors if requested
+  if (sensor_position == "both") {
+    sensors_to_process <- c("outer", "inner")
+  } else {
+    sensors_to_process <- sensor_position
   }
 
-  # Route to appropriate method
-  result <- switch(method,
-
-    # ===== MANUAL METHOD =====
-    "manual" = {
-      if (!"manual_changepoints" %in% names(dots)) {
-        stop("Manual method requires 'manual_changepoints' parameter")
-      }
-
-      if (verbose) {
-        cat("Using MANUAL changepoint specification\n")
-        cat(sprintf("  Changepoints provided: %d\n",
-                    length(dots$manual_changepoints)))
-        cat("\n")
-      }
-
-      # Call manual spacing correction
-      manual_result <- apply_manual_spacing_correction(
-        vh_data = vh_data,
-        manual_changepoints = dots$manual_changepoints,
-        sensor_position = dots$sensor_position %||% "outer",
-        method = hpv_method,
-        k_assumed = k_assumed,
-        probe_spacing = dots$probe_spacing %||% 0.5,
-        measurement_time = dots$measurement_time %||% 80,
-        baseline_overrides = dots$baseline_overrides %||% NULL,
-        create_new_col = dots$create_new_col %||% FALSE,
-        verbose = verbose
-      )
-
-      # Convert to unified format
-      list(
-        vh_corrected = manual_result$vh_corrected,
-        method_used = "manual",
-        changepoints = dots$manual_changepoints,
-        segments = manual_result$segment_results,
-        correction_info = manual_result$metadata,
-        metadata = list(
-          hpv_method = hpv_method,
-          k_assumed = k_assumed,
-          manual_changepoints = dots$manual_changepoints
-        )
-      )
-    },
-
-    # ===== PELT METHOD =====
-    "pelt" = {
-      if (verbose) {
-        cat("Using PELT automatic changepoint detection\n")
-        cat(sprintf("  Penalty: %s\n", dots$penalty %||% "MBIC"))
-        cat(sprintf("  Min segment days: %d\n", dots$min_segment_days %||% 7))
-        cat("\n")
-      }
-
-      # Calculate daily minima
-      sensor_pos <- dots$sensor_position %||% "outer"
-      daily_minima <- calculate_daily_minima(
-        vh_data,
-        sensor_position = sensor_pos,
-        method = hpv_method
-      )
-
-      if (verbose) {
-        cat("Step 1: Detecting changepoints from daily minima...\n")
-      }
-
-      # Detect changepoints
-      cpt_result <- detect_changepoints(
-        daily_minima,
-        penalty = dots$penalty %||% "MBIC",
-        min_segment_days = dots$min_segment_days %||% 7,
-        merge_short_segments = dots$merge_short_segments %||% TRUE
-      )
-
-      if (verbose) {
-        cat(sprintf("  Detected %d changepoints\n", length(cpt_result$changepoints)))
-        cat("\nStep 2: Applying spacing correction to both sensors...\n")
-      }
-
-      # Apply correction using detected changepoints
-      correction_result <- apply_spacing_correction_both_sensors(
-        vh_data = vh_data,
-        changepoints = cpt_result$changepoints,
-        method = hpv_method,
-        baseline_overrides_outer = dots$baseline_overrides_outer %||% NULL,
-        baseline_overrides_inner = dots$baseline_overrides_inner %||% NULL,
-        k_assumed = k_assumed,
-        probe_spacing = dots$probe_spacing %||% 0.5,
-        measurement_time = dots$measurement_time %||% 80,
-        create_new_col = dots$create_new_col %||% FALSE,
-        verbose = verbose
-      )
-
-      # Return unified format
-      list(
-        vh_corrected = correction_result$vh_corrected,
-        method_used = "pelt",
-        changepoints = cpt_result$changepoints,
-        segments = cpt_result$segments,
-        correction_info = correction_result$metadata,
-        metadata = list(
-          hpv_method = hpv_method,
-          k_assumed = k_assumed,
-          penalty = dots$penalty %||% "MBIC",
-          min_segment_days = dots$min_segment_days %||% 7,
-          cpt_detection = cpt_result$parameters
-        )
-      )
-    },
-
-    # ===== VPD METHOD =====
-    "vpd" = {
-      if (is.null(weather_data)) {
-        stop("VPD method requires 'weather_data' parameter with datetime and vpd_kpa columns")
-      }
-
-      if (verbose) {
-        cat("Using VPD-based changepoint detection\n")
-        cat(sprintf("  VPD threshold: %.2f kPa\n", dots$vpd_threshold %||% 0.5))
-        cat(sprintf("  Min segment days: %d\n", dots$min_segment_days %||% 7))
-        cat("\n")
-      }
-
-      # Calculate daily VPD minima
-      if (verbose) {
-        cat("Step 1: Calculating daily VPD minima...\n")
-      }
-
-      daily_vpd <- calculate_daily_vpd_minima(
-        weather_data,
-        vpd_col = dots$vpd_col %||% "vpd_kpa"
-      )
-
-      if (verbose) {
-        cat("Step 2: Detecting suitable low-VPD dates...\n")
-      }
-
-      # Detect VPD-based changepoints
-      vpd_result <- detect_vpd_changepoints(
-        daily_vpd,
-        vpd_threshold = dots$vpd_threshold %||% 0.5,
-        min_segment_days = dots$min_segment_days %||% 7,
-        require_consecutive = dots$require_consecutive %||% FALSE,
-        min_consecutive_days = dots$min_consecutive_days %||% 3,
-        max_changepoints = dots$max_changepoints %||% NULL
-      )
-
-      if (verbose) {
-        cat(sprintf("  Identified %d suitable dates\n", length(vpd_result$changepoints)))
-        cat("\nStep 3: Applying spacing correction to both sensors...\n")
-      }
-
-      # Apply correction using VPD-based changepoints
-      correction_result <- apply_spacing_correction_both_sensors(
-        vh_data = vh_data,
-        changepoints = vpd_result$changepoints,
-        method = hpv_method,
-        baseline_overrides_outer = dots$baseline_overrides_outer %||% NULL,
-        baseline_overrides_inner = dots$baseline_overrides_inner %||% NULL,
-        k_assumed = k_assumed,
-        probe_spacing = dots$probe_spacing %||% 0.5,
-        measurement_time = dots$measurement_time %||% 80,
-        create_new_col = dots$create_new_col %||% FALSE,
-        verbose = verbose
-      )
-
-      # Return unified format
-      list(
-        vh_corrected = correction_result$vh_corrected,
-        method_used = "vpd",
-        changepoints = vpd_result$changepoints,
-        segments = vpd_result$segments,
-        correction_info = correction_result$metadata,
-        vpd_values = vpd_result$vpd_values,
-        metadata = list(
-          hpv_method = hpv_method,
-          k_assumed = k_assumed,
-          vpd_threshold = dots$vpd_threshold %||% 0.5,
-          vpd_detection = vpd_result$parameters,
-          n_days_below_threshold = vpd_result$n_days_below_threshold
-        )
-      )
-    },
-
-    # ===== HEARTWOOD METHOD =====
-    "heartwood" = {
-      if (is.null(wood_properties)) {
-        stop("Heartwood method requires 'wood_properties' with sapwood_depth")
-      }
-      if (is.null(probe_config)) {
-        stop("Heartwood method requires 'probe_config'")
-      }
-
-      # Extract sapwood depth
-      sapwood_depth <- if ("tree_measurements" %in% names(wood_properties)) {
-        wood_properties$tree_measurements$sapwood_depth
-      } else if ("sapwood_depth" %in% names(wood_properties)) {
-        wood_properties$sapwood_depth
-      } else {
-        stop("wood_properties must contain sapwood_depth")
-      }
-
-      # Extract bark thickness
-      bark_thickness <- if ("tree_measurements" %in% names(wood_properties)) {
-        wood_properties$tree_measurements$bark_thickness %||% 0
-      } else if ("bark_thickness" %in% names(wood_properties)) {
-        wood_properties$bark_thickness
-      } else {
-        0
-      }
-
-      if (verbose) {
-        cat("Using HEARTWOOD continuous reference correction\n")
-        cat(sprintf("  Sapwood depth: %.2f cm\n", sapwood_depth))
-        cat(sprintf("  Bark thickness: %.2f cm\n", bark_thickness))
-        cat("\n")
-      }
-
-      # Check if heartwood reference is available
-      hw_check <- check_heartwood_reference_available(
-        probe_config = probe_config,
-        sapwood_depth = sapwood_depth,
-        bark_thickness = bark_thickness,
-        field_of_influence = dots$field_of_influence %||% 1.0
-      )
-
-      if (!hw_check$available) {
-        stop("Heartwood reference not available:\n  ", hw_check$recommendation)
-      }
-
-      if (verbose) {
-        cat("[OK] Heartwood reference available\n")
-        cat(sprintf("  Inner sensor depth: %.2f cm\n", hw_check$inner_depth_cm))
-        cat(sprintf("  Margin into heartwood: %.2f cm\n", hw_check$margin_cm))
-        cat("\n")
-      }
-
-      # Apply heartwood-based correction
-      # Note: This is a continuous correction, not segmented
-      hw_result <- apply_heartwood_reference_correction(
-        vh_data = vh_data,
-        method = hpv_method,
-        probe_config = probe_config,
-        sapwood_depth = sapwood_depth,
-        bark_thickness = bark_thickness,
-        k_assumed = k_assumed,
-        probe_spacing = dots$probe_spacing %||% 0.5,
-        measurement_time = dots$measurement_time %||% 80,
-        create_new_col = dots$create_new_col %||% FALSE,
-        verbose = verbose
-      )
-
-      # Return unified format
-      list(
-        vh_corrected = hw_result$vh_corrected,
-        method_used = "heartwood",
-        changepoints = NULL,  # Continuous, no changepoints
-        segments = NULL,      # Continuous, no segments
-        correction_info = hw_result$metadata,
-        heartwood_check = hw_check,
-        metadata = list(
-          hpv_method = hpv_method,
-          k_assumed = k_assumed,
-          sapwood_depth = sapwood_depth,
-          bark_thickness = bark_thickness,
-          inner_sensor_depth = hw_check$inner_depth_cm,
-          heartwood_margin = hw_check$margin_cm
-        )
-      )
-    }
-  )
-
-  # =========================================================================
-  # CREATE AUDIT COLUMNS FOR AUDITABLE WORKFLOW
-  # =========================================================================
-  # User workflow requirement: Create separate columns for each correction stage
-  # - Vh_cm_hr_raw: Original raw values (preserved)
-  # - Vh_cm_hr_sc: Spacing correction results (new, shows only corrected values)
-  # - Vh_cm_hr: Current "best available" (hybrid of raw + corrections)
-
-  vh_corrected <- result$vh_corrected
-
+  # Start with the input data
+  vh_corrected <- vh_data
+  
   # Ensure Vh_cm_hr_raw exists (preserve original values)
   if (!"Vh_cm_hr_raw" %in% names(vh_corrected)) {
-    # If raw doesn't exist, save current Vh_cm_hr as raw before modifying
     vh_corrected$Vh_cm_hr_raw <- vh_corrected$Vh_cm_hr
   }
 
-  # Create Vh_cm_hr_sc audit column showing spacing correction results
-  # This column shows what spacing correction calculated, NA for uncorrected rows
-  if ("spacing_correction_applied" %in% names(vh_corrected)) {
-    # Mark which rows were spacing-corrected
-    spacing_corrected_rows <- vh_corrected$spacing_correction_applied %in% c(TRUE, "TRUE")
-    spacing_corrected_rows[is.na(spacing_corrected_rows)] <- FALSE
-
-    # Create Vh_cm_hr_sc: spacing-corrected values where applied, NA elsewhere
-    vh_corrected$Vh_cm_hr_sc <- ifelse(
-      spacing_corrected_rows,
-      vh_corrected$Vh_cm_hr,  # Current Vh_cm_hr has corrected values
-      NA_real_
-    )
-
-    if (verbose) {
-      cat("\nCreated audit column: Vh_cm_hr_sc (spacing correction results)\n")
-      cat(sprintf("  Corrected rows: %d\n", sum(spacing_corrected_rows, na.rm = TRUE)))
-      cat(sprintf("  Uncorrected rows: %d\n", sum(!spacing_corrected_rows, na.rm = TRUE)))
+  # Process each sensor
+  for (sensor in sensors_to_process) {
+    if (verbose && length(sensors_to_process) > 1) {
+      cat(sprintf("Processing %s sensor...\n", toupper(sensor)))
     }
-  } else {
-    # No spacing correction flag - assume all rows of specified method were corrected
-    method_rows <- vh_corrected$method == hpv_method
-    vh_corrected$Vh_cm_hr_sc <- ifelse(
-      method_rows,
-      vh_corrected$Vh_cm_hr,
-      NA_real_
-    )
 
-    if (verbose) {
-      cat("\nCreated audit column: Vh_cm_hr_sc (spacing correction results)\n")
-      cat(sprintf("  Method '%s' rows: %d\n", hpv_method, sum(method_rows, na.rm = TRUE)))
+    # Identify rows corrected in THIS pass
+    # (Used for surgical write-back at the end)
+    current_mask <- vh_corrected$sensor_position == sensor & 
+                    vh_corrected$method == hpv_method
+    current_mask[is.na(current_mask)] <- FALSE
+    
+    if (!any(current_mask)) next
+
+    # Route to appropriate model
+    if (offset_model == "segment") {
+      # ===== SEGMENT-BASED (STEP-WISE) MODEL =====
+      
+      # Use the manual correction function as the engine for segmented logic
+      model_result <- apply_manual_spacing_correction(
+        vh_data = vh_corrected,
+        manual_changepoints = changepoints,
+        sensor_position = sensor,
+        method = hpv_method,
+        vh_col = if ("Vs_cm_hr" %in% names(vh_corrected)) "Vs_cm_hr" else "Vh_cm_hr",
+        correction_type = correction_math,
+        k_assumed = k_assumed,
+        probe_spacing = probe_spacing,
+        measurement_time = dots$measurement_time %||% 80,
+        create_new_col = TRUE,
+        verbose = FALSE
+      )
+      
+      source_col <- paste0(if ("Vs_cm_hr" %in% names(vh_corrected)) "Vs_cm_hr" else "Vh_cm_hr", "_sc")
+      # Extract only the corrected rows to ensure lengths match during write-back
+      temp_data <- model_result$vh_corrected[current_mask, ]
+
+    } else {
+      # ===== GRADIENT (CONTINUOUS) MODEL =====
+      
+      vh_col_in <- if ("Vs_cm_hr" %in% names(vh_corrected)) "Vs_cm_hr" else "Vh_cm_hr"
+      
+      lookup <- NULL
+      if (correction_math == "burgess") {
+        lookup <- calculate_burgess_coefficients(
+          k = k_assumed,
+          x = probe_spacing,
+          t = dots$measurement_time %||% 80
+        )
+      }
+
+      # Filter to this sensor only for the gradient engine
+      sensor_data <- vh_corrected[current_mask, ]
+
+      grad_result <- apply_gradient_offset_correction(
+        vh_data = sensor_data,
+        changepoints = changepoints,
+        vh_col = vh_col_in,
+        new_col_suffix = "_gradient_corrected",
+        edge_handling = dots$edge_handling %||% "extend",
+        correction_type = correction_math,
+        lookup_table = lookup
+      )
+      
+      source_col <- paste0(vh_col_in, "_gradient_corrected")
+      # grad_result already only contains sensor-specific rows
+      temp_data <- grad_result
     }
+
+    # =======================================================================
+    # SURGICAL WRITE-BACK (Audit Workflow)
+    # =======================================================================
+    
+    # 1. Update Vh_cm_hr_sc (Audit column: only shows corrected values)
+    if (!"Vh_cm_hr_sc" %in% names(vh_corrected)) {
+      vh_corrected$Vh_cm_hr_sc <- NA_real_
+    }
+    vh_corrected$Vh_cm_hr_sc[current_mask] <- temp_data[[source_col]]
+
+    # 2. Update Vs_cm_hr (Current Best Estimate)
+    if (!"Vs_cm_hr" %in% names(vh_corrected)) {
+      vh_corrected$Vs_cm_hr <- vh_corrected$Vh_cm_hr_raw
+    }
+    vh_corrected$Vs_cm_hr[current_mask] <- temp_data[[source_col]]
+    
+    # 3. Transfer any other tracking columns (a, b, baseline)
+    cols_to_copy <- c("spacing_correction_a", "spacing_correction_b", "baseline_offset_cm_hr")
+    for (col in cols_to_copy) {
+      if (col %in% names(temp_data)) {
+        if (!col %in% names(vh_corrected)) vh_corrected[[col]] <- NA_real_
+        vh_corrected[[col]][current_mask] <- temp_data[[col]]
+      }
+    }
+    
+    # Mark as applied
+    if (!"spacing_correction_applied" %in% names(vh_corrected)) {
+       vh_corrected$spacing_correction_applied <- FALSE
+    }
+    vh_corrected$spacing_correction_applied[current_mask] <- TRUE
   }
 
-  # Vh_cm_hr already contains hybrid values (helpers update it in place)
-  # Update result with modified data frame
-  result$vh_corrected <- vh_corrected
+  # Lock Vh_cm_hr back to raw
+  vh_corrected$Vh_cm_hr <- vh_corrected$Vh_cm_hr_raw
 
-  # Add class
-  class(result) <- c("unified_spacing_correction_result", "list")
+  # Attach metadata
+  attr(vh_corrected, "offset_model")    <- offset_model
+  attr(vh_corrected, "correction_math") <- correction_math
+  attr(vh_corrected, "changepoints")    <- changepoints
+  attr(vh_corrected, "corrections_applied") <- unique(c(attr(vh_data, "corrections_applied"), "spacing"))
 
   if (verbose) {
     cat("\n")
     cat(strrep("=", 72), "\n")
     cat("SPACING CORRECTION COMPLETE\n")
     cat(strrep("=", 72), "\n")
-    cat(sprintf("Method used: %s\n", toupper(result$method_used)))
-    if (!is.null(result$changepoints)) {
-      cat(sprintf("Changepoints detected: %d\n", length(result$changepoints)))
-      cat(sprintf("Segments created: %d\n", length(result$changepoints) + 1))
-    } else {
-      cat("Correction type: Continuous (heartwood reference)\n")
-    }
-    cat("\nAudit columns created:\n")
-    cat("  Vh_cm_hr_raw - Original raw values\n")
-    cat("  Vh_cm_hr_sc - Spacing correction results\n")
-    cat("  Vh_cm_hr - Current best available (hybrid)\n")
-    cat("\nCorrection factor columns:\n")
-    cat("  spacing_correction_a - Slope coefficient (a)\n")
-    cat("  spacing_correction_b - Intercept coefficient (b)\n")
-    cat("  baseline_offset_cm_hr - Zero-flow baseline (cm/hr)\n")
-    cat(strrep("=", 72), "\n")
     cat("\n")
   }
 
-  return(result)
+  return(vh_corrected)
 }
-
-
-#' @rdname apply_spacing_correction
-#' @export
-print.unified_spacing_correction_result <- function(x, ...) {
-  cat("\n")
-  cat(strrep("=", 60), "\n")
-  cat("Unified Spacing Correction Result\n")
-  cat(strrep("=", 60), "\n")
-  cat(sprintf("Method used: %s\n", toupper(x$method_used)))
-  cat(sprintf("HPV method corrected: %s\n", x$metadata$hpv_method))
-  cat(sprintf("Thermal diffusivity: %.6f cm^2/s\n", x$metadata$k_assumed))
-
-  if (!is.null(x$changepoints)) {
-    cat(sprintf("\nChangepoints: %d\n", length(x$changepoints)))
-    if (length(x$changepoints) > 0) {
-      cat("  Dates:", paste(as.character(head(x$changepoints, 5)), collapse = ", "))
-      if (length(x$changepoints) > 5) {
-        cat(sprintf(", ... (%d more)", length(x$changepoints) - 5))
-      }
-      cat("\n")
-    }
-    cat(sprintf("Segments: %d\n", length(x$changepoints) + 1))
-  } else {
-    cat("\nCorrection type: Continuous (heartwood reference)\n")
-  }
-
-  cat(sprintf("\nCorrected observations: %d\n", nrow(x$vh_corrected)))
-
-  cat(strrep("=", 60), "\n")
-  cat("\n")
-
-  invisible(x)
-}
-
 
 # Helper function for NULL-coalescing
 `%||%` <- function(x, y) {

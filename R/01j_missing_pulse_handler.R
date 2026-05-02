@@ -224,23 +224,24 @@ create_missing_pulse_results <- function(diagnostics, methods) {
         sensor_position = "outer",
         Vh_cm_hr_raw = NA_real_,
         Vh_cm_hr = NA_real_,
+        Vs_cm_hr = NA_real_,
         temp_ratio = NA_real_,
 
         # Method-specific window columns (all NA for missing pulses)
         hrm_window_start_sec = NA_real_,
         hrm_window_end_sec = NA_real_,
-        hrm_peclet_number = NA_real_,
+        peclet_number = NA_real_,
 
         mhr_upstream_peak_sec = NA_real_,
         mhr_downstream_peak_sec = NA_real_,
 
-        hrmxa_window_start_sec = NA_real_,
-        hrmxa_window_end_sec = NA_real_,
+        # hrmxa_window_start_sec = NA_real_,
+        # hrmxa_window_end_sec = NA_real_,
 
-        hrmxb_downstream_start_sec = NA_real_,
-        hrmxb_downstream_end_sec = NA_real_,
-        hrmxb_upstream_start_sec = NA_real_,
-        hrmxb_upstream_end_sec = NA_real_,
+        # hrmxb_downstream_start_sec = NA_real_,
+        # hrmxb_downstream_end_sec = NA_real_,
+        # hrmxb_upstream_start_sec = NA_real_,
+        # hrmxb_upstream_end_sec = NA_real_,
 
         tmax_peak_time_sec = NA_real_,
 
@@ -256,23 +257,24 @@ create_missing_pulse_results <- function(diagnostics, methods) {
         sensor_position = "inner",
         Vh_cm_hr_raw = NA_real_,
         Vh_cm_hr = NA_real_,
+        Vs_cm_hr = NA_real_,
         temp_ratio = NA_real_,
 
         # Method-specific window columns (all NA for missing pulses)
         hrm_window_start_sec = NA_real_,
         hrm_window_end_sec = NA_real_,
-        hrm_peclet_number = NA_real_,
+        peclet_number = NA_real_,
 
         mhr_upstream_peak_sec = NA_real_,
         mhr_downstream_peak_sec = NA_real_,
 
-        hrmxa_window_start_sec = NA_real_,
-        hrmxa_window_end_sec = NA_real_,
+        # hrmxa_window_start_sec = NA_real_,
+        # hrmxa_window_end_sec = NA_real_,
 
-        hrmxb_downstream_start_sec = NA_real_,
-        hrmxb_downstream_end_sec = NA_real_,
-        hrmxb_upstream_start_sec = NA_real_,
-        hrmxb_upstream_end_sec = NA_real_,
+        # hrmxb_downstream_start_sec = NA_real_,
+        # hrmxb_downstream_end_sec = NA_real_,
+        # hrmxb_upstream_start_sec = NA_real_,
+        # hrmxb_upstream_end_sec = NA_real_,
 
         tmax_peak_time_sec = NA_real_,
 
