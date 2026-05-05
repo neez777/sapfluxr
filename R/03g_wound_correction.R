@@ -242,10 +242,15 @@ apply_wound_correction <- function(vh_data,
   input_col <- velocity_col
 
   corrected_values <- vh_data[[input_col]] * B_vector
-  vh_data$Vh_cm_hr_wc <- corrected_values
+  vh_data$Vh_cm_hr_wc <- as.numeric(unlist(corrected_values))
+  
   # Vh_cm_hr is locked to raw — do not mutate it
   if (!"Vs_cm_hr" %in% names(vh_data)) vh_data$Vs_cm_hr <- vh_data$Vh_cm_hr
-  vh_data$Vs_cm_hr <- ifelse(is.na(corrected_values), vh_data$Vs_cm_hr, corrected_values)
+  
+  # Apply correction and AGGRESSIVELY FLATTEN to prevent nested dataframe bug
+  res_Vs <- ifelse(is.na(corrected_values), vh_data$Vs_cm_hr, corrected_values)
+  vh_data$Vs_cm_hr <- as.numeric(unlist(res_Vs))
+  
   vh_data$Vc_cm_hr <- vh_data$Vs_cm_hr  # Legacy alias
   vh_data$wound_correction_applied <- TRUE
   vh_data$wound_correction_factor <- B_vector

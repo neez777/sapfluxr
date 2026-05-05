@@ -266,10 +266,13 @@ apply_spacing_correction_per_segment <- function(vh_data,
   }
 
   # Insert corrected values for this sensor/method
+  # AGGRESSIVE FLATTENING: Force to plain numeric vector to prevent nested dataframe bug
+  corrected_vh_flat <- as.numeric(unlist(corrected_vh))
+  
   sensor_method_mask <- corrected_data$sensor_position == sensor_position &
                         corrected_data[[method_col]] == method
 
-  corrected_data[[corrected_col]][sensor_method_mask] <- corrected_vh
+  corrected_data[[corrected_col]][sensor_method_mask] <- corrected_vh_flat
   corrected_data$spacing_correction_applied[sensor_method_mask] <- TRUE
 
   # Add correction factor columns (for transparency - matches wound correction pattern)
@@ -759,10 +762,13 @@ apply_manual_spacing_correction <- function(vh_data,
   }
 
   # Insert corrected values for this sensor/method
+  # AGGRESSIVE FLATTENING: Force to plain numeric vector to prevent nested dataframe bug
+  corrected_vh_flat <- as.numeric(unlist(corrected_vh))
+  
   sensor_method_mask <- corrected_data$sensor_position == sensor_position &
                         corrected_data[[method_col]] == method
 
-  corrected_data[[corrected_col]][sensor_method_mask] <- corrected_vh
+  corrected_data[[corrected_col]][sensor_method_mask] <- corrected_vh_flat
   corrected_data$spacing_correction_applied[sensor_method_mask] <- TRUE
 
   # Add correction factor columns (for transparency - matches wound correction pattern)

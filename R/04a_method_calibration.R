@@ -185,6 +185,19 @@ find_optimal_calibration_threshold <- function(vh_corrected,
     suffixes = c("_primary", "_secondary")
   )
 
+  # Rename columns to standard names so the rest of the script works
+  primary_col <- paste0(velocity_col, "_primary")
+  secondary_col <- paste0(velocity_col, "_secondary")
+  names(merged_data)[names(merged_data) == primary_col] <- "Vh_cm_hr_primary"
+  names(merged_data)[names(merged_data) == secondary_col] <- "Vh_cm_hr_secondary"
+
+  # Force columns to be plain numeric vectors (destroys any nested data.frames or tibble structures)
+  merged_data$Vh_cm_hr_primary <- as.numeric(unlist(merged_data$Vh_cm_hr_primary))
+  merged_data$Vh_cm_hr_secondary <- as.numeric(unlist(merged_data$Vh_cm_hr_secondary))
+
+  primary_col <- "Vh_cm_hr_primary"
+  secondary_col <- "Vh_cm_hr_secondary"
+
   if (nrow(merged_data) == 0) {
     stop("No matching pulse_ids between methods")
   }
@@ -544,7 +557,7 @@ calibrate_method_to_primary <- function(vh_corrected,
                                          secondary_method,
                                          sensor_position = "outer",
                                          threshold_velocity,
-                                         handover_pct = 0.5,
+                                         handover_pct = 1.0,
                                          fit_type = "auto",
                                          min_points = 50,
                                          verbose = TRUE,
@@ -584,10 +597,15 @@ calibrate_method_to_primary <- function(vh_corrected,
     suffixes = c("_primary", "_secondary")
   )
 
-  # CRITICAL FIX: Construct column names based on velocity_col
-  # When velocity_col = "Vc_cm_hr", merged columns are "Vc_cm_hr_primary" and "Vc_cm_hr_secondary"
+  # Rename columns to standard names so the rest of the script works
   primary_col <- paste0(velocity_col, "_primary")
   secondary_col <- paste0(velocity_col, "_secondary")
+  names(calib_data)[names(calib_data) == primary_col] <- "Vh_cm_hr_primary"
+  names(calib_data)[names(calib_data) == secondary_col] <- "Vh_cm_hr_secondary"
+  
+  # For downstream compatibility, we redefine primary_col and secondary_col
+  primary_col <- "Vh_cm_hr_primary"
+  secondary_col <- "Vh_cm_hr_secondary"
 
   # Calculate handover window bounds
   handover_lower <- threshold_velocity * (1 - handover_pct)
@@ -1499,6 +1517,8 @@ compare_methods_segmented <- function(vh_corrected,
   }
 
   # Extract data for both methods
+  vh_corrected <- as.data.frame(vh_corrected)
+
   primary_data <- vh_corrected[
     vh_corrected$method == primary_method &
     vh_corrected$sensor_position == sensor_position,
@@ -1521,14 +1541,22 @@ compare_methods_segmented <- function(vh_corrected,
     suffixes = c("_primary", "_secondary")
   )
 
-  # CRITICAL FIX: Construct column names based on velocity_col
-  primary_col <- paste0(velocity_col, "_primary")
-  secondary_col <- paste0(velocity_col, "_secondary")
+  # GUARANTEED POSITIONAL RENAME
+  # Col 1: pulse_id, Col 2: primary, Col 3: secondary
+  names(merged_data) <- c("pulse_id", "Vh_cm_hr_primary", "Vh_cm_hr_secondary")
+
+  # Force columns to be plain numeric vectors (destroys any nested data.frames or tibble structures)
+  merged_data$Vh_cm_hr_primary <- as.numeric(unlist(merged_data$Vh_cm_hr_primary))
+  merged_data$Vh_cm_hr_secondary <- as.numeric(unlist(merged_data$Vh_cm_hr_secondary))
+
+  # Lock internal names for code clarity
+  primary_col <- "Vh_cm_hr_primary"
+  secondary_col <- "Vh_cm_hr_secondary"
 
   # Remove NA values
   merged_data <- merged_data[
-    !is.na(merged_data[[primary_col]]) &
-    !is.na(merged_data[[secondary_col]]),
+    !is.na(merged_data$Vh_cm_hr_primary) &
+    !is.na(merged_data$Vh_cm_hr_secondary),
   ]
 
   if (nrow(merged_data) < min_points) {
@@ -1537,7 +1565,6 @@ compare_methods_segmented <- function(vh_corrected,
       nrow(merged_data), min_points
     ))
   }
-
   # PERFORMANCE OPTIMIZATION: Downsample if dataset is very large
   # Segmented regression is computationally expensive with >50k points
   # Systematic sampling preserves the overall relationship while speeding up fitting
@@ -1670,8 +1697,8 @@ compare_methods_segmented <- function(vh_corrected,
 
   # Extract breakpoint information
   breakpoint_summary <- summary(seg_fit)$psi
-  breakpoint_est <- breakpoint_summary[, "Est."]
-  breakpoint_se <- breakpoint_summary[, "St.Err"]
+  breakpoint_est <- as.numeric(breakpoint_summary[, "Est."])
+  breakpoint_se <- as.numeric(breakpoint_summary[, "St.Err"])
 
   # Calculate 95% confidence interval (+/-1.96 SE)
   breakpoint_ci <- c(
@@ -1681,16 +1708,22 @@ compare_methods_segmented <- function(vh_corrected,
 
   # Extract slopes before and after breakpoint
   slopes <- segmented::slope(seg_fit)
-  slope_before <- slopes[[primary_col]][1, 1]  # First segment slope
-  slope_after <- slopes[[primary_col]][2, 1]   # Second segment slope
+  
+  # Robustly find the slope element for the primary column
+  slope_name <- names(slopes)[grepl(primary_col, names(slopes))][1]
+  slope_before <- as.numeric(slopes[[slope_name]][1, 1])  # First segment slope
+  slope_after <- as.numeric(slopes[[slope_name]][2, 1])   # Second segment slope
 
   # Calculate R^2 for segmented model
-  seg_r2 <- 1 - (sum(residuals(seg_fit)^2) / sum((merged_data[[secondary_col]] - mean(merged_data[[secondary_col]]))^2))
+  # Use exact standardized names to avoid errors
+  ss_res <- sum(residuals(seg_fit)^2, na.rm = TRUE)
+  ss_tot <- sum((merged_data$Vh_cm_hr_secondary - mean(merged_data$Vh_cm_hr_secondary, na.rm = TRUE))^2, na.rm = TRUE)
+  seg_r2 <- 1 - (ss_res / ss_tot)
 
   # Davies test for significant breakpoint
   davies_test <- tryCatch({
     davies_result <- segmented::davies.test(lm_fit, seg_formula)
-    davies_result$p.value
+    as.numeric(davies_result$p.value)
   }, error = function(e) {
     if (verbose) {
       cat("Warning: Davies test failed\n")

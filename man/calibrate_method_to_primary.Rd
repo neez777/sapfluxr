@@ -10,7 +10,7 @@ calibrate_method_to_primary(
   secondary_method,
   sensor_position = "outer",
   threshold_velocity,
-  handover_pct = 0.5,
+  handover_pct = 1,
   fit_type = "auto",
   min_points = 50,
   verbose = TRUE,

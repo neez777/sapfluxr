@@ -37,6 +37,7 @@ compare_methods_enhanced <- function(vh_corrected,
                                      sensor_position = "outer",
                                      try_quadratic = TRUE,
                                      velocity_col = "Vh_cm_hr",
+                                     create_plots = TRUE,
                                      ...) {
 
   # First fit standard segmented regression
@@ -45,7 +46,7 @@ compare_methods_enhanced <- function(vh_corrected,
     primary_method = primary_method,
     secondary_method = secondary_method,
     sensor_position = sensor_position,
-    create_plots = TRUE,
+    create_plots = create_plots,
     velocity_col = velocity_col,
     ...
   )
@@ -207,20 +208,28 @@ diagnose_residual_pattern <- function(result) {
 fit_piecewise_linear_quadratic <- function(merged_data, breakpoint,
                                            primary_method, secondary_method) {
 
-  # Create indicator for segment
-  merged_data$segment <- ifelse(merged_data$Vh_cm_hr_primary <= breakpoint, 1, 2)
+  # We need to map SECONDARY -> PRIMARY (for calibration)
+  # But the breakpoint is typically defined in terms of PRIMARY method failure.
+  # We first need to find the equivalent SECONDARY breakpoint.
+  
+  # For the purpose of piecewise fitting, we'll use the Secondary method as the independent variable.
+  # We need to create a mask based on the secondary values.
+  # Because methods correlate below the breakpoint, we can estimate secondary_bp.
+  
+  # Use linear model to find equivalent breakpoint in secondary scale
+  lm_temp <- lm(Vh_cm_hr_secondary ~ Vh_cm_hr_primary, data = merged_data[merged_data$Vh_cm_hr_primary <= breakpoint, ])
+  secondary_bp <- predict(lm_temp, newdata = data.frame(Vh_cm_hr_primary = breakpoint))
 
-  # Create piecewise variables
-  # Segment 1 (before breakpoint): linear
-  # Segment 2 (after breakpoint): quadratic
+  # Create indicator for segment based on SECONDARY method
+  merged_data$segment <- ifelse(merged_data$Vh_cm_hr_secondary <= secondary_bp, 1, 2)
 
-  merged_data$x1 <- ifelse(merged_data$segment == 1, merged_data$Vh_cm_hr_primary, 0)
-  merged_data$x2 <- ifelse(merged_data$segment == 2, merged_data$Vh_cm_hr_primary - breakpoint, 0)
+  # Create piecewise variables for mapping SECONDARY -> PRIMARY
+  merged_data$x1 <- ifelse(merged_data$segment == 1, merged_data$Vh_cm_hr_secondary, 0)
+  merged_data$x2 <- ifelse(merged_data$segment == 2, merged_data$Vh_cm_hr_secondary - secondary_bp, 0)
   merged_data$x2_sq <- merged_data$x2^2
 
-  # Fit model: y = b0 + b1*x1 + b2*x2 + b3*x2^2
-  # This ensures continuity at the breakpoint
-  model <- lm(Vh_cm_hr_secondary ~ x1 + x2 + x2_sq, data = merged_data)
+  # Fit model: Primary = b0 + b1*x1 + b2*x2 + b3*x2^2
+  model <- lm(Vh_cm_hr_primary ~ x1 + x2 + x2_sq, data = merged_data)
 
   # Calculate R^2
   r_squared <- summary(model)$r.squared
@@ -235,7 +244,8 @@ fit_piecewise_linear_quadratic <- function(merged_data, breakpoint,
   return(list(
     model = model,
     r_squared = r_squared,
-    breakpoint = breakpoint,
+    breakpoint = secondary_bp,
+    primary_breakpoint = breakpoint,
     coefficients = coefs,
     fitted = fitted_values,
     residuals = residuals_values,
@@ -266,9 +276,9 @@ create_quadratic_plot <- function(quad_result, primary_method, secondary_method)
   merged_data <- quad_result$merged_data
   merged_data$fitted_quad <- quad_result$fitted
 
-  # Create plot
+  # Create plot with SECONDARY on X axis (Calibration scale)
   p <- ggplot2::ggplot(merged_data,
-                       ggplot2::aes(x = Vh_cm_hr_primary, y = Vh_cm_hr_secondary)) +
+                       ggplot2::aes(x = Vh_cm_hr_secondary, y = Vh_cm_hr_primary)) +
     # Data points
     ggplot2::geom_point(alpha = 0.3, color = "grey40", size = 1.5) +
 
@@ -279,17 +289,17 @@ create_quadratic_plot <- function(quad_result, primary_method, secondary_method)
     ggplot2::geom_abline(slope = 1, intercept = 0, linetype = "dashed",
                          color = "blue", alpha = 0.5) +
 
-    # Breakpoint vertical line
+    # Breakpoint vertical line (in secondary scale)
     ggplot2::geom_vline(xintercept = quad_result$breakpoint, color = "darkgreen",
                         linetype = "dashed", linewidth = 1) +
 
     # Labels and theme
     ggplot2::labs(
-      title = paste("Piecewise Linear-Quadratic:", secondary_method, "vs", primary_method),
-      subtitle = sprintf("R^2 = %.4f | Linear before BP, Quadratic after BP",
+      title = paste("Piecewise Linear-Quadratic:", secondary_method, "→", primary_method),
+      subtitle = sprintf("R^2 = %.4f | Linear before BP, Quadratic after BP (Calibration mapping)",
                         quad_result$r_squared),
-      x = paste(primary_method, "Velocity (cm/hr)"),
-      y = paste(secondary_method, "Velocity (cm/hr)")
+      x = paste(secondary_method, "Velocity (cm/hr)"),
+      y = paste(primary_method, "Velocity (cm/hr)")
     ) +
     ggplot2::theme_minimal() +
     ggplot2::theme(

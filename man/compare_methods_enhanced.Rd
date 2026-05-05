@@ -11,6 +11,7 @@ compare_methods_enhanced(
   sensor_position = "outer",
   try_quadratic = TRUE,
   velocity_col = "Vh_cm_hr",
+  create_plots = TRUE,
   ...
 )
 }
