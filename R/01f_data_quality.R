@@ -169,6 +169,12 @@ flag_vh_quality <- function(vh_results,
   if (!is.data.frame(vh_results)) {
     stop("vh_results must be a data frame")
   }
+  
+  # Save original attributes to preserve them through sorting and subsetting
+  original_attrs <- attributes(vh_results)
+  # Remove names, row.names to avoid conflicts during row operations
+  original_attrs$names <- NULL
+  original_attrs$row.names <- NULL
 
   required_cols <- c("datetime", "Vh_cm_hr")
   missing_cols <- setdiff(required_cols, names(vh_results))
@@ -477,6 +483,11 @@ flag_vh_quality <- function(vh_results,
   if (verbose) {
     message("\nQuality control complete:")
     message("  ", paste(names(flag_counts), "=", flag_counts, collapse = ", "))
+  }
+
+  # Restore attributes
+  for (attr_name in names(original_attrs)) {
+    attr(vh_results, attr_name) <- original_attrs[[attr_name]]
   }
 
   # Return results

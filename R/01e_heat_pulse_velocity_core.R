@@ -448,6 +448,7 @@ calc_heat_pulse_velocity_internal <- function(measurements_by_pulse, pulse_ids, 
   # Store calculation parameters as attributes for efficient recalculation
   attr(combined_results, "diffusivity") <- params$diffusivity
   attr(combined_results, "probe_spacing") <- params$probe_spacing
+  attr(combined_results, "baseline_method") <- baseline_method
 
   # Track correction history (starts with none applied)
   attr(combined_results, "current_vh_column") <- "Vh_cm_hr_raw"

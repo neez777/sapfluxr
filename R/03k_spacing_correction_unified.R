@@ -182,13 +182,13 @@ apply_spacing_correction <- function(vh_data,
     if (!"Vh_cm_hr_sc" %in% names(vh_corrected)) {
       vh_corrected$Vh_cm_hr_sc <- NA_real_
     }
-    vh_corrected$Vh_cm_hr_sc[current_mask] <- temp_data[[source_col]]
+    vh_corrected$Vh_cm_hr_sc[current_mask] <- as.numeric(unlist(temp_data[[source_col]]))
 
     # 2. Update Vs_cm_hr (Current Best Estimate)
     if (!"Vs_cm_hr" %in% names(vh_corrected)) {
       vh_corrected$Vs_cm_hr <- vh_corrected$Vh_cm_hr_raw
     }
-    vh_corrected$Vs_cm_hr[current_mask] <- temp_data[[source_col]]
+    vh_corrected$Vs_cm_hr[current_mask] <- as.numeric(unlist(temp_data[[source_col]]))
     
     # 3. Transfer any other tracking columns (a, b, baseline)
     cols_to_copy <- c("spacing_correction_a", "spacing_correction_b", "baseline_offset_cm_hr")

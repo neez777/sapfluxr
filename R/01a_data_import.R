@@ -267,7 +267,7 @@ read_heat_pulse_data <- function(file_path,
   }
 
   if (show_progress) {
-    show_message(sprintf("|o.....| Reading heat pulse data: %s (%.1f MB)\n",
+    show_message(sprintf("|>.....| Reading heat pulse data: %s (%.1f MB)\n",
                         basename(file_path), file_size_mb))
   }
 
@@ -275,7 +275,7 @@ read_heat_pulse_data <- function(file_path,
   if (is.null(format)) {
     format <- detect_format(file_path)
     if (show_progress) {
-      show_message(sprintf("|*.....| Auto-detected format: %s\n", format))
+      show_message(sprintf("|=.....| Auto-detected format: %s\n", format))
     }
   }
 
@@ -320,7 +320,7 @@ read_heat_pulse_data <- function(file_path,
   # This ensures completeness calculations are accurate
   if (nrow(result$measurements) > 1 && "datetime" %in% names(result$measurements)) {
     if (show_progress) {
-      show_message("|****o.| Detecting missing pulses...\n")
+      show_message("|====>.| Detecting missing pulses...\n")
     }
 
     tryCatch({
@@ -362,7 +362,7 @@ read_heat_pulse_data <- function(file_path,
   # Trim incomplete days if requested (AFTER gap detection, BEFORE validation)
   if (trim_incomplete_days && nrow(result$measurements) > 0 && "datetime" %in% names(result$measurements)) {
     if (show_progress) {
-      show_message("|*****.|  Trimming incomplete days...\n")
+      show_message("|=====.|  Trimming incomplete days...\n")
     }
 
     trimmed <- trim_incomplete_days(
@@ -384,7 +384,7 @@ read_heat_pulse_data <- function(file_path,
   # Validate if requested (now runs AFTER gap detection and trimming)
   if (validate_data) {
     if (show_progress) {
-      show_message("|*****o| Validating data structure and ranges...\n")
+      show_message("|=====>| Validating data structure and ranges...\n")
     }
     validation_result <- validate_heat_pulse_data(result)
     if (!validation_result$valid) {
@@ -413,7 +413,7 @@ read_heat_pulse_data <- function(file_path,
   }
 
   if (show_progress) {
-    summary_msg <- sprintf("|******| Import complete: %s pulses, %s measurements",
+    summary_msg <- sprintf("|======| Import complete: %s pulses, %s measurements",
                           format(nrow(result$diagnostics), big.mark = ","),
                           format(nrow(result$measurements), big.mark = ","))
 
@@ -515,7 +515,7 @@ read_ict_current <- function(file_path, chunk_size, show_progress, ...) {
   file_size_mb <- file_size / 1e6
 
   if (show_progress) {
-    show_message("|*o....| Reading file...\n")
+    show_message("|=>....| Reading file...\n")
   }
 
   con <- file(file_path, "rb")
@@ -543,13 +543,13 @@ read_ict_current <- function(file_path, chunk_size, show_progress, ...) {
     }
 
     if (show_progress) {
-      show_message("|***...| File reading complete\n")
+      show_message("|===...| File reading complete\n")
     }
 
   } else {
     # For very large files, use list accumulation (avoids O(n^2) string concatenation)
     if (show_progress) {
-      show_message("|**....| Reading large file in chunks...\n")
+      show_message("|==....| Reading large file in chunks...\n")
     }
 
     chunks <- list()
@@ -578,7 +578,7 @@ read_ict_current <- function(file_path, chunk_size, show_progress, ...) {
     }
 
     if (show_progress) {
-      show_message("|**o...| File reading complete\n")
+      show_message("|==>...| File reading complete\n")
     }
 
     # Join all chunks once at the end - much faster than repeated paste0
@@ -586,7 +586,7 @@ read_ict_current <- function(file_path, chunk_size, show_progress, ...) {
   }
 
   if (show_progress) {
-    show_message("|***o..| Parsing data...\n")
+    show_message("|===>..| Parsing data...\n")
   }
 
   # Ultra-fast parsing: extract all data at once using vectorized operations

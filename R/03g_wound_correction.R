@@ -35,12 +35,12 @@ NULL
 #'
 #' @keywords internal
 wound_coefficients_5mm <- data.frame(
-  wound_diameter_cm = c(0.17, 0.18, 0.19, 0.20, 0.21, 0.22, 0.23, 0.24, 0.26, 0.28, 0.30),
-  b = c(1.6821, 1.7304, 1.7961, 1.8558, 1.9181, 1.9831, 2.0509, 2.0973, 2.2231, 2.3760, 2.5232),
-  c = c(-0.0015, -0.0013, -0.0016, -0.0018, -0.0021, -0.0024, -0.0028, -0.0030, -0.0037, -0.0046, -0.0055),
-  d = c(0.0002, 0.0002, 0.0002, 0.0003, 0.0003, 0.0004, 0.0004, 0.0005, 0.0006, 0.0008, 0.0010),
-  B_linear = c(1.7283, 1.7853, 1.8568, 1.9216, 1.9891, 2.0594, 2.1326, 2.1825, 2.3176, 2.4813, 2.6383),
-  r_squared = c(0.9993, 0.9992, 0.9991, 0.9990, 0.9989, 0.9988, 0.9987, 0.9987, 0.9985, 0.9983, 0.9982),
+  wound_diameter_cm = c(0.17, 0.18, 0.19, 0.20, 0.21, 0.22, 0.23, 0.24, 0.25, 0.26, 0.27, 0.28, 0.29, 0.30),
+  b = c(1.6821, 1.7304, 1.7961, 1.8558, 1.9181, 1.9831, 2.0509, 2.0973, 2.1681, 2.2231, 2.2980, 2.3760, 2.4401, 2.5232),
+  c = c(-0.0015, -0.0013, -0.0016, -0.0018, -0.0021, -0.0024, -0.0028, -0.0030, -0.0034, -0.0037, -0.0041, -0.0046, -0.0050, -0.0055),
+  d = c(0.0002, 0.0002, 0.0002, 0.0003, 0.0003, 0.0004, 0.0004, 0.0005, 0.0006, 0.0006, 0.0007, 0.0008, 0.0009, 0.0010),
+  B_linear = c(1.7283, 1.7853, 1.8568, 1.9216, 1.9891, 2.0594, 2.1326, 2.1825, 2.2586, 2.3176, 2.3978, 2.4813, 2.5497, 2.6383),
+  r_squared = c(0.9993, 0.9992, 0.9991, 0.9990, 0.9989, 0.9988, 0.9987, 0.9987, 0.9986, 0.9985, 0.9984, 0.9983, 0.9982, 0.9982),
   stringsAsFactors = FALSE
 )
 
@@ -51,12 +51,12 @@ wound_coefficients_5mm <- data.frame(
 #' @format Same structure as wound_coefficients_5mm
 #' @keywords internal
 wound_coefficients_6mm <- data.frame(
-  wound_diameter_cm = c(0.17, 0.18, 0.19, 0.20, 0.21, 0.22, 0.23, 0.24, 0.26, 0.28, 0.30),
-  b = c(1.6565, 1.7077, 1.7701, 1.8292, 1.8909, 1.9554, 2.0226, 2.0685, 2.1932, 2.3448, 2.4908),
-  c = c(-0.0014, -0.0014, -0.0017, -0.0019, -0.0022, -0.0025, -0.0029, -0.0031, -0.0038, -0.0047, -0.0057),
-  d = c(0.0002, 0.0002, 0.0002, 0.0003, 0.0003, 0.0004, 0.0004, 0.0005, 0.0006, 0.0008, 0.0010),
-  B_linear = c(1.7023, 1.7585, 1.8265, 1.8905, 1.9572, 2.0267, 2.0991, 2.1482, 2.2817, 2.4467, 2.5985),
-  r_squared = c(0.9993, 0.9992, 0.9991, 0.9990, 0.9989, 0.9988, 0.9987, 0.9987, 0.9985, 0.9984, 0.9983),
+  wound_diameter_cm = c(0.17, 0.18, 0.19, 0.20, 0.21, 0.22, 0.23, 0.24, 0.25, 0.26, 0.27, 0.28, 0.29, 0.30),
+  b = c(1.6565, 1.7076, 1.7701, 1.8292, 1.8909, 1.9553, 2.0225, 2.0685, 2.1386, 2.1931, 2.2673, 2.3447, 2.4082, 2.4907),
+  c = c(-0.0014, -0.0014, -0.0017, -0.0019, -0.0022, -0.0025, -0.0029, -0.0031, -0.0034, -0.0038, -0.0042, -0.0047, -0.0052, -0.0057),
+  d = c(0.0002, 0.0002, 0.0002, 0.0003, 0.0003, 0.0004, 0.0004, 0.0005, 0.0005, 0.0006, 0.0007, 0.0008, 0.0008, 0.0010),
+  B_linear = c(1.7023, 1.7585, 1.8265, 1.8905, 1.9572, 2.0267, 2.0991, 2.1482, 2.2259, 2.2817, 2.3639, 2.4467, 2.5144, 2.5985),
+  r_squared = c(0.9993, 0.9992, 0.9991, 0.9990, 0.9989, 0.9988, 0.9987, 0.9987, 0.9986, 0.9985, 0.9984, 0.9984, 0.9983, 0.9983),
   stringsAsFactors = FALSE
 )
 
@@ -137,36 +137,65 @@ calc_wound_diameter <- function(timestamps, wound_config) {
     }
   }
 
-  # Determine growth rate
-  growth_rate_mm_per_day <- 0
-  if (!is.null(wound_config$final_diameter_mm) && !is.null(wound_config$initial_date) && !is.null(wound_config$final_date)) {
-    initial_date <- as.POSIXct(wound_config$initial_date)
+  # Determine growth rates per period
+  # We need a start date, end date, and final diameter for EACH period.
+  n_periods <- length(installation_starts)
+  period_rates <- rep(0, n_periods)
+  
+  # 1. Calculate rate for the LAST period (using experiment final measurement)
+  if (!is.null(wound_config$final_diameter_mm) && !is.null(wound_config$final_date)) {
     final_date <- as.POSIXct(wound_config$final_date)
-    if (final_date <= initial_date) stop("final_date must be after initial_date")
-    days_between <- as.numeric(difftime(final_date, initial_date, units = "days"))
-    growth_rate_mm_per_day <- (wound_config$final_diameter_mm - base_diameter_mm) / days_between
+    last_start <- installation_starts[n_periods]
+    if (final_date > last_start) {
+      days <- as.numeric(difftime(final_date, last_start, units = "days"))
+      if (days > 0) {
+        period_rates[n_periods] <- (wound_config$final_diameter_mm - base_diameter_mm) / days
+      }
+    }
+  }
+  
+  # 2. Calculate rates for EARLIER periods (using measured diameters at removal)
+  if (n_periods > 1 && !is.null(wound_config$reinstall_measured_diameters)) {
+    # reinstall_measured_diameters[1] corresponds to period 1 end (at reinstall_dates[1])
+    for (i in 1:(n_periods - 1)) {
+      start <- installation_starts[i]
+      end <- installation_starts[i + 1] # The next reinstallation is the end of this period
+      days <- as.numeric(difftime(end, start, units = "days"))
+      if (days > 0 && i <= length(wound_config$reinstall_measured_diameters)) {
+        diam <- wound_config$reinstall_measured_diameters[i]
+        if (!is.na(diam)) {
+          period_rates[i] <- (diam - base_diameter_mm) / days
+        }
+      }
+    }
+  } else if (n_periods > 1) {
+    # If no intermediate diameters, extrapolate the last period's rate backwards
+    # (Matches user's suggestion of "recalculating the gradient")
+    period_rates[1:(n_periods - 1)] <- period_rates[n_periods]
   }
 
-  # Calculate diameter
+  # Map timestamps to periods and apply correct rates
   period_idx <- findInterval(timestamps, installation_starts, rightmost.closed = FALSE)
   period_idx[period_idx == 0] <- 1
+  
   current_starts <- installation_starts[period_idx]
+  current_rates <- period_rates[period_idx]
 
   # Growth rate is 0 before initial_date
-  current_rates <- rep(growth_rate_mm_per_day, length(timestamps))
   before_initial <- timestamps < installation_starts[1]
   if (any(before_initial)) current_rates[before_initial] <- 0
 
   days_elapsed <- as.numeric(difftime(timestamps, current_starts, units = "days"))
-  # Cap negative days (shouldn't happen with period_idx logic but for safety)
+  # Cap negative days
   days_elapsed <- pmax(0, days_elapsed)
 
   wound_diameter_mm <- base_diameter_mm + (days_elapsed * current_rates)
 
-  # Cap at final diameter
+  # Cap at final diameter for the VERY LAST period only
   if (!is.null(wound_config$final_date) && !is.null(wound_config$final_diameter_mm)) {
     final_date <- as.POSIXct(wound_config$final_date)
-    after_final <- timestamps > final_date
+    last_period_mask <- period_idx == n_periods
+    after_final <- timestamps > final_date & last_period_mask
     if (any(after_final)) wound_diameter_mm[after_final] <- wound_config$final_diameter_mm
   }
 
@@ -186,6 +215,7 @@ calc_wound_diameter <- function(timestamps, wound_config) {
 #' @param velocity_col Name of velocity column to use as input. Default: \code{NULL}
 #'   (auto-detects in priority order: \code{Vs_cm_hr}, \code{Vh_cm_hr_sc},
 #'   \code{Vh_cm_hr_raw}).
+#' @param method Character, either \code{"linear"} (default) or \code{"quadratic"}.
 #' @param confirm_parameters Logical. Default: TRUE
 #' @param verbose Logical. Default: TRUE
 #' @return Corrected data frame.
@@ -193,10 +223,14 @@ calc_wound_diameter <- function(timestamps, wound_config) {
 apply_wound_correction <- function(vh_data,
                                    wound_diameter = NULL,
                                    probe_spacing = "5mm",
+                                   method = c("linear", "quadratic"),
                                    wood_properties = NULL,
                                    velocity_col = NULL,
                                    confirm_parameters = TRUE,
                                    verbose = TRUE) {
+
+  # Match arguments
+  method <- match.arg(method)
 
   if (!is.data.frame(vh_data)) stop("vh_data must be a data frame")
   if (!all(c("datetime", "Vh_cm_hr") %in% names(vh_data))) stop("vh_data missing required columns")
@@ -228,7 +262,8 @@ apply_wound_correction <- function(vh_data,
     wound_diameter_vector <- rep(wound_diameter, nrow(vh_data))
   }
 
-  B_vector <- get_wound_correction_coefficient(wound_diameter_vector, probe_spacing)
+  # Get ALL coefficients (list of b, c, d, B)
+  coefs <- get_wound_correction_coefficient(wound_diameter_vector, probe_spacing)
 
   if (!"Vh_cm_hr_raw" %in% names(vh_data)) vh_data$Vh_cm_hr_raw <- vh_data$Vh_cm_hr
   if (is.null(velocity_col)) {
@@ -241,19 +276,39 @@ apply_wound_correction <- function(vh_data,
   }
   input_col <- velocity_col
 
-  corrected_values <- vh_data[[input_col]] * B_vector
+  # Find HRM rows — wound correction is only validated for HRM
+  hrm_mask <- vh_data$method == "HRM"
+  hrm_mask[is.na(hrm_mask)] <- FALSE
+
+  # Calculate corrected values based on selected method
+  Vh <- vh_data[[input_col]]
+  
+  if (method == "linear") {
+    # Vc = B * Vh
+    corrected_values_raw <- Vh * coefs$B
+  } else {
+    # Vc = b*Vh + (c*Vh)^2 + (d*Vh)^3
+    # Confirmed by user as the desired structural form
+    corrected_values_raw <- (coefs$b * Vh) + (coefs$c * Vh)^2 + (coefs$d * Vh)^3
+  }
+  
+  corrected_values <- rep(NA_real_, nrow(vh_data))
+  corrected_values[hrm_mask] <- corrected_values_raw[hrm_mask]
+  
+  # Update the audit column (WC only shows for HRM)
   vh_data$Vh_cm_hr_wc <- as.numeric(unlist(corrected_values))
   
-  # Vh_cm_hr is locked to raw — do not mutate it
+  # Ensure Vs_cm_hr exists (Best Estimate pointer)
   if (!"Vs_cm_hr" %in% names(vh_data)) vh_data$Vs_cm_hr <- vh_data$Vh_cm_hr
   
-  # Apply correction and AGGRESSIVELY FLATTEN to prevent nested dataframe bug
-  res_Vs <- ifelse(is.na(corrected_values), vh_data$Vs_cm_hr, corrected_values)
-  vh_data$Vs_cm_hr <- as.numeric(unlist(res_Vs))
+  # Apply correction ONLY to HRM rows in the Best Estimate column
+  # Secondary methods remain raw (Vs_cm_hr = Vh_cm_hr)
+  vh_data$Vs_cm_hr[hrm_mask] <- vh_data$Vh_cm_hr_wc[hrm_mask]
   
   vh_data$Vc_cm_hr <- vh_data$Vs_cm_hr  # Legacy alias
   vh_data$wound_correction_applied <- TRUE
-  vh_data$wound_correction_factor <- B_vector
+  vh_data$wound_correction_method <- method
+  vh_data$wound_correction_factor <- coefs$B # Store linear B for reference
   vh_data$wound_diameter_cm <- wound_diameter_vector
 
   attr(vh_data, "current_vh_column") <- "Vh_cm_hr_wc"
@@ -265,15 +320,27 @@ apply_wound_correction <- function(vh_data,
 #' @keywords internal
 get_wound_correction_coefficient <- function(wound_diameter, probe_spacing = "5mm") {
   coef_table <- if (probe_spacing == "5mm") wound_coefficients_5mm else wound_coefficients_6mm
-  B_vector <- approx(x = coef_table$wound_diameter_cm, y = coef_table$B_linear, xout = wound_diameter, rule = 2)$y
+  
+  # Interpolate all coefficients
+  # Using rule = 2 to extrapolate with the nearest value if outside range
+  b_vec <- approx(x = coef_table$wound_diameter_cm, y = coef_table$b, xout = wound_diameter, rule = 2)$y
+  c_vec <- approx(x = coef_table$wound_diameter_cm, y = coef_table$c, xout = wound_diameter, rule = 2)$y
+  d_vec <- approx(x = coef_table$wound_diameter_cm, y = coef_table$d, xout = wound_diameter, rule = 2)$y
+  B_vec <- approx(x = coef_table$wound_diameter_cm, y = coef_table$B_linear, xout = wound_diameter, rule = 2)$y
 
   if (any(wound_diameter < min(coef_table$wound_diameter_cm), na.rm = TRUE)) {
-    warning("Some wound diameters below table minimum. Using minimum coefficient.")
+    warning("Some wound diameters below table minimum. Using minimum coefficients.")
   }
   if (any(wound_diameter > max(coef_table$wound_diameter_cm), na.rm = TRUE)) {
-    warning("Some wound diameters above table maximum. Using maximum coefficient.")
+    warning("Some wound diameters above table maximum. Using maximum coefficients.")
   }
-  return(B_vector)
+  
+  return(list(
+    b = b_vec,
+    c = c_vec,
+    d = d_vec,
+    B = B_vec
+  ))
 }
 
 #' @keywords internal

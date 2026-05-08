@@ -310,13 +310,16 @@ apply_sdma_processing_internal <- function(vh_results, results_by_pulse, pulse_i
       peclet_col <- "peclet_number"
       use_hrm_outer <- !is.na(hrm_outer[[peclet_col]]) & hrm_outer[[peclet_col]] < peclet_threshold
 
+      # Use best estimate column if available, else fall back to Vh_cm_hr
+      vh_col <- if ("Vs_cm_hr" %in% names(hrm_outer)) "Vs_cm_hr" else "Vh_cm_hr"
+
       # Build data frame
       sdma_outer <- data.frame(
         datetime = hrm_outer$datetime,
         pulse_id = hrm_outer$pulse_id,
         method = sdma_method_name,
         sensor_position = "outer",
-        Vh_cm_hr = ifelse(use_hrm_outer, hrm_outer$Vh_cm_hr, sec_outer$Vh_cm_hr),
+        Vh_cm_hr = ifelse(use_hrm_outer, hrm_outer[[vh_col]], sec_outer[[vh_col]]),
         stringsAsFactors = FALSE
       )
 
@@ -342,13 +345,16 @@ apply_sdma_processing_internal <- function(vh_results, results_by_pulse, pulse_i
       peclet_col <- "peclet_number"
       use_hrm_inner <- !is.na(hrm_inner[[peclet_col]]) & hrm_inner[[peclet_col]] < peclet_threshold
 
+      # Use best estimate column
+      vh_col <- if ("Vs_cm_hr" %in% names(hrm_inner)) "Vs_cm_hr" else "Vh_cm_hr"
+
       # Build data frame
       sdma_inner <- data.frame(
         datetime = hrm_inner$datetime,
         pulse_id = hrm_inner$pulse_id,
         method = sdma_method_name,
         sensor_position = "inner",
-        Vh_cm_hr = ifelse(use_hrm_inner, hrm_inner$Vh_cm_hr, sec_inner$Vh_cm_hr),
+        Vh_cm_hr = ifelse(use_hrm_inner, hrm_inner[[vh_col]], sec_inner[[vh_col]]),
         stringsAsFactors = FALSE
       )
 

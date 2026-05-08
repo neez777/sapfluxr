@@ -342,6 +342,11 @@ detect_pressure_column <- function(data) {
 #' @return POSIXct vector
 #' @keywords internal
 parse_datetime_column <- function(datetime_vec) {
+  # If already parsed (e.g. by readr), return as is
+  if (inherits(datetime_vec, "POSIXt")) {
+    return(datetime_vec)
+  }
+
   # Try multiple common datetime formats
   formats <- c("dmy HM", "mdy HM", "ymd HM",
                "dmy HMS", "mdy HMS", "ymd HMS",
