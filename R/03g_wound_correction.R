@@ -215,7 +215,7 @@ calc_wound_diameter <- function(timestamps, wound_config) {
 #' @param velocity_col Name of velocity column to use as input. Default: \code{NULL}
 #'   (auto-detects in priority order: \code{Vs_cm_hr}, \code{Vh_cm_hr_sc},
 #'   \code{Vh_cm_hr_raw}).
-#' @param method Character, either \code{"linear"} (default) or \code{"quadratic"}.
+#' @param method Character, either \code{"linear"} (default) or \code{"polynomial"}.
 #' @param confirm_parameters Logical. Default: TRUE
 #' @param verbose Logical. Default: TRUE
 #' @return Corrected data frame.
@@ -223,7 +223,7 @@ calc_wound_diameter <- function(timestamps, wound_config) {
 apply_wound_correction <- function(vh_data,
                                    wound_diameter = NULL,
                                    probe_spacing = "5mm",
-                                   method = c("linear", "quadratic"),
+                                   method = c("linear", "polynomial"),
                                    wood_properties = NULL,
                                    velocity_col = NULL,
                                    confirm_parameters = TRUE,
@@ -288,7 +288,7 @@ apply_wound_correction <- function(vh_data,
     corrected_values_raw <- Vh * coefs$B
   } else {
     # Vc = b*Vh + (c*Vh)^2 + (d*Vh)^3
-    # Confirmed by user as the desired structural form
+    # Confirmed by user as the desired structural form (Polynomial)
     corrected_values_raw <- (coefs$b * Vh) + (coefs$c * Vh)^2 + (coefs$d * Vh)^3
   }
   
