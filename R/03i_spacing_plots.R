@@ -1110,7 +1110,7 @@ plot_changepoints_interactive <- function(daily_min,
         mode = "lines",
         name = "VPD",
         yaxis = "y2",
-        line = list(color = "green", width = 2),
+        line = list(color = "black", width = 1.0, dash = "dot"),
         hovertemplate = paste(
           "<b>VPD</b><br>",
           "Date: %{x|%Y-%m-%d}<br>",
@@ -1120,65 +1120,28 @@ plot_changepoints_interactive <- function(daily_min,
       )
   }
 
-  # Configure layout - CONDITIONAL based on whether VPD is shown
+  # Configure layout - basic skeleton, Shiny app will apply final standard layout
   if (use_vpd_axis) {
     # Layout with secondary y-axis for VPD
     fig <- fig %>%
       plotly::layout(
-        title = list(text = title, font = list(size = 16, weight = "bold")),
-        xaxis = list(
-          title = "Date",
-          showgrid = TRUE,
-          gridcolor = "lightgray"
-        ),
-        yaxis = list(
-          title = "Velocity (cm/hr)",
-          showgrid = TRUE,
-          gridcolor = "lightgray"
-        ),
+        title = list(text = title),
+        xaxis = list(title = "Date"),
+        yaxis = list(title = "Velocity (cm/hr)"),
         yaxis2 = list(
           title = "VPD (kPa)",
           overlaying = "y",
           side = "right",
-          showgrid = FALSE,
-          rangemode = "tozero"
-        ),
-        hovermode = "closest",
-        dragmode = "zoom",
-        legend = list(
-          orientation = "h",
-          x = 0,
-          y = -0.25,
-          xanchor = "left",
-          yanchor = "top"
-        ),
-        margin = list(b = 150, l = 60, r = 80, t = 80)
+          showgrid = FALSE
+        )
       )
   } else {
     # Standard single-axis layout
     fig <- fig %>%
       plotly::layout(
-        title = list(text = title, font = list(size = 16, weight = "bold")),
-        xaxis = list(
-          title = "Date",
-          showgrid = TRUE,
-          gridcolor = "lightgray"
-        ),
-        yaxis = list(
-          title = "Velocity (cm/hr)",
-          showgrid = TRUE,
-          gridcolor = "lightgray"
-        ),
-        hovermode = "closest",
-        dragmode = "zoom",
-        legend = list(
-          orientation = "h",
-          x = 0,
-          y = -0.25,
-          xanchor = "left",
-          yanchor = "top"
-        ),
-        margin = list(b = 150, l = 60, r = 60, t = 80)
+        title = list(text = title),
+        xaxis = list(title = "Date"),
+        yaxis = list(title = "Velocity (cm/hr)")
       )
   }
 

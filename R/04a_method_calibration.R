@@ -618,9 +618,15 @@ calibrate_method_to_primary <- function(vh_corrected,
     calib_data[[primary_col]] <= handover_upper,
   ]
 
+  # Remove NAs after filtering to ensure lm() doesn't fail
+  calib_data <- calib_data[
+    !is.na(calib_data[[primary_col]]) &
+    !is.na(calib_data[[secondary_col]]),
+  ]
+
   if (nrow(calib_data) < min_points) {
     stop(sprintf(
-      "Insufficient data for calibration (n=%d, need %d).\nHandover window: %.2f - %.2f cm/hr\nTry:\n  - Increasing handover_pct (currently %.2f)\n  - Lowering min_points\n  - Adjusting threshold_velocity",
+      "Insufficient data for calibration (n=%d, need %d after removing NAs).\nHandover window: %.2f - %.2f cm/hr\nTry:\n  - Increasing handover_pct (currently %.2f)\n  - Lowering min_points\n  - Adjusting threshold_velocity",
       nrow(calib_data), min_points, handover_lower, handover_upper, handover_pct
     ))
   }

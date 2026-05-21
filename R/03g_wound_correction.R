@@ -229,7 +229,7 @@ apply_wound_correction <- function(vh_data,
                                    confirm_parameters = TRUE,
                                    verbose = TRUE) {
 
-  # Match arguments
+  # Match arguments - must be 'linear' or 'polynomial'
   method <- match.arg(method)
 
   if (!is.data.frame(vh_data)) stop("vh_data must be a data frame")

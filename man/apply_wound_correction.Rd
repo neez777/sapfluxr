@@ -8,7 +8,7 @@ apply_wound_correction(
   vh_data,
   wound_diameter = NULL,
   probe_spacing = "5mm",
-  method = c("linear", "quadratic"),
+  method = c("linear", "polynomial"),
   wood_properties = NULL,
   velocity_col = NULL,
   confirm_parameters = TRUE,
@@ -22,7 +22,7 @@ apply_wound_correction(
 
 \item{probe_spacing}{Probe spacing: "5mm" or "6mm".}
 
-\item{method}{Character, either \code{"linear"} (default) or \code{"quadratic"}.}
+\item{method}{Character, either \code{"linear"} (default) or \code{"polynomial"}.}
 
 \item{wood_properties}{Optional WoodProperties object.}
 
