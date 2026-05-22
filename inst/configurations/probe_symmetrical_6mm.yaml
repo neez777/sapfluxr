@@ -17,7 +17,7 @@ probe:
   needle_diameter: 1.27       # mm, needle diameter
   inner_sensor: 7.5           # mm, distance from probe tip
   outer_sensor: 22.5          # mm, distance from probe tip
-  spacer_thickness: 0         # mm, external spacer between handle and bark (0 = fully inserted)
+  spacer_thickness: 0         # mm, gap between needle hub/flange and shaved bark surface (0 = fully seated)
   manufacturer: ICT           # probe manufacturer
   model: SFM1                # probe model
   heat_pulse_duration: 2      # seconds, typical ICT pulse duration

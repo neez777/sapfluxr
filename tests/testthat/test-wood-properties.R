@@ -103,7 +103,8 @@ test_that("load_wood_properties() respects tree_overrides", {
   expect_equal(wood$tree_measurements$dbh, 45.2)
   expect_equal(wood$tree_measurements$sapwood_depth, 3.5)
   # Unspecified measurements should still be NULL
-  expect_null(wood$tree_measurements$bark_thickness)
+  expect_null(wood$tree_measurements$bark_thickness_dbh)
+  expect_null(wood$tree_measurements$bark_thickness_probe)
 })
 
 

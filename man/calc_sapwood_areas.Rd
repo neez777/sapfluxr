@@ -6,7 +6,8 @@
 \usage{
 calc_sapwood_areas(
   dbh,
-  bark_thickness = 0,
+  bark_thickness_dbh,
+  bark_thickness_probe,
   sapwood_depth,
   sensor_positions = c("outer", "inner"),
   probe_config = NULL
@@ -15,12 +16,21 @@ calc_sapwood_areas(
 \arguments{
 \item{dbh}{Diameter at breast height (cm).}
 
-\item{bark_thickness}{Bark thickness (cm). Default: 0.}
+\item{bark_thickness_dbh}{Bark thickness at the DBH measurement site (cm).
+This is the \strong{full, unshaved} bark and is used to derive the inner-bark
+(cambium) radius: \code{cambium_radius = dbh/2 - bark_thickness_dbh}.}
+
+\item{bark_thickness_probe}{Bark thickness at the probe installation site (cm),
+after shaving. Must be \eqn{\le} \code{bark_thickness_dbh}. Used together
+with \code{spacer_thickness} (from the probe config) to calculate sensor
+depths from the cambium:
+\deqn{d_{sensor} = \frac{(\text{probe length} - \text{sensor from tip}) -
+    (\text{bark\_probe} \times 10 + \text{spacer\_mm})}{10}}}
 
 \item{sapwood_depth}{Total depth from the \strong{outer bark surface} to the
 sapwood-heartwood boundary (cm). This matches the standard field measurement
 convention (e.g., from a wood core). The actual conducting sapwood thickness
-is \code{sapwood_depth - bark_thickness}.}
+is \code{sapwood_depth - bark_thickness_dbh}.}
 
 \item{sensor_positions}{Character vector of sensor positions to include.
 Options: \code{"outer"}, \code{"inner"}. Default: \code{c("outer", "inner")}.}
@@ -59,18 +69,24 @@ dimensions, probe geometry, and sensor positions. Implements the Hatton et al.
 \details{
 \subsection{Measurement convention}{
 
-\code{sapwood_depth} is measured from the \strong{bark surface} (e.g., with a
+\code{sapwood_depth} is measured from the \strong{outer bark surface} (e.g., with a
 coring tool or increment borer), which is the standard field convention.
-The function subtracts \code{bark_thickness} internally to obtain the actual
+The function subtracts \code{bark_thickness_dbh} internally to obtain the actual
 conducting sapwood thickness (\code{actual_sapwood_cm}).
+
+Two bark parameters are required because the bark at the DBH measurement site
+(intact, full thickness) differs from the bark at the probe installation site
+(typically shaved down). Using only the probe-site (shaved) value for the
+cambium-radius formula causes systematic overestimation of sapwood area.
 }
 
 \subsection{Probe geometry and annulus boundaries}{
 
-Sensor depths from the cambium are derived from the probe configuration and
-the tree's bark thickness:
+Sensor depths from the cambium are derived from the probe configuration,
+the probe-site bark thickness, and the spacer thickness (from the probe config):
 
-\deqn{d_{sensor} = \frac{(\text{probe length} - \text{sensor from tip}) - \text{bark (mm)}}{10}}
+\deqn{d_{sensor} = \frac{(\text{probe length} - \text{sensor from tip}) -
+  (\text{bark\_probe} \times 10 + \text{spacer\_mm})}{10}}
 
 Three fixed probe landmarks (all from the cambium) determine the annulus
 boundaries:
@@ -83,7 +99,7 @@ measured or estimated.}
 annulus is added from the probe tip to the heartwood boundary.}
 }
 
-\strong{Annulus allocation} (example: standard ICT probe, bark = 0.5 cm)
+\strong{Annulus allocation} (example: standard ICT probe, bark_probe = 0.5 cm, spacer = 0)
 
 Probe landmarks from cambium: outer sensor 0.75 cm, midpoint 1.50 cm,
 inner sensor 2.25 cm, probe tip 3.00 cm.
@@ -112,28 +128,28 @@ assumption.
 }
 \examples{
 \dontrun{
-# Standard case: bark = 0.5 cm, sapwood measured from bark surface = 2.5 cm
-# => actual sapwood from cambium = 2.0 cm => 1 active sensor + 1 sensorless ring
+# Standard case: full bark 0.5 cm (no shaving), sapwood depth from OB = 2.5 cm
+# => actual sapwood from cambium = 2.0 cm
 areas <- calc_sapwood_areas(
-  dbh = 30,
-  bark_thickness = 0.5,
-  sapwood_depth = 2.5
+  dbh                  = 30,
+  bark_thickness_dbh   = 0.5,
+  bark_thickness_probe = 0.5,
+  sapwood_depth        = 2.5
 )
 print(areas$rings)
 print(areas$total_sapwood_area_cm2)
 
-# Deep sapwood: both sensors active, no sensorless zone
-areas2 <- calc_sapwood_areas(
-  dbh = 30,
-  bark_thickness = 0.5,
-  sapwood_depth = 3.0   # actual sapwood = 2.5 cm, inner sensor at 2.25 cm
-)
-print(areas2$rings)
-
-# Use a loaded probe configuration
+# Probe installed through shaved bark (Tim's reference geometry)
 probe <- load_probe_config("symmetrical")
-areas3 <- calc_sapwood_areas(dbh = 30, bark_thickness = 0.5,
-                              sapwood_depth = 2.5, probe_config = probe)
+probe$yaml_data$probe$spacer_thickness <- 2.5  # 2.5 mm hub-to-bark gap
+areas2 <- calc_sapwood_areas(
+  dbh                  = 18.2,
+  bark_thickness_dbh   = 1.7,
+  bark_thickness_probe = 0.5,
+  sapwood_depth        = 4.7,
+  probe_config         = probe
+)
+print(areas2$total_sapwood_area_cm2)  # ~111.21 cm^2
 }
 
 }

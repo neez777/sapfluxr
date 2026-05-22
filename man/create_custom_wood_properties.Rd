@@ -20,7 +20,8 @@ create_custom_wood_properties(
   wood_type = "softwood",
   temperature = 20,
   dbh = NULL,
-  bark_thickness = NULL,
+  bark_thickness_dbh = NULL,
+  bark_thickness_probe = NULL,
   sapwood_depth = NULL,
   sapwood_area = NULL,
   heartwood_radius = NULL,
@@ -62,8 +63,6 @@ create_custom_wood_properties(
 
 \item{dbh}{Diameter at breast height (cm). Optional.}
 
-\item{bark_thickness}{Bark thickness (cm). Optional.}
-
 \item{sapwood_depth}{Sapwood depth (cm). Optional.}
 
 \item{sapwood_area}{Sapwood area (cm^2). Optional.}
@@ -82,6 +81,8 @@ fresh_density and dry_density alone. Default: TRUE.}
 
 \item{verbose}{Logical. If TRUE, prints information about derived properties.
 Default: TRUE.}
+
+\item{bark_thickness}{Bark thickness (cm). Optional.}
 }
 \value{
 WoodProperties R6 object with automatically derived missing properties

@@ -9,11 +9,19 @@
 #' (1990) weighted average method with probe-derived annulus boundaries.
 #'
 #' @param dbh Diameter at breast height (cm).
-#' @param bark_thickness Bark thickness (cm). Default: 0.
+#' @param bark_thickness_dbh Bark thickness at the DBH measurement site (cm).
+#'   This is the **full, unshaved** bark and is used to derive the inner-bark
+#'   (cambium) radius: \code{cambium_radius = dbh/2 - bark_thickness_dbh}.
+#' @param bark_thickness_probe Bark thickness at the probe installation site (cm),
+#'   after shaving. Must be \eqn{\le} \code{bark_thickness_dbh}. Used together
+#'   with \code{spacer_thickness} (from the probe config) to calculate sensor
+#'   depths from the cambium:
+#'   \deqn{d_{sensor} = \frac{(\text{probe length} - \text{sensor from tip}) -
+#'     (\text{bark\_probe} \times 10 + \text{spacer\_mm})}{10}}
 #' @param sapwood_depth Total depth from the **outer bark surface** to the
 #'   sapwood-heartwood boundary (cm). This matches the standard field measurement
 #'   convention (e.g., from a wood core). The actual conducting sapwood thickness
-#'   is \code{sapwood_depth - bark_thickness}.
+#'   is \code{sapwood_depth - bark_thickness_dbh}.
 #' @param sensor_positions Character vector of sensor positions to include.
 #'   Options: \code{"outer"}, \code{"inner"}. Default: \code{c("outer", "inner")}.
 #' @param probe_config Optional probe configuration. Accepts:
@@ -44,17 +52,23 @@
 #' @details
 #' ## Measurement convention
 #'
-#' \code{sapwood_depth} is measured from the **bark surface** (e.g., with a
+#' \code{sapwood_depth} is measured from the **outer bark surface** (e.g., with a
 #' coring tool or increment borer), which is the standard field convention.
-#' The function subtracts \code{bark_thickness} internally to obtain the actual
+#' The function subtracts \code{bark_thickness_dbh} internally to obtain the actual
 #' conducting sapwood thickness (\code{actual_sapwood_cm}).
+#'
+#' Two bark parameters are required because the bark at the DBH measurement site
+#' (intact, full thickness) differs from the bark at the probe installation site
+#' (typically shaved down). Using only the probe-site (shaved) value for the
+#' cambium-radius formula causes systematic overestimation of sapwood area.
 #'
 #' ## Probe geometry and annulus boundaries
 #'
-#' Sensor depths from the cambium are derived from the probe configuration and
-#' the tree's bark thickness:
+#' Sensor depths from the cambium are derived from the probe configuration,
+#' the probe-site bark thickness, and the spacer thickness (from the probe config):
 #'
-#' \deqn{d_{sensor} = \frac{(\text{probe length} - \text{sensor from tip}) - \text{bark (mm)}}{10}}
+#' \deqn{d_{sensor} = \frac{(\text{probe length} - \text{sensor from tip}) -
+#'   (\text{bark\_probe} \times 10 + \text{spacer\_mm})}{10}}
 #'
 #' Three fixed probe landmarks (all from the cambium) determine the annulus
 #' boundaries:
@@ -67,7 +81,7 @@
 #'     annulus is added from the probe tip to the heartwood boundary.}
 #' }
 #'
-#' \strong{Annulus allocation} (example: standard ICT probe, bark = 0.5 cm)
+#' \strong{Annulus allocation} (example: standard ICT probe, bark_probe = 0.5 cm, spacer = 0)
 #'
 #' Probe landmarks from cambium: outer sensor 0.75 cm, midpoint 1.50 cm,
 #' inner sensor 2.25 cm, probe tip 3.00 cm.
@@ -94,28 +108,28 @@
 #'
 #' @examples
 #' \dontrun{
-#' # Standard case: bark = 0.5 cm, sapwood measured from bark surface = 2.5 cm
-#' # => actual sapwood from cambium = 2.0 cm => 1 active sensor + 1 sensorless ring
+#' # Standard case: full bark 0.5 cm (no shaving), sapwood depth from OB = 2.5 cm
+#' # => actual sapwood from cambium = 2.0 cm
 #' areas <- calc_sapwood_areas(
-#'   dbh = 30,
-#'   bark_thickness = 0.5,
-#'   sapwood_depth = 2.5
+#'   dbh                  = 30,
+#'   bark_thickness_dbh   = 0.5,
+#'   bark_thickness_probe = 0.5,
+#'   sapwood_depth        = 2.5
 #' )
 #' print(areas$rings)
 #' print(areas$total_sapwood_area_cm2)
 #'
-#' # Deep sapwood: both sensors active, no sensorless zone
-#' areas2 <- calc_sapwood_areas(
-#'   dbh = 30,
-#'   bark_thickness = 0.5,
-#'   sapwood_depth = 3.0   # actual sapwood = 2.5 cm, inner sensor at 2.25 cm
-#' )
-#' print(areas2$rings)
-#'
-#' # Use a loaded probe configuration
+#' # Probe installed through shaved bark (Tim's reference geometry)
 #' probe <- load_probe_config("symmetrical")
-#' areas3 <- calc_sapwood_areas(dbh = 30, bark_thickness = 0.5,
-#'                               sapwood_depth = 2.5, probe_config = probe)
+#' probe$yaml_data$probe$spacer_thickness <- 2.5  # 2.5 mm hub-to-bark gap
+#' areas2 <- calc_sapwood_areas(
+#'   dbh                  = 18.2,
+#'   bark_thickness_dbh   = 1.7,
+#'   bark_thickness_probe = 0.5,
+#'   sapwood_depth        = 4.7,
+#'   probe_config         = probe
+#' )
+#' print(areas2$total_sapwood_area_cm2)  # ~111.21 cm^2
 #' }
 #'
 #' @references
@@ -127,7 +141,8 @@
 #' @family sapwood integration functions
 #' @export
 calc_sapwood_areas <- function(dbh,
-                                bark_thickness = 0,
+                                bark_thickness_dbh,
+                                bark_thickness_probe,
                                 sapwood_depth,
                                 sensor_positions = c("outer", "inner"),
                                 probe_config = NULL) {
@@ -136,16 +151,26 @@ calc_sapwood_areas <- function(dbh,
   if (!is.numeric(dbh) || dbh <= 0) {
     stop("dbh must be a positive number (cm)")
   }
-  if (!is.numeric(bark_thickness) || bark_thickness < 0) {
-    stop("bark_thickness must be a non-negative number (cm)")
+  if (!is.numeric(bark_thickness_dbh) || bark_thickness_dbh < 0) {
+    stop("bark_thickness_dbh must be a non-negative number (cm)")
+  }
+  if (!is.numeric(bark_thickness_probe) || bark_thickness_probe < 0) {
+    stop("bark_thickness_probe must be a non-negative number (cm)")
+  }
+  if (bark_thickness_probe > bark_thickness_dbh) {
+    stop(sprintf(
+      "bark_thickness_probe (%.2f cm) cannot exceed bark_thickness_dbh (%.2f cm). ",
+      bark_thickness_probe, bark_thickness_dbh
+    ),
+    "Shaving can only remove bark, not add it.")
   }
   if (!is.numeric(sapwood_depth) || sapwood_depth <= 0) {
     stop("sapwood_depth must be a positive number (cm)")
   }
-  if (sapwood_depth <= bark_thickness) {
+  if (sapwood_depth <= bark_thickness_dbh) {
     stop(sprintf(
-      "sapwood_depth (%.2f cm) must be greater than bark_thickness (%.2f cm). ",
-      sapwood_depth, bark_thickness
+      "sapwood_depth (%.2f cm) must be greater than bark_thickness_dbh (%.2f cm). ",
+      sapwood_depth, bark_thickness_dbh
     ),
     "sapwood_depth is the total depth from the bark surface to the heartwood boundary.")
   }
@@ -158,31 +183,34 @@ calc_sapwood_areas <- function(dbh,
 
   # ── Extract probe parameters ────────────────────────────────────────────────
   if (is.null(probe_config)) {
-    probe_length_mm   <- 35
-    outer_from_tip_mm <- 22.5
-    inner_from_tip_mm <- 7.5
+    probe_length_mm     <- 35
+    outer_from_tip_mm   <- 22.5
+    inner_from_tip_mm   <- 7.5
+    spacer_thickness_mm <- 0
   } else if (inherits(probe_config, "ProbeConfiguration")) {
     # R6 ProbeConfiguration — pull dimensions from stored yaml_data
-    pc                <- probe_config$yaml_data$probe
-    probe_length_mm   <- pc$length       %||% 35
-    outer_from_tip_mm <- pc$outer_sensor %||% 22.5
-    inner_from_tip_mm <- pc$inner_sensor %||% 7.5
+    pc                  <- probe_config$yaml_data$probe
+    probe_length_mm     <- pc$length            %||% 35
+    outer_from_tip_mm   <- pc$outer_sensor      %||% 22.5
+    inner_from_tip_mm   <- pc$inner_sensor      %||% 7.5
+    spacer_thickness_mm <- pc$spacer_thickness  %||% 0
   } else if (is.list(probe_config)) {
     # Plain list: accept either top-level fields or nested under $probe
-    pc                <- probe_config$probe %||% probe_config
-    probe_length_mm   <- pc$length       %||% probe_config$probe_length %||% 35
-    outer_from_tip_mm <- pc$outer_sensor %||% 22.5
-    inner_from_tip_mm <- pc$inner_sensor %||% 7.5
+    pc                  <- probe_config$probe %||% probe_config
+    probe_length_mm     <- pc$length            %||% probe_config$probe_length %||% 35
+    outer_from_tip_mm   <- pc$outer_sensor      %||% 22.5
+    inner_from_tip_mm   <- pc$inner_sensor      %||% 7.5
+    spacer_thickness_mm <- pc$spacer_thickness  %||% 0
   } else {
     stop("probe_config must be NULL, a named list, or a ProbeConfiguration object")
   }
 
   # ── Tree geometry ────────────────────────────────────────────────────────────
-  # sapwood_depth is measured from the bark surface; subtract bark to get the
-  # actual conducting sapwood thickness (from cambium to heartwood boundary)
-  actual_sapwood_cm   <- sapwood_depth - bark_thickness
+  # sapwood_depth is measured from the OB surface; subtract full bark (at DBH)
+  # to get actual conducting sapwood thickness (cambium to heartwood boundary).
+  actual_sapwood_cm   <- sapwood_depth - bark_thickness_dbh
   stem_radius_cm      <- dbh / 2
-  cambium_radius_cm   <- stem_radius_cm - bark_thickness
+  cambium_radius_cm   <- stem_radius_cm - bark_thickness_dbh
   heartwood_radius_cm <- cambium_radius_cm - actual_sapwood_cm
 
   if (heartwood_radius_cm < 0) {
@@ -193,11 +221,13 @@ calc_sapwood_areas <- function(dbh,
   total_sapwood_area_cm2 <- pi * (cambium_radius_cm^2 - heartwood_radius_cm^2)
 
   # ── Probe landmark depths from cambium (cm) ──────────────────────────────────
-  bark_mm         <- bark_thickness * 10
-  outer_sensor_cm <- ((probe_length_mm - outer_from_tip_mm) - bark_mm) / 10
-  inner_sensor_cm <- ((probe_length_mm - inner_from_tip_mm) - bark_mm) / 10
-  midpoint_cm     <- (outer_sensor_cm + inner_sensor_cm) / 2
-  probe_tip_cm    <- (probe_length_mm - bark_mm) / 10
+  # The probe needle hub sits on the shaved bark surface. The install offset
+  # combines the remaining (probe-site) bark and any spacer between hub and bark.
+  install_offset_mm <- bark_thickness_probe * 10 + spacer_thickness_mm
+  outer_sensor_cm   <- ((probe_length_mm - outer_from_tip_mm) - install_offset_mm) / 10
+  inner_sensor_cm   <- ((probe_length_mm - inner_from_tip_mm) - install_offset_mm) / 10
+  midpoint_cm       <- (outer_sensor_cm + inner_sensor_cm) / 2
+  probe_tip_cm      <- (probe_length_mm - install_offset_mm) / 10
 
   # Active sensors = those in sensor_positions whose depth is within sapwood
   all_sensor_depths <- c(outer = outer_sensor_cm, inner = inner_sensor_cm)
@@ -289,13 +319,15 @@ calc_sapwood_areas <- function(dbh,
     total_sapwood_area_cm2 = total_sapwood_area_cm2,
     rings                  = rings,
     tree_dimensions        = list(
-      dbh_cm              = dbh,
-      bark_thickness_cm   = bark_thickness,
-      stem_radius_cm      = stem_radius_cm,
-      cambium_radius_cm   = cambium_radius_cm,
-      sapwood_depth_cm    = sapwood_depth,
-      actual_sapwood_cm   = actual_sapwood_cm,
-      heartwood_radius_cm = heartwood_radius_cm
+      dbh_cm                  = dbh,
+      bark_thickness_dbh_cm   = bark_thickness_dbh,
+      bark_thickness_probe_cm = bark_thickness_probe,
+      spacer_thickness_cm     = spacer_thickness_mm / 10,
+      stem_radius_cm          = stem_radius_cm,
+      cambium_radius_cm       = cambium_radius_cm,
+      sapwood_depth_cm        = sapwood_depth,
+      actual_sapwood_cm       = actual_sapwood_cm,
+      heartwood_radius_cm     = heartwood_radius_cm
     ),
     probe_landmarks        = list(
       outer_sensor_depth_cm = outer_sensor_cm,
@@ -489,7 +521,8 @@ calc_flux_single_timestamp <- function(sensor_positions,
 #' # If your data has tree dimensions
 #' flux_data$dbh <- 30
 #' flux_data$sapwood_depth <- 3.5
-#' flux_data$bark_thickness <- 0.5
+#' flux_data$bark_thickness_dbh <- 0.5
+#' flux_data$bark_thickness_probe <- 0.5
 #'
 #' result <- apply_sap_flux_integration(flux_data)
 #' }
@@ -499,7 +532,8 @@ calc_flux_single_timestamp <- function(sensor_positions,
 apply_sap_flux_integration <- function(flux_data,
                                         dbh_col = "dbh",
                                         sapwood_depth_col = "sapwood_depth",
-                                        bark_thickness_col = "bark_thickness",
+                                        bark_thickness_dbh_col = "bark_thickness_dbh",
+                                        bark_thickness_probe_col = "bark_thickness_probe",
                                         method = "weighted_average") {
 
   # Validate columns exist
@@ -511,21 +545,29 @@ apply_sap_flux_integration <- function(flux_data,
     stop("Column '", sapwood_depth_col, "' not found in flux_data")
   }
 
-  # Get tree dimensions (assume constant per tree)
-  dbh <- unique(flux_data[[dbh_col]])[1]
-  sapwood_depth <- unique(flux_data[[sapwood_depth_col]])[1]
-
-  if (is.null(bark_thickness_col) || !bark_thickness_col %in% names(flux_data)) {
-    bark_thickness <- 0
-  } else {
-    bark_thickness <- unique(flux_data[[bark_thickness_col]])[1]
+  if (!bark_thickness_dbh_col %in% names(flux_data)) {
+    stop("Column '", bark_thickness_dbh_col, "' not found in flux_data. ",
+         "Provide 'bark_thickness_dbh' (full bark at DBH site) and ",
+         "'bark_thickness_probe' (probe-site bark after shaving) as separate columns.")
   }
+
+  if (!bark_thickness_probe_col %in% names(flux_data)) {
+    stop("Column '", bark_thickness_probe_col, "' not found in flux_data. ",
+         "Provide 'bark_thickness_probe' (probe-site bark after shaving).")
+  }
+
+  # Get tree dimensions (assume constant per tree)
+  dbh                  <- unique(flux_data[[dbh_col]])[1]
+  sapwood_depth        <- unique(flux_data[[sapwood_depth_col]])[1]
+  bark_thickness_dbh   <- unique(flux_data[[bark_thickness_dbh_col]])[1]
+  bark_thickness_probe <- unique(flux_data[[bark_thickness_probe_col]])[1]
 
   # Calculate sapwood areas
   sapwood_areas <- calc_sapwood_areas(
-    dbh = dbh,
-    bark_thickness = bark_thickness,
-    sapwood_depth = sapwood_depth
+    dbh                  = dbh,
+    bark_thickness_dbh   = bark_thickness_dbh,
+    bark_thickness_probe = bark_thickness_probe,
+    sapwood_depth        = sapwood_depth
   )
 
   # Integrate flux
@@ -546,7 +588,8 @@ apply_sap_flux_integration <- function(flux_data,
 
   cat("Tree Dimensions:\n")
   cat(sprintf("  DBH: %.1f cm\n", dbh))
-  cat(sprintf("  Bark thickness: %.1f cm\n", bark_thickness))
+  cat(sprintf("  Bark thickness (DBH site): %.1f cm\n", bark_thickness_dbh))
+  cat(sprintf("  Bark thickness (probe site): %.1f cm\n", bark_thickness_probe))
   cat(sprintf("  Sapwood depth: %.1f cm\n", sapwood_depth))
   cat(sprintf("  Total sapwood area: %.1f cm^2\n",
               sapwood_areas$total_sapwood_area_cm2))

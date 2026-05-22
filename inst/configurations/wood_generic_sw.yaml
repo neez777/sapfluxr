@@ -73,11 +73,12 @@ wood_property:
 # TREE MEASUREMENTS - Optional, can override per tree in R
 # ============================================================================
 tree_measurements:
-  dbh: null                   # cm, diameter at breast height
-  bark_thickness: null        # cm, bark thickness
-  sapwood_depth: null         # cm, sapwood depth from cambium
-  sapwood_area: null          # cm^2, conducting sapwood area
-  heartwood_radius: null      # cm, heartwood radius
+  dbh: null                    # cm, diameter at breast height
+  bark_thickness_dbh: null     # cm, full bark at DBH measurement site
+  bark_thickness_probe: null   # cm, remaining bark at probe site after shaving
+  sapwood_depth: null          # cm, OB surface to heartwood boundary
+  sapwood_area: null           # cm^2, conducting sapwood area
+  heartwood_radius: null       # cm, heartwood radius
 
 # ============================================================================
 # WOUND CORRECTION - Temporal wound expansion tracking

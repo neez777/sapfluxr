@@ -9,7 +9,7 @@ test_that("wound coefficient lookup tables are valid", {
  coef_5mm <- sapfluxr:::wound_coefficients_5mm
  expect_s3_class(coef_5mm, "data.frame")
  expect_true(all(c("wound_diameter_cm", "b", "c", "d", "B_linear", "r_squared") %in% names(coef_5mm)))
- expect_equal(nrow(coef_5mm), 11)
+ expect_equal(nrow(coef_5mm), 14)
 
  # Check values are reasonable
  expect_true(all(coef_5mm$wound_diameter_cm >= 0.15 & coef_5mm$wound_diameter_cm <= 0.35))
@@ -19,36 +19,36 @@ test_that("wound coefficient lookup tables are valid", {
  # Check 6mm table
  coef_6mm <- sapfluxr:::wound_coefficients_6mm
  expect_s3_class(coef_6mm, "data.frame")
- expect_equal(nrow(coef_6mm), 11)
+ expect_equal(nrow(coef_6mm), 14)
 })
 
 
 test_that("get_wound_correction_coefficient returns correct values", {
 
- # Exact match from table (5mm, 0.20 cm wound)
+ # Exact match from table (5mm, 0.20 cm wound) — function returns list(b, c, d, B)
  B <- sapfluxr:::get_wound_correction_coefficient(0.20, "5mm")
- expect_equal(B, 1.9216)
+ expect_equal(B$B, 1.9216)
 
  # Exact match from 6mm table
  B_6mm <- sapfluxr:::get_wound_correction_coefficient(0.20, "6mm")
- expect_equal(B_6mm, 1.8905)
+ expect_equal(B_6mm$B, 1.8905)
 
  # Interpolation between table values
  B_interp <- sapfluxr:::get_wound_correction_coefficient(0.195, "5mm")
- expect_true(B_interp > 1.8568 && B_interp < 1.9216)  # Between 0.19 and 0.20
+ expect_true(B_interp$B > 1.8568 && B_interp$B < 1.9216)  # Between 0.19 and 0.20
 
  # Edge cases - should warn and return boundary values
  expect_warning(
    B_low <- sapfluxr:::get_wound_correction_coefficient(0.10, "5mm"),
    "below table minimum"
  )
- expect_equal(B_low, min(sapfluxr:::wound_coefficients_5mm$B_linear))
+ expect_equal(B_low$B, min(sapfluxr:::wound_coefficients_5mm$B_linear))
 
  expect_warning(
    B_high <- sapfluxr:::get_wound_correction_coefficient(0.40, "5mm"),
    "above table maximum"
  )
- expect_equal(B_high, max(sapfluxr:::wound_coefficients_5mm$B_linear))
+ expect_equal(B_high$B, max(sapfluxr:::wound_coefficients_5mm$B_linear))
 })
 
 

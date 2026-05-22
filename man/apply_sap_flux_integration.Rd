@@ -8,7 +8,8 @@ apply_sap_flux_integration(
   flux_data,
   dbh_col = "dbh",
   sapwood_depth_col = "sapwood_depth",
-  bark_thickness_col = "bark_thickness",
+  bark_thickness_dbh_col = "bark_thickness_dbh",
+  bark_thickness_probe_col = "bark_thickness_probe",
   method = "weighted_average"
 )
 }
@@ -20,10 +21,10 @@ apply_sap_flux_integration(
 \item{sapwood_depth_col}{Name of sapwood depth column (cm).
 Default: "sapwood_depth"}
 
+\item{method}{Integration method. Default: "weighted_average"}
+
 \item{bark_thickness_col}{Name of bark thickness column (cm).
 Default: "bark_thickness". If NULL, assumes 0.}
-
-\item{method}{Integration method. Default: "weighted_average"}
 }
 \value{
 Data frame with added Q columns
@@ -37,7 +38,8 @@ in a single call.
 # If your data has tree dimensions
 flux_data$dbh <- 30
 flux_data$sapwood_depth <- 3.5
-flux_data$bark_thickness <- 0.5
+flux_data$bark_thickness_dbh <- 0.5
+flux_data$bark_thickness_probe <- 0.5
 
 result <- apply_sap_flux_integration(flux_data)
 }

@@ -57,7 +57,8 @@ wood_property:
 # ============================================================================
 tree_measurements:
   dbh: null
-  bark_thickness: null
+  bark_thickness_dbh: null     # cm, full bark at DBH measurement site
+  bark_thickness_probe: null   # cm, remaining bark at probe site after shaving
   sapwood_depth: null
   sapwood_area: null
   heartwood_radius: null

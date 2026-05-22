@@ -36,7 +36,8 @@ get_hardcoded_wood_defaults <- function(config_name = "generic_sw") {
       ),
       tree_measurements = list(
         dbh = NULL,
-        bark_thickness = NULL,
+        bark_thickness_dbh = NULL,
+        bark_thickness_probe = NULL,
         sapwood_depth = NULL,
         sapwood_area = NULL,
         heartwood_radius = NULL
@@ -70,7 +71,8 @@ get_hardcoded_wood_defaults <- function(config_name = "generic_sw") {
       ),
       tree_measurements = list(
         dbh = NULL,
-        bark_thickness = NULL,
+        bark_thickness_dbh = NULL,
+        bark_thickness_probe = NULL,
         sapwood_depth = NULL,
         sapwood_area = NULL,
         heartwood_radius = NULL
@@ -104,7 +106,8 @@ get_hardcoded_wood_defaults <- function(config_name = "generic_sw") {
       ),
       tree_measurements = list(
         dbh = NULL,
-        bark_thickness = NULL,
+        bark_thickness_dbh = NULL,
+        bark_thickness_probe = NULL,
         sapwood_depth = NULL,
         sapwood_area = NULL,
         heartwood_radius = NULL
@@ -232,12 +235,22 @@ WoodProperties <- R6::R6Class(
       if (is.null(tree_measurements)) {
         self$tree_measurements <- list(
           dbh = NULL,
-          bark_thickness = NULL,
+          bark_thickness_dbh = NULL,
+          bark_thickness_probe = NULL,
           sapwood_depth = NULL,
           sapwood_area = NULL,
           heartwood_radius = NULL
         )
       } else {
+        if ("bark_thickness" %in% names(tree_measurements) &&
+            !all(c("bark_thickness_dbh", "bark_thickness_probe") %in% names(tree_measurements))) {
+          stop(
+            "Legacy 'bark_thickness' field detected. Migrate to two separate fields:\n",
+            "  bark_thickness_dbh   — full bark at DBH measurement site (cm)\n",
+            "  bark_thickness_probe — remaining bark at probe site after shaving (cm)\n",
+            "See knowledge_docs/function_reasoning/bark_thickness_split.md for details."
+          )
+        }
         self$tree_measurements <- tree_measurements
       }
 
@@ -688,10 +701,29 @@ load_wood_properties <- function(config_name = NULL,
   if (is.null(tree_meas)) {
     tree_meas <- list(
       dbh = NULL,
-      bark_thickness = NULL,
+      bark_thickness_dbh = NULL,
+      bark_thickness_probe = NULL,
       sapwood_depth = NULL,
       sapwood_area = NULL,
       heartwood_radius = NULL
+    )
+  }
+
+  # Hard-break: reject legacy single bark_thickness field
+  if ("bark_thickness" %in% names(tree_meas) &&
+      !all(c("bark_thickness_dbh", "bark_thickness_probe") %in% names(tree_meas))) {
+    stop(
+      "Legacy 'bark_thickness' field found in YAML. Migrate to two fields:\n",
+      "  bark_thickness_dbh:   <cm>  # full bark at DBH measurement site\n",
+      "  bark_thickness_probe: <cm>  # remaining bark at probe site after shaving\n",
+      "See knowledge_docs/function_reasoning/bark_thickness_split.md."
+    )
+  }
+  if (!is.null(tree_overrides) && "bark_thickness" %in% names(tree_overrides) &&
+      !all(c("bark_thickness_dbh", "bark_thickness_probe") %in% names(tree_overrides))) {
+    stop(
+      "Legacy 'bark_thickness' key in tree_overrides. Use 'bark_thickness_dbh' and ",
+      "'bark_thickness_probe' instead."
     )
   }
 
@@ -1005,7 +1037,8 @@ create_custom_wood_properties <- function(config_name = "Custom Wood Properties"
                                           wood_type = "softwood",
                                           temperature = 20,
                                           dbh = NULL,
-                                          bark_thickness = NULL,
+                                          bark_thickness_dbh = NULL,
+                                          bark_thickness_probe = NULL,
                                           sapwood_depth = NULL,
                                           sapwood_area = NULL,
                                           heartwood_radius = NULL,
@@ -1083,7 +1116,8 @@ create_custom_wood_properties <- function(config_name = "Custom Wood Properties"
   # Create tree measurements list
   tree_measurements <- list(
     dbh = dbh,
-    bark_thickness = bark_thickness,
+    bark_thickness_dbh = bark_thickness_dbh,
+    bark_thickness_probe = bark_thickness_probe,
     sapwood_depth = sapwood_depth,
     sapwood_area = sapwood_area,
     heartwood_radius = heartwood_radius

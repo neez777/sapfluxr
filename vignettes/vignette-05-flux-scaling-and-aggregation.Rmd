@@ -44,9 +44,10 @@ library(sapfluxr)
 sap_flux <- calc_sap_flux(
   vh_results,
   wood_properties = wood_props,
-  dbh = 35.2,            # Tree diameter (cm)
-  bark_thickness = 1.2,   # Bark thickness (cm)
-  sapwood_depth_mm = 45   # Sapwood depth (mm)
+  dbh = 35.2,                  # Tree diameter (cm)
+  bark_thickness_dbh = 1.2,   # Full bark thickness at DBH site (cm)
+  bark_thickness_probe = 0.5, # Remaining bark at probe site after shaving (cm)
+  sapwood_depth_mm = 45       # Sapwood depth (mm)
 )
 ```
 
