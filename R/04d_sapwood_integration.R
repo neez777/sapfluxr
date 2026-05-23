@@ -243,8 +243,13 @@ calc_sapwood_areas <- function(dbh,
   }
 
   # ── Build annuli from probe landmarks ────────────────────────────────────────
-  # Three zones are defined by the midpoint and probe tip.
-  # Each zone becomes an annulus only if the sapwood reaches that depth.
+  # Three zones are defined by the midpoint and inner detection limit.
+  # HRM detection radius = 0.5 cm: the inner sensor reliably measures flux
+  # within ±0.5 cm of its position, so the measured zone ends at inner + 0.5 cm.
+  # The probe tip overrides this only when it falls closer than 0.5 cm past the
+  # inner sensor (i.e. the needle ends before the detection limit is reached).
+  inner_det_lim_cm <- min(inner_sensor_cm + 0.5, probe_tip_cm)
+
   zones <- list()
 
   # Zone 1 — outer sensor zone: cambium to min(midpoint, heartwood)
@@ -258,10 +263,10 @@ calc_sapwood_areas <- function(dbh,
     ring_name     = "outer_ring"
   )
 
-  # Zone 2 — inner sensor zone: midpoint to min(probe_tip, heartwood)
+  # Zone 2 — inner sensor zone: midpoint to min(inner_det_lim, heartwood)
   if (actual_sapwood_cm > midpoint_cm) {
-    zone2_end        <- min(probe_tip_cm, actual_sapwood_cm)
-    inner_measured   <- "inner" %in% active_sensors
+    zone2_end      <- min(inner_det_lim_cm, actual_sapwood_cm)
+    inner_measured <- "inner" %in% active_sensors
     zones[[length(zones) + 1]] <- list(
       d_start       = midpoint_cm,
       d_end         = zone2_end,
@@ -272,10 +277,10 @@ calc_sapwood_areas <- function(dbh,
     )
   }
 
-  # Zone 3 — beyond probe: probe_tip to heartwood (if sapwood extends past probe)
-  if (actual_sapwood_cm > probe_tip_cm) {
+  # Zone 3 — beyond detection limit: inner_det_lim to heartwood
+  if (actual_sapwood_cm > inner_det_lim_cm) {
     zones[[length(zones) + 1]] <- list(
-      d_start       = probe_tip_cm,
+      d_start       = inner_det_lim_cm,
       d_end         = actual_sapwood_cm,
       sensor        = "sensorless",
       sensor_source = "inner",
@@ -330,11 +335,12 @@ calc_sapwood_areas <- function(dbh,
       heartwood_radius_cm     = heartwood_radius_cm
     ),
     probe_landmarks        = list(
-      outer_sensor_depth_cm = outer_sensor_cm,
-      inner_sensor_depth_cm = inner_sensor_cm,
-      midpoint_depth_cm     = midpoint_cm,
-      probe_tip_depth_cm    = probe_tip_cm,
-      active_sensors        = active_sensors
+      outer_sensor_depth_cm      = outer_sensor_cm,
+      inner_sensor_depth_cm      = inner_sensor_cm,
+      midpoint_depth_cm          = midpoint_cm,
+      inner_det_lim_depth_cm     = inner_det_lim_cm,
+      probe_tip_depth_cm         = probe_tip_cm,
+      active_sensors             = active_sensors
     )
   )
 }

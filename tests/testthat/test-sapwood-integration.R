@@ -68,8 +68,9 @@ test_that("calc_sapwood_areas allocates outer + measured inner for deeper sapwoo
 })
 
 
-test_that("calc_sapwood_areas allocates three rings for sapwood beyond probe tip", {
-  # actual_sapwood = 4.0 - 0.5 = 3.5 cm  (> probe_tip 3.0)
+test_that("calc_sapwood_areas allocates three rings for sapwood beyond detection limit", {
+  # actual_sapwood = 4.0 - 0.5 = 3.5 cm  (> inner_det_lim 2.75)
+  # inner_sensor = 2.25 cm, inner_det_lim = min(2.25+0.5, probe_tip=3.0) = 2.75
   areas <- calc_sapwood_areas(
     dbh                  = 40,
     bark_thickness_dbh   = 0.5,
@@ -81,10 +82,10 @@ test_that("calc_sapwood_areas allocates three rings for sapwood beyond probe tip
   expect_equal(areas$rings$sensor[1], "outer")
   expect_equal(areas$rings$depth_from_cambium_cm[1], "0.000-1.500")
   expect_equal(areas$rings$sensor[2], "inner")
-  expect_equal(areas$rings$depth_from_cambium_cm[2], "1.500-3.000")
+  expect_equal(areas$rings$depth_from_cambium_cm[2], "1.500-2.750")
   expect_equal(areas$rings$sensor[3], "sensorless")
   expect_equal(areas$rings$ring_name[3], "beyond_probe_ring")
-  expect_equal(areas$rings$depth_from_cambium_cm[3], "3.000-3.500")
+  expect_equal(areas$rings$depth_from_cambium_cm[3], "2.750-3.500")
 })
 
 
@@ -546,8 +547,55 @@ test_that("calc_sapwood_areas return value includes all required fields", {
   expect_equal(areas$tree_dimensions$spacer_thickness_cm,     0.25, tolerance = 0.001)
 
   # probe_landmarks present
-  expect_true("outer_sensor_depth_cm" %in% names(areas$probe_landmarks))
-  expect_true("inner_sensor_depth_cm" %in% names(areas$probe_landmarks))
-  expect_true("midpoint_depth_cm"     %in% names(areas$probe_landmarks))
-  expect_true("probe_tip_depth_cm"    %in% names(areas$probe_landmarks))
+  expect_true("outer_sensor_depth_cm"   %in% names(areas$probe_landmarks))
+  expect_true("inner_sensor_depth_cm"   %in% names(areas$probe_landmarks))
+  expect_true("midpoint_depth_cm"       %in% names(areas$probe_landmarks))
+  expect_true("probe_tip_depth_cm"      %in% names(areas$probe_landmarks))
+  expect_true("inner_det_lim_depth_cm"  %in% names(areas$probe_landmarks))
+
+  # inner_det_lim = min(inner_sensor + 0.5, probe_tip)
+  # inner_sensor_depth = 2.0 cm, probe_tip = 2.75 cm → min(2.5, 2.75) = 2.5
+  expect_equal(areas$probe_landmarks$inner_det_lim_depth_cm, 2.5, tolerance = 0.001)
+})
+
+
+# =============================================================================
+# Regression test against fixture reference values
+# =============================================================================
+
+test_that("calc_sapwood_areas matches reference fixture values", {
+  fixture_path <- testthat::test_path("fixtures", "sapwood_reference_cases.csv")
+  skip_if_not(file.exists(fixture_path), "fixture file not found")
+
+  ref <- read.csv(fixture_path, stringsAsFactors = FALSE)
+
+  probe_fn <- function(spacer_mm) {
+    list(probe = list(length = 35, outer_sensor = 22.5, inner_sensor = 7.5,
+                      spacer_thickness = spacer_mm))
+  }
+
+  for (i in seq_len(nrow(ref))) {
+    r   <- ref[i, ]
+    lbl <- r$case_id
+
+    a <- calc_sapwood_areas(
+      dbh                  = r$dbh,
+      bark_thickness_dbh   = r$bark_thickness_dbh,
+      bark_thickness_probe = r$bark_thickness_probe,
+      sapwood_depth        = r$sapwood_depth,
+      probe_config         = probe_fn(r$spacer_mm)
+    )
+
+    expect_equal(a$tree_dimensions$cambium_radius_cm,   r$cambium_radius_cm,   tolerance = 0.001, label = paste(lbl, "cambium_r"))
+    expect_equal(a$tree_dimensions$actual_sapwood_cm,   r$actual_sapwood_cm,   tolerance = 0.001, label = paste(lbl, "actual_sapwood"))
+    expect_equal(a$total_sapwood_area_cm2,              r$total_sapwood_area,  tolerance = 0.01,  label = paste(lbl, "total_area"))
+    expect_equal(a$probe_landmarks$outer_sensor_depth_cm,  r$outer_sensor_depth, tolerance = 0.001, label = paste(lbl, "outer_depth"))
+    expect_equal(a$probe_landmarks$inner_sensor_depth_cm,  r$inner_sensor_depth, tolerance = 0.001, label = paste(lbl, "inner_depth"))
+    expect_equal(a$probe_landmarks$inner_det_lim_depth_cm, r$inner_det_lim_depth, tolerance = 0.001, label = paste(lbl, "det_lim"))
+    expect_equal(nrow(a$rings), r$n_zones, label = paste(lbl, "n_zones"))
+
+    if (r$n_zones >= 1) expect_equal(a$rings$area_cm2[1], r$zone1_area, tolerance = 0.01, label = paste(lbl, "zone1"))
+    if (r$n_zones >= 2) expect_equal(a$rings$area_cm2[2], r$zone2_area, tolerance = 0.01, label = paste(lbl, "zone2"))
+    if (r$n_zones >= 3) expect_equal(a$rings$area_cm2[3], r$zone3_area, tolerance = 0.01, label = paste(lbl, "zone3"))
+  }
 })
