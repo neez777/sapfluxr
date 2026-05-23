@@ -38,7 +38,7 @@ get_hardcoded_wood_defaults <- function(config_name = "generic_sw") {
         dbh = NULL,
         bark_thickness_dbh = NULL,
         bark_thickness_probe = NULL,
-        sapwood_depth = NULL,
+        sapwood_thickness = NULL,
         sapwood_area = NULL,
         heartwood_radius = NULL
       ),
@@ -73,7 +73,7 @@ get_hardcoded_wood_defaults <- function(config_name = "generic_sw") {
         dbh = NULL,
         bark_thickness_dbh = NULL,
         bark_thickness_probe = NULL,
-        sapwood_depth = NULL,
+        sapwood_thickness = NULL,
         sapwood_area = NULL,
         heartwood_radius = NULL
       ),
@@ -108,7 +108,7 @@ get_hardcoded_wood_defaults <- function(config_name = "generic_sw") {
         dbh = NULL,
         bark_thickness_dbh = NULL,
         bark_thickness_probe = NULL,
-        sapwood_depth = NULL,
+        sapwood_thickness = NULL,
         sapwood_area = NULL,
         heartwood_radius = NULL
       ),
@@ -136,7 +136,7 @@ get_hardcoded_wood_defaults <- function(config_name = "generic_sw") {
 #' @field wood_measurements List of user-provided measurements (Method 1 or Method 2)
 #' @field wood_constants List of physical constants (thermal/sap/cell wall properties)
 #' @field wood_property List of basic wood identifiers (species, type, temperature)
-#' @field tree_measurements List of tree-specific measurements (dbh, sapwood_depth, etc.)
+#' @field tree_measurements List of tree-specific measurements (dbh, sapwood_thickness, etc.)
 #' @field wound_correction List of wound configuration (drill bit, temporal tracking)
 #' @field quality_thresholds List of quality control thresholds
 #' @field derived_properties List of calculated properties (populated by calculate_wood_properties())
@@ -237,7 +237,7 @@ WoodProperties <- R6::R6Class(
           dbh = NULL,
           bark_thickness_dbh = NULL,
           bark_thickness_probe = NULL,
-          sapwood_depth = NULL,
+          sapwood_thickness = NULL,
           sapwood_area = NULL,
           heartwood_radius = NULL
         )
@@ -465,8 +465,8 @@ WoodProperties <- R6::R6Class(
         cat("  DBH:", tree$dbh, "cm\n")
         has_tree <- TRUE
       }
-      if (!is.null(tree$sapwood_depth)) {
-        cat("  Sapwood depth:", tree$sapwood_depth, "cm\n")
+      if (!is.null(tree$sapwood_thickness)) {
+        cat("  Sapwood depth:", tree$sapwood_thickness, "cm\n")
         has_tree <- TRUE
       }
       if (!is.null(tree$sapwood_area)) {
@@ -573,7 +573,7 @@ WoodProperties <- R6::R6Class(
 #' @param overrides Named list of wood property parameters to override from YAML.
 #'   For example: list(thermal_diffusivity = 0.003, moisture_content = 35)
 #' @param tree_overrides Named list of tree measurement parameters to override.
-#'   For example: list(dbh = 45.2, sapwood_depth = 3.2)
+#'   For example: list(dbh = 45.2, sapwood_thickness = 3.2)
 #'
 #' @return WoodProperties R6 object
 #'
@@ -703,7 +703,7 @@ load_wood_properties <- function(config_name = NULL,
       dbh = NULL,
       bark_thickness_dbh = NULL,
       bark_thickness_probe = NULL,
-      sapwood_depth = NULL,
+      sapwood_thickness = NULL,
       sapwood_area = NULL,
       heartwood_radius = NULL
     )
@@ -953,7 +953,7 @@ list_available_wood_properties <- function() {
 #' @param temperature Typical wood temperature (degC). Default: 20
 #' @param dbh Diameter at breast height (cm). Optional.
 #' @param bark_thickness Bark thickness (cm). Optional.
-#' @param sapwood_depth Sapwood depth (cm). Optional.
+#' @param sapwood_thickness Sapwood depth (cm). Optional.
 #' @param sapwood_area Sapwood area (cm^2). Optional.
 #' @param heartwood_radius Heartwood radius (cm). Optional.
 #' @param max_velocity_cm_hr Maximum velocity threshold (cm/hr). Default: 200
@@ -1039,7 +1039,7 @@ create_custom_wood_properties <- function(config_name = "Custom Wood Properties"
                                           dbh = NULL,
                                           bark_thickness_dbh = NULL,
                                           bark_thickness_probe = NULL,
-                                          sapwood_depth = NULL,
+                                          sapwood_thickness = NULL,
                                           sapwood_area = NULL,
                                           heartwood_radius = NULL,
                                           max_velocity_cm_hr = 200,
@@ -1118,7 +1118,7 @@ create_custom_wood_properties <- function(config_name = "Custom Wood Properties"
     dbh = dbh,
     bark_thickness_dbh = bark_thickness_dbh,
     bark_thickness_probe = bark_thickness_probe,
-    sapwood_depth = sapwood_depth,
+    sapwood_thickness = sapwood_thickness,
     sapwood_area = sapwood_area,
     heartwood_radius = heartwood_radius
   )

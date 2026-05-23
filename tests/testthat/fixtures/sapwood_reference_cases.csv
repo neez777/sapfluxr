@@ -1,7 +1,7 @@
-"case_id","dbh","bark_thickness_dbh","bark_thickness_probe","sapwood_depth","spacer_mm","cambium_radius_cm","heartwood_radius_cm","actual_sapwood_cm","total_sapwood_area","outer_sensor_depth","inner_sensor_depth","inner_det_lim_depth","n_zones","zone1_area","zone2_area","zone3_area"
-"tim_reference",18.2,1.7,0.5,4.7,2.5,7.4,4.4,3,111.2124,0.5,2,2.5,3,53.2107,43.3932,14.6084
-"same_bark_std",18.2,0.5,0.5,3.2,0,8.6,5.9,2.7,122.9934,0.75,2.25,2.75,2,73.9845,49.0088,NA
-"diff_bark_3zones",18.2,1.5,0.5,4.5,0,7.6,4.6,3,114.9823,0.75,2.25,2.75,3,64.5597,43.0005,7.422
-"shallow_sapwood",18.2,1.7,0.5,2.6,2.5,7.4,6.5,0.9,39.3013,0.5,2,2.5,1,39.3013,NA,NA
-"sapwood_at_det_lim",18.2,1.7,0.5,4.2,2.5,7.4,4.9,2.5,96.604,0.5,2,2.5,2,53.2107,43.3932,NA
-"large_dbh",40,2,0.8,6.5,0,18,13.5,4.5,445.3208,0.45,1.95,2.45,3,131.1929,127.0382,187.0897
+"case_id","dbh","bark_thickness_dbh","bark_thickness_probe","sapwood_thickness","spacer_mm","cambium_radius_cm","heartwood_radius_cm","actual_sapwood_cm","total_sapwood_area","outer_sensor_depth","inner_sensor_depth","inner_det_lim_depth","n_zones","zone1_area","zone2_area","zone3_area"
+"tim_reference",18.2,1.7,0.5,3,2.5,7.4,4.4,3,111.2124,0.5,2,2.5,3,53.2107,43.3932,14.6084
+"same_bark_std",18.2,0.5,0.5,2.7,0,8.6,5.9,2.7,122.9934,0.75,2.25,2.75,2,73.9845,49.0088,NA
+"diff_bark_3zones",18.2,1.5,0.5,3,0,7.6,4.6,3,114.9823,0.75,2.25,2.75,3,64.5597,43.0005,7.422
+"shallow_sapwood",18.2,1.7,0.5,0.9,2.5,7.4,6.5,0.9,39.3013,0.5,2,2.5,1,39.3013,NA,NA
+"sapwood_at_det_lim",18.2,1.7,0.5,2.5,2.5,7.4,4.9,2.5,96.604,0.5,2,2.5,2,53.2107,43.3932,NA
+"large_dbh",40,2,0.8,4.5,0,18,13.5,4.5,445.3208,0.45,1.95,2.45,3,131.1929,127.0382,187.0897

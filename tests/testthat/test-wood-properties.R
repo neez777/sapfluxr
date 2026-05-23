@@ -151,7 +151,7 @@ test_that("WoodProperties object has new structure with required sections", {
 
   # Check tree measurements structure
   expect_true("dbh" %in% names(wood$tree_measurements))
-  expect_true("sapwood_depth" %in% names(wood$tree_measurements))
+  expect_true("sapwood_thickness" %in% names(wood$tree_measurements))
 
   # Check quality thresholds structure
   expect_true("max_velocity_cm_hr" %in% names(wood$quality_thresholds))

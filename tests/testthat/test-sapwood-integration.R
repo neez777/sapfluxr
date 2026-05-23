@@ -13,12 +13,12 @@
 # =============================================================================
 
 test_that("calc_sapwood_areas allocates single outer ring for shallow sapwood", {
-  # actual_sapwood = 1.8 - 0.5 = 1.3 cm  (<  midpoint 1.50)
+  # sapwood_thickness = 1.3 cm  (<  midpoint 1.50)
   areas <- calc_sapwood_areas(
     dbh                  = 20,
     bark_thickness_dbh   = 0.5,
     bark_thickness_probe = 0.5,
-    sapwood_depth        = 1.8
+    sapwood_thickness    = 1.3
   )
 
   expect_equal(nrow(areas$rings), 1)
@@ -29,12 +29,12 @@ test_that("calc_sapwood_areas allocates single outer ring for shallow sapwood", 
 
 
 test_that("calc_sapwood_areas allocates outer + sensorless inner for medium sapwood", {
-  # actual_sapwood = 2.5 - 0.5 = 2.0 cm  (> midpoint 1.5 but < inner_sensor 2.25)
+  # sapwood_thickness = 2.0 cm  (> midpoint 1.5 but < inner_sensor 2.25)
   areas <- calc_sapwood_areas(
     dbh                  = 25,
     bark_thickness_dbh   = 0.5,
     bark_thickness_probe = 0.5,
-    sapwood_depth        = 2.5
+    sapwood_thickness    = 2.0
   )
 
   expect_equal(nrow(areas$rings), 2)
@@ -50,12 +50,12 @@ test_that("calc_sapwood_areas allocates outer + sensorless inner for medium sapw
 
 
 test_that("calc_sapwood_areas allocates outer + measured inner for deeper sapwood", {
-  # actual_sapwood = 3.0 - 0.5 = 2.5 cm  (> inner_sensor 2.25, < probe_tip 3.0)
+  # sapwood_thickness = 2.5 cm  (> inner_sensor 2.25, < inner_det_lim 2.75)
   areas <- calc_sapwood_areas(
     dbh                  = 30,
     bark_thickness_dbh   = 0.5,
     bark_thickness_probe = 0.5,
-    sapwood_depth        = 3.0
+    sapwood_thickness    = 2.5
   )
 
   expect_equal(nrow(areas$rings), 2)
@@ -69,13 +69,13 @@ test_that("calc_sapwood_areas allocates outer + measured inner for deeper sapwoo
 
 
 test_that("calc_sapwood_areas allocates three rings for sapwood beyond detection limit", {
-  # actual_sapwood = 4.0 - 0.5 = 3.5 cm  (> inner_det_lim 2.75)
+  # sapwood_thickness = 3.5 cm  (> inner_det_lim 2.75)
   # inner_sensor = 2.25 cm, inner_det_lim = min(2.25+0.5, probe_tip=3.0) = 2.75
   areas <- calc_sapwood_areas(
     dbh                  = 40,
     bark_thickness_dbh   = 0.5,
     bark_thickness_probe = 0.5,
-    sapwood_depth        = 4.0
+    sapwood_thickness    = 3.5
   )
 
   expect_equal(nrow(areas$rings), 3)
@@ -94,15 +94,14 @@ test_that("calc_sapwood_areas allocates three rings for sapwood beyond detection
 # =============================================================================
 
 test_that("calc_sapwood_areas calculates areas correctly", {
-  # dbh = 30, bark_dbh = 0.5, sapwood_depth = 3.0
+  # dbh = 30, bark_dbh = 0.5, sapwood_thickness = 2.5
   # cambium_radius = 15 - 0.5 = 14.5
-  # actual_sapwood = 3.0 - 0.5 = 2.5
   # heartwood_radius = 14.5 - 2.5 = 12.0
   areas <- calc_sapwood_areas(
     dbh                  = 30,
     bark_thickness_dbh   = 0.5,
     bark_thickness_probe = 0.5,
-    sapwood_depth        = 3.0
+    sapwood_thickness    = 2.5
   )
 
   expected_total <- pi * (14.5^2 - 12.0^2)
@@ -124,7 +123,7 @@ test_that("calc_sapwood_areas handles zero bark thickness", {
     dbh                  = 20,
     bark_thickness_dbh   = 0,
     bark_thickness_probe = 0,
-    sapwood_depth        = 3.0
+    sapwood_thickness    = 3.0
   )
 
   expect_equal(areas$tree_dimensions$cambium_radius_cm, areas$tree_dimensions$stem_radius_cm)
@@ -134,12 +133,13 @@ test_that("calc_sapwood_areas handles zero bark thickness", {
 
 
 test_that("calc_sapwood_areas handles tree with no heartwood", {
+  # sapwood_thickness (10 cm) > cambium_radius (4.7 cm) → clamped to pith
   expect_warning(
     areas <- calc_sapwood_areas(
       dbh                  = 10,
       bark_thickness_dbh   = 0.3,
       bark_thickness_probe = 0.3,
-      sapwood_depth        = 10
+      sapwood_thickness    = 10
     ),
     "no heartwood"
   )
@@ -155,10 +155,9 @@ test_that("calc_sapwood_areas handles tree with no heartwood", {
 
 test_that("calc_sapwood_areas matches Tim's reference geometry exactly", {
   # ICT SFM1x, DBH = 18.2 cm, full bark = 1.7 cm, shaved bark = 0.5 cm,
-  # spacer = 2.5 mm, sapwood_depth = 4.7 cm
+  # spacer = 2.5 mm, sapwood_thickness = 3.0 cm (cambium → heartwood)
   # Expected (Tim's spreadsheet):
   #   IB radius     = 9.1 - 1.7   = 7.40 cm
-  #   actual_sapwood= 4.7 - 1.7   = 3.00 cm
   #   heartwood_r   = 7.4 - 3.0   = 4.40 cm
   #   sapwood_area  = pi*(7.4^2-4.4^2) = 111.21 cm^2
   #   outer sensor  = (35-22.5-7.5)/10 = 0.50 cm from cambium
@@ -173,7 +172,7 @@ test_that("calc_sapwood_areas matches Tim's reference geometry exactly", {
     dbh                  = 18.2,
     bark_thickness_dbh   = 1.7,
     bark_thickness_probe = 0.5,
-    sapwood_depth        = 4.7,
+    sapwood_thickness    = 3.0,
     probe_config         = probe
   )
 
@@ -192,41 +191,37 @@ test_that("calc_sapwood_areas matches Tim's reference geometry exactly", {
 
 test_that("calc_sapwood_areas errors on invalid inputs", {
   expect_error(
-    calc_sapwood_areas(dbh = -10, bark_thickness_dbh = 0.5, bark_thickness_probe = 0.5, sapwood_depth = 2),
+    calc_sapwood_areas(dbh = -10, bark_thickness_dbh = 0.5, bark_thickness_probe = 0.5, sapwood_thickness = 2),
     "dbh must be a positive number"
   )
 
   expect_error(
-    calc_sapwood_areas(dbh = 20, bark_thickness_dbh = -1, bark_thickness_probe = 0, sapwood_depth = 2),
+    calc_sapwood_areas(dbh = 20, bark_thickness_dbh = -1, bark_thickness_probe = 0, sapwood_thickness = 2),
     "bark_thickness_dbh must be a non-negative"
   )
 
   expect_error(
-    calc_sapwood_areas(dbh = 20, bark_thickness_dbh = 0.5, bark_thickness_probe = -1, sapwood_depth = 2),
+    calc_sapwood_areas(dbh = 20, bark_thickness_dbh = 0.5, bark_thickness_probe = -1, sapwood_thickness = 2),
     "bark_thickness_probe must be a non-negative"
   )
 
   expect_error(
-    calc_sapwood_areas(dbh = 20, bark_thickness_dbh = 0.5, bark_thickness_probe = 0.8, sapwood_depth = 2),
+    calc_sapwood_areas(dbh = 20, bark_thickness_dbh = 0.5, bark_thickness_probe = 0.8, sapwood_thickness = 2),
     "cannot exceed bark_thickness_dbh"
   )
 
   expect_error(
-    calc_sapwood_areas(dbh = 20, bark_thickness_dbh = 0.5, bark_thickness_probe = 0.5, sapwood_depth = 0),
-    "sapwood_depth must be a positive"
-  )
-
-  expect_error(
-    calc_sapwood_areas(dbh = 20, bark_thickness_dbh = 1.5, bark_thickness_probe = 0.5, sapwood_depth = 1.2),
-    "sapwood_depth.*must be greater than bark_thickness_dbh"
+    calc_sapwood_areas(dbh = 20, bark_thickness_dbh = 0.5, bark_thickness_probe = 0.5, sapwood_thickness = 0),
+    "sapwood_thickness must be a positive"
   )
 })
 
 
-test_that("calc_sapwood_areas warns when sapwood exceeds radius", {
+test_that("calc_sapwood_areas warns when sapwood thickness exceeds cambium radius", {
+  # cambium_radius = 5 - 1 = 4 cm; sapwood_thickness = 5 > 4
   expect_warning(
-    calc_sapwood_areas(dbh = 10, bark_thickness_dbh = 1, bark_thickness_probe = 0.5, sapwood_depth = 10),
-    "exceeds stem radius"
+    calc_sapwood_areas(dbh = 10, bark_thickness_dbh = 1, bark_thickness_probe = 0.5, sapwood_thickness = 5),
+    "exceeds cambium radius"
   )
 })
 
@@ -236,9 +231,9 @@ test_that("calc_sapwood_areas warns when sapwood exceeds radius", {
 # =============================================================================
 
 test_that("calc_sap_flux integrates correctly for shallow sapwood", {
-  # 1 ring (outer only), actual_sapwood = 1.3
+  # 1 ring (outer only), sapwood_thickness = 1.3 cm
   areas <- calc_sapwood_areas(
-    dbh = 20, bark_thickness_dbh = 0.5, bark_thickness_probe = 0.5, sapwood_depth = 1.8
+    dbh = 20, bark_thickness_dbh = 0.5, bark_thickness_probe = 0.5, sapwood_thickness = 1.3
   )
 
   flux_data <- data.frame(
@@ -257,9 +252,9 @@ test_that("calc_sap_flux integrates correctly for shallow sapwood", {
 
 
 test_that("calc_sap_flux applies velocity assumption for sensorless inner ring", {
-  # 2 rings, inner sensorless. actual_sapwood = 2.0, inner_sensor at 2.25 (in heartwood)
+  # 2 rings, inner sensorless. sapwood_thickness = 2.0 cm, inner_sensor at 2.25 (in heartwood)
   areas <- calc_sapwood_areas(
-    dbh = 25, bark_thickness_dbh = 0.5, bark_thickness_probe = 0.5, sapwood_depth = 2.5
+    dbh = 25, bark_thickness_dbh = 0.5, bark_thickness_probe = 0.5, sapwood_thickness = 2.0
   )
 
   flux_data <- data.frame(
@@ -279,9 +274,9 @@ test_that("calc_sap_flux applies velocity assumption for sensorless inner ring",
 
 
 test_that("calc_sap_flux integrates directly when inner sensor is active", {
-  # 2 rings, inner sensor measured. actual_sapwood = 2.5
+  # 2 rings, inner sensor measured. sapwood_thickness = 2.5 cm
   areas <- calc_sapwood_areas(
-    dbh = 30, bark_thickness_dbh = 0.5, bark_thickness_probe = 0.5, sapwood_depth = 3.0
+    dbh = 30, bark_thickness_dbh = 0.5, bark_thickness_probe = 0.5, sapwood_thickness = 2.5
   )
 
   flux_data <- data.frame(
@@ -301,9 +296,9 @@ test_that("calc_sap_flux integrates directly when inner sensor is active", {
 
 
 test_that("calc_sap_flux handles three rings with beyond-probe sensorless zone", {
-  # 3 rings. actual_sapwood = 3.5 > probe_tip 3.0
+  # 3 rings. sapwood_thickness = 3.5 cm > inner_det_lim 2.75
   areas <- calc_sapwood_areas(
-    dbh = 40, bark_thickness_dbh = 0.5, bark_thickness_probe = 0.5, sapwood_depth = 4.0
+    dbh = 40, bark_thickness_dbh = 0.5, bark_thickness_probe = 0.5, sapwood_thickness = 3.5
   )
 
   flux_data <- data.frame(
@@ -329,7 +324,7 @@ test_that("calc_sap_flux handles three rings with beyond-probe sensorless zone",
 
 test_that("calc_sap_flux handles multiple timestamps", {
   areas <- calc_sapwood_areas(
-    dbh = 30, bark_thickness_dbh = 0.5, bark_thickness_probe = 0.5, sapwood_depth = 3.0
+    dbh = 30, bark_thickness_dbh = 0.5, bark_thickness_probe = 0.5, sapwood_thickness = 2.5
   )
 
   flux_data <- data.frame(
@@ -365,7 +360,7 @@ test_that("calc_sap_flux handles multiple timestamps", {
 
 test_that("calc_sap_flux handles NA values in Jv", {
   areas <- calc_sapwood_areas(
-    dbh = 30, bark_thickness_dbh = 0.5, bark_thickness_probe = 0.5, sapwood_depth = 3.0
+    dbh = 30, bark_thickness_dbh = 0.5, bark_thickness_probe = 0.5, sapwood_thickness = 2.5
   )
 
   flux_data <- data.frame(
@@ -386,7 +381,7 @@ test_that("calc_sap_flux handles NA values in Jv", {
 
 test_that("calc_sap_flux handles missing sensor data", {
   areas <- calc_sapwood_areas(
-    dbh = 30, bark_thickness_dbh = 0.5, bark_thickness_probe = 0.5, sapwood_depth = 3.0
+    dbh = 30, bark_thickness_dbh = 0.5, bark_thickness_probe = 0.5, sapwood_thickness = 2.5
   )
 
   flux_data <- data.frame(
@@ -404,7 +399,7 @@ test_that("calc_sap_flux handles missing sensor data", {
 
 test_that("calc_sap_flux handles zero flux", {
   areas <- calc_sapwood_areas(
-    dbh = 30, bark_thickness_dbh = 0.5, bark_thickness_probe = 0.5, sapwood_depth = 3.0
+    dbh = 30, bark_thickness_dbh = 0.5, bark_thickness_probe = 0.5, sapwood_thickness = 2.5
   )
 
   flux_data <- data.frame(
@@ -427,7 +422,7 @@ test_that("calc_sap_flux handles zero flux", {
 
 test_that("calc_sap_flux errors on invalid inputs", {
   areas <- calc_sapwood_areas(
-    dbh = 30, bark_thickness_dbh = 0.5, bark_thickness_probe = 0.5, sapwood_depth = 3.0
+    dbh = 30, bark_thickness_dbh = 0.5, bark_thickness_probe = 0.5, sapwood_thickness = 2.5
   )
 
   expect_error(
@@ -466,7 +461,7 @@ test_that("apply_sap_flux_integration works end-to-end", {
     sensor_position = rep(c("outer", "inner"), 2),
     Jv_cm3_cm2_hr = c(5.0, 4.0, 10.0, 8.0),
     dbh = 30,
-    sapwood_depth = 3.0,
+    sapwood_thickness = 2.5,
     bark_thickness_dbh = 0.5,
     bark_thickness_probe = 0.5
   )
@@ -487,7 +482,7 @@ test_that("apply_sap_flux_integration handles custom column names", {
     sensor_position = "outer",
     Jv_cm3_cm2_hr = 10.0,
     tree_dbh = 30,
-    sw_depth = 3.0,
+    sw_thick = 2.5,
     bark_dbh = 0.5,
     bark_probe = 0.5
   )
@@ -496,7 +491,7 @@ test_that("apply_sap_flux_integration handles custom column names", {
     apply_sap_flux_integration(
       flux_data,
       dbh_col                  = "tree_dbh",
-      sapwood_depth_col        = "sw_depth",
+      sapwood_thickness_col    = "sw_thick",
       bark_thickness_dbh_col   = "bark_dbh",
       bark_thickness_probe_col = "bark_probe"
     )
@@ -513,7 +508,7 @@ test_that("apply_sap_flux_integration errors when bark columns are missing", {
     sensor_position = "outer",
     Jv_cm3_cm2_hr = 10.0,
     dbh = 30,
-    sapwood_depth = 3.0
+    sapwood_thickness = 2.5
   )
 
   expect_error(
@@ -532,7 +527,7 @@ test_that("calc_sapwood_areas return value includes all required fields", {
     dbh                  = 18.2,
     bark_thickness_dbh   = 1.7,
     bark_thickness_probe = 0.5,
-    sapwood_depth        = 4.7,
+    sapwood_thickness    = 3.0,
     probe_config         = list(
       probe = list(length = 35, outer_sensor = 22.5, inner_sensor = 7.5, spacer_thickness = 2.5)
     )
@@ -582,7 +577,7 @@ test_that("calc_sapwood_areas matches reference fixture values", {
       dbh                  = r$dbh,
       bark_thickness_dbh   = r$bark_thickness_dbh,
       bark_thickness_probe = r$bark_thickness_probe,
-      sapwood_depth        = r$sapwood_depth,
+      sapwood_thickness    = r$sapwood_thickness,
       probe_config         = probe_fn(r$spacer_mm)
     )
 
