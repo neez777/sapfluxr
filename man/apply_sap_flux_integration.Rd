@@ -7,7 +7,7 @@
 apply_sap_flux_integration(
   flux_data,
   dbh_col = "dbh",
-  sapwood_depth_col = "sapwood_depth",
+  sapwood_thickness_col = "sapwood_thickness",
   bark_thickness_dbh_col = "bark_thickness_dbh",
   bark_thickness_probe_col = "bark_thickness_probe",
   method = "weighted_average"
@@ -18,8 +18,8 @@ apply_sap_flux_integration(
 
 \item{dbh_col}{Name of DBH column (cm). Default: "dbh"}
 
-\item{sapwood_depth_col}{Name of sapwood depth column (cm).
-Default: "sapwood_depth"}
+\item{sapwood_thickness_col}{Name of sapwood thickness column (cm, cambium to
+heartwood). Default: "sapwood_thickness"}
 
 \item{method}{Integration method. Default: "weighted_average"}
 
@@ -37,7 +37,7 @@ in a single call.
 \dontrun{
 # If your data has tree dimensions
 flux_data$dbh <- 30
-flux_data$sapwood_depth <- 3.5
+flux_data$sapwood_thickness <- 2.5
 flux_data$bark_thickness_dbh <- 0.5
 flux_data$bark_thickness_probe <- 0.5
 

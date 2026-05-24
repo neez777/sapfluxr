@@ -108,6 +108,10 @@ This function:
 \item Detects VPD-stable dates using \code{\link{detect_stable_vpd_periods}}
 \item Detects vh-stable dates using \code{\link{find_stable_vh_dates}}
 \item Finds intersection (dates passing BOTH tests)
+\item Applies the \code{min_segment_days} spacing filter \strong{once} on the
+intersection — not on the constituent sets. This ensures dates are drawn from
+across the full deployment rather than clustering around the
+globally-lowest-quality period.
 \item Within each dual-stable date, identifies the exact timestamp with minimum vh
 }
 

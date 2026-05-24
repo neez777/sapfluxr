@@ -8,7 +8,7 @@ calc_sapwood_areas(
   dbh,
   bark_thickness_dbh,
   bark_thickness_probe,
-  sapwood_depth,
+  sapwood_thickness,
   sensor_positions = c("outer", "inner"),
   probe_config = NULL
 )
@@ -27,10 +27,10 @@ depths from the cambium:
 \deqn{d_{sensor} = \frac{(\text{probe length} - \text{sensor from tip}) -
     (\text{bark\_probe} \times 10 + \text{spacer\_mm})}{10}}}
 
-\item{sapwood_depth}{Total depth from the \strong{outer bark surface} to the
-sapwood-heartwood boundary (cm). This matches the standard field measurement
-convention (e.g., from a wood core). The actual conducting sapwood thickness
-is \code{sapwood_depth - bark_thickness_dbh}.}
+\item{sapwood_thickness}{Radial thickness of the conducting sapwood (cm),
+measured from the \strong{cambium (inner bark) surface} to the sapwood-heartwood
+boundary. This is the sapwood layer width only — do not include bark.
+Equivalent to what Tim's spreadsheet calls "Sapwood width".}
 
 \item{sensor_positions}{Character vector of sensor positions to include.
 Options: \code{"outer"}, \code{"inner"}. Default: \code{c("outer", "inner")}.}
@@ -69,10 +69,9 @@ dimensions, probe geometry, and sensor positions. Implements the Hatton et al.
 \details{
 \subsection{Measurement convention}{
 
-\code{sapwood_depth} is measured from the \strong{outer bark surface} (e.g., with a
-coring tool or increment borer), which is the standard field convention.
-The function subtracts \code{bark_thickness_dbh} internally to obtain the actual
-conducting sapwood thickness (\code{actual_sapwood_cm}).
+\code{sapwood_thickness} is the radial width of the conducting sapwood only —
+measured from the cambium to the heartwood boundary (IB→HW). Do not add bark.
+This matches the "Sapwood width" column in Tim's reference spreadsheet.
 
 Two bark parameters are required because the bark at the DBH measurement site
 (intact, full thickness) differs from the bark at the probe installation site
@@ -128,13 +127,12 @@ assumption.
 }
 \examples{
 \dontrun{
-# Standard case: full bark 0.5 cm (no shaving), sapwood depth from OB = 2.5 cm
-# => actual sapwood from cambium = 2.0 cm
+# Standard case: full bark 0.5 cm (no shaving), sapwood thickness 2.0 cm
 areas <- calc_sapwood_areas(
   dbh                  = 30,
   bark_thickness_dbh   = 0.5,
   bark_thickness_probe = 0.5,
-  sapwood_depth        = 2.5
+  sapwood_thickness    = 2.0
 )
 print(areas$rings)
 print(areas$total_sapwood_area_cm2)
@@ -146,7 +144,7 @@ areas2 <- calc_sapwood_areas(
   dbh                  = 18.2,
   bark_thickness_dbh   = 1.7,
   bark_thickness_probe = 0.5,
-  sapwood_depth        = 4.7,
+  sapwood_thickness    = 3.0,
   probe_config         = probe
 )
 print(areas2$total_sapwood_area_cm2)  # ~111.21 cm^2

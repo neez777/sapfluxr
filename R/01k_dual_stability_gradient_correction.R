@@ -26,6 +26,10 @@
 #' @param min_n_points Minimum number of observations required per day. Default: 4
 #' @param min_segment_days Minimum days between selected dates. Default: 7
 #' @param max_changepoints Maximum number of dates to select. Default: NULL (no limit)
+#' @param .apply_spacing_filter Internal flag. When \code{FALSE}, skips the spacing
+#'   filter so that \code{\link{find_dual_stable_periods}} can collect the full
+#'   unfiltered candidate pool before applying the filter once on the intersection.
+#'   Should not be set by end users.
 #'
 #' @return A list (S3 class "stable_vh_periods") containing:
 #'   \item{valid_dates}{Vector of dates meeting stability criteria}
@@ -94,7 +98,8 @@ find_stable_vh_dates <- function(vh_data,
                                   stability_threshold = 0.5,
                                   min_n_points = 4,
                                   min_segment_days = 7,
-                                  max_changepoints = NULL) {
+                                  max_changepoints = NULL,
+                                  .apply_spacing_filter = TRUE) {
 
   # Input validation
   if (!is.data.frame(vh_data)) {
@@ -211,7 +216,7 @@ find_stable_vh_dates <- function(vh_data,
   }
 
   # Filter by minimum spacing
-  if (min_segment_days > 0 && length(candidate_dates) > 1) {
+  if (.apply_spacing_filter && min_segment_days > 0 && length(candidate_dates) > 1) {
     selected_indices <- filter_stable_by_spacing(
       candidate_dates, candidate_vh, min_segment_days
     )
@@ -329,6 +334,10 @@ find_stable_vh_dates <- function(vh_data,
 #'   \item Detects VPD-stable dates using \code{\link{detect_stable_vpd_periods}}
 #'   \item Detects vh-stable dates using \code{\link{find_stable_vh_dates}}
 #'   \item Finds intersection (dates passing BOTH tests)
+#'   \item Applies the \code{min_segment_days} spacing filter \strong{once} on the
+#'     intersection — not on the constituent sets. This ensures dates are drawn from
+#'     across the full deployment rather than clustering around the
+#'     globally-lowest-quality period.
 #'   \item Within each dual-stable date, identifies the exact timestamp with minimum vh
 #' }
 #'
@@ -465,7 +474,7 @@ find_dual_stable_periods <- function(vh_data,
     effective_window <- predawn_window
   }
 
-  # 1. Find VPD-stable dates
+  # 1. Find VPD-stable dates (unfiltered — spacing is applied once on the intersection)
   vpd_results <- detect_stable_vpd_periods(
     weather_data = weather_data,
     predawn_window = effective_hours,
@@ -474,10 +483,11 @@ find_dual_stable_periods <- function(vh_data,
     min_n_points = min_n_points,
     min_segment_days = min_segment_days,
     max_changepoints = NULL,  # Don't limit yet
-    vpd_col = vpd_col
+    vpd_col = vpd_col,
+    .apply_spacing_filter = FALSE
   )
 
-  # 2. Find vh-stable dates
+  # 2. Find vh-stable dates (unfiltered — spacing is applied once on the intersection)
   vh_results <- find_stable_vh_dates(
     vh_data         = vh_data,
     vh_col          = vh_col,
@@ -488,7 +498,8 @@ find_dual_stable_periods <- function(vh_data,
     stability_threshold = vh_stability,
     min_n_points    = min_n_points,
     min_segment_days = min_segment_days,
-    max_changepoints = NULL  # Don't limit yet
+    max_changepoints = NULL,  # Don't limit yet
+    .apply_spacing_filter = FALSE
   )
 
   # 3. Find intersection of dates

@@ -12,7 +12,8 @@ detect_stable_vpd_periods(
   min_n_points = 3,
   min_segment_days = 7,
   max_changepoints = NULL,
-  vpd_col = "vpd_kpa"
+  vpd_col = "vpd_kpa",
+  .apply_spacing_filter = TRUE
 )
 }
 \arguments{
@@ -39,6 +40,11 @@ is retained.}
 If more days meet criteria, those with lowest mean VPD are selected.}
 
 \item{vpd_col}{Name of VPD column (default: "vpd_kpa")}
+
+\item{.apply_spacing_filter}{Internal flag. When \code{FALSE}, skips the spacing
+filter so that \code{\link{find_dual_stable_periods}} can collect the full
+unfiltered candidate pool before applying the filter once on the intersection.
+Should not be set by end users.}
 }
 \value{
 A list (S3 class "stable_vpd_periods") containing:

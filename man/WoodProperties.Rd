@@ -26,7 +26,7 @@ tree measurements, and quality thresholds.
 
 \item{\code{wood_property}}{List of basic wood identifiers (species, type, temperature)}
 
-\item{\code{tree_measurements}}{List of tree-specific measurements (dbh, sapwood_depth, etc.)}
+\item{\code{tree_measurements}}{List of tree-specific measurements (dbh, sapwood_thickness, etc.)}
 
 \item{\code{wound_correction}}{List of wound configuration (drill bit, temporal tracking)}
 

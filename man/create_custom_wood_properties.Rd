@@ -22,7 +22,7 @@ create_custom_wood_properties(
   dbh = NULL,
   bark_thickness_dbh = NULL,
   bark_thickness_probe = NULL,
-  sapwood_depth = NULL,
+  sapwood_thickness = NULL,
   sapwood_area = NULL,
   heartwood_radius = NULL,
   max_velocity_cm_hr = 200,
@@ -63,7 +63,7 @@ create_custom_wood_properties(
 
 \item{dbh}{Diameter at breast height (cm). Optional.}
 
-\item{sapwood_depth}{Sapwood depth (cm). Optional.}
+\item{sapwood_thickness}{Sapwood depth (cm). Optional.}
 
 \item{sapwood_area}{Sapwood area (cm^2). Optional.}
 

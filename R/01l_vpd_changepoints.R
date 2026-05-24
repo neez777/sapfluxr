@@ -624,6 +624,10 @@ print.vpd_changepoints <- function(x, ...) {
 #' @param min_segment_days Minimum number of days between selected dates (default: 7).
 #'   If valid dates are closer than this, only the most stable day in that period
 #'   is retained.
+#' @param .apply_spacing_filter Internal flag. When \code{FALSE}, skips the spacing
+#'   filter so that \code{\link{find_dual_stable_periods}} can collect the full
+#'   unfiltered candidate pool before applying the filter once on the intersection.
+#'   Should not be set by end users.
 #' @param max_changepoints Maximum number of dates to return (default: NULL, no limit).
 #'   If more days meet criteria, those with lowest mean VPD are selected.
 #' @param vpd_col Name of VPD column (default: "vpd_kpa")
@@ -763,7 +767,8 @@ detect_stable_vpd_periods <- function(weather_data,
                                        min_n_points = 3,
                                        min_segment_days = 7,
                                        max_changepoints = NULL,
-                                       vpd_col = "vpd_kpa") {
+                                       vpd_col = "vpd_kpa",
+                                       .apply_spacing_filter = TRUE) {
 
   # Input validation
   if (!is.data.frame(weather_data)) {
@@ -892,7 +897,7 @@ detect_stable_vpd_periods <- function(weather_data,
   candidate_vpd <- daily_stats$mean_predawn_vpd[daily_stats$passed_both]
 
   # Apply minimum segment spacing
-  if (length(candidate_dates) > 1 && min_segment_days > 1) {
+  if (.apply_spacing_filter && length(candidate_dates) > 1 && min_segment_days > 1) {
     selected_indices <- filter_stable_vpd_by_spacing(
       dates = candidate_dates,
       vpd_values = candidate_vpd,

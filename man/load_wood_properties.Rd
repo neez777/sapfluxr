@@ -19,7 +19,7 @@ If NULL, uses default ("generic_sw").}
 For example: list(thermal_diffusivity = 0.003, moisture_content = 35)}
 
 \item{tree_overrides}{Named list of tree measurement parameters to override.
-For example: list(dbh = 45.2, sapwood_depth = 3.2)}
+For example: list(dbh = 45.2, sapwood_thickness = 3.2)}
 }
 \value{
 WoodProperties R6 object

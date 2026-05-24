@@ -14,7 +14,8 @@ find_stable_vh_dates(
   stability_threshold = 0.5,
   min_n_points = 4,
   min_segment_days = 7,
-  max_changepoints = NULL
+  max_changepoints = NULL,
+  .apply_spacing_filter = TRUE
 )
 }
 \arguments{
@@ -42,6 +43,11 @@ to analyse hours 2, 3, 4, 5. Default: c(2, 6)}
 \item{min_segment_days}{Minimum days between selected dates. Default: 7}
 
 \item{max_changepoints}{Maximum number of dates to select. Default: NULL (no limit)}
+
+\item{.apply_spacing_filter}{Internal flag. When \code{FALSE}, skips the spacing
+filter so that \code{\link{find_dual_stable_periods}} can collect the full
+unfiltered candidate pool before applying the filter once on the intersection.
+Should not be set by end users.}
 }
 \value{
 A list (S3 class "stable_vh_periods") containing:
