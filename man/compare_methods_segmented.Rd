@@ -13,6 +13,7 @@ compare_methods_segmented(
   min_points = 50,
   create_plots = TRUE,
   verbose = TRUE,
+  ok_only = TRUE,
   velocity_col = "Vh_cm_hr"
 )
 }
@@ -35,6 +36,9 @@ If NULL, uses midpoint of data range. Default: NULL.}
 \item{create_plots}{Logical indicating whether to create diagnostic plots (default: TRUE).}
 
 \item{verbose}{Logical indicating whether to print progress (default: TRUE).}
+
+\item{ok_only}{Logical. If TRUE (default), only rows where quality_flag == "OK" are used
+for regression fitting. Set to FALSE to include all non-NA rows.}
 
 \item{velocity_col}{Name of velocity column to use (default: "Vh_cm_hr").}
 }
