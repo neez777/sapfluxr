@@ -60,6 +60,7 @@ A tibble with filtered and interpolated velocity data containing:
 \item{method}{Calculation method}
 \item{sensor_position}{Inner or outer sensor position}
 \item{Vh_cm_hr}{Cleaned/interpolated velocity (cm/hr)}
+\item{Vs_cm_hr}{Updated to match Vh_cm_hr at interpolated rows (when column present)}
 \item{Vh_original}{Original velocity before interpolation (if keep_original_values = TRUE)}
 \item{quality_flag}{Updated quality flag ("INTERPOLATED" for filled values, "LARGE_GAP" for unfilled)}
 \item{quality_flag_original}{Original quality flag before filtering}

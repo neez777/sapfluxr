@@ -1391,6 +1391,8 @@ print.method_calibration <- function(x, ...) {
 #' @param min_points Minimum number of points required for valid analysis (default: 50).
 #' @param create_plots Logical indicating whether to create diagnostic plots (default: TRUE).
 #' @param verbose Logical indicating whether to print progress (default: TRUE).
+#' @param ok_only Logical. If TRUE (default), only rows where quality_flag == "OK" are used
+#'   for regression fitting. Set to FALSE to include all non-NA rows.
 #' @param velocity_col Name of velocity column to use (default: "Vh_cm_hr").
 #'
 #' @return A list with components \code{breakpoint} (estimated breakpoint
@@ -1483,6 +1485,7 @@ compare_methods_segmented <- function(vh_corrected,
                                       min_points = 50,
                                       create_plots = TRUE,
                                       verbose = TRUE,
+                                      ok_only = TRUE,
                                       velocity_col = "Vh_cm_hr") {
 
   # Check for segmented package
@@ -1534,6 +1537,18 @@ compare_methods_segmented <- function(vh_corrected,
     vh_corrected$method == secondary_method &
     vh_corrected$sensor_position == sensor_position,
   ]
+
+  if (ok_only && "quality_flag" %in% names(primary_data)) {
+    primary_data <- primary_data[primary_data$quality_flag == "OK", ]
+  }
+  if (ok_only && "quality_flag" %in% names(secondary_data)) {
+    secondary_data <- secondary_data[secondary_data$quality_flag == "OK", ]
+  }
+
+  if (verbose && ok_only && "quality_flag" %in% names(vh_corrected)) {
+    cat(sprintf("  Filtered to OK-only: %d primary, %d secondary rows\n",
+                nrow(primary_data), nrow(secondary_data)))
+  }
 
   if (nrow(primary_data) == 0 || nrow(secondary_data) == 0) {
     stop("No data found for one or both methods at sensor position: ", sensor_position)
