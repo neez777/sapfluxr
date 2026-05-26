@@ -63,8 +63,8 @@ outer and inner sensor positions, their midpoint, and the probe tip.}
 }
 \description{
 Calculates the cross-sectional area of sapwood rings (annuli) based on tree
-dimensions, probe geometry, and sensor positions. Implements the Hatton et al.
-(1990) weighted average method with probe-derived annulus boundaries.
+dimensions, probe geometry, and sensor positions, following the area-weighted
+integration of Hatton et al. (1990) with probe-derived annulus boundaries.
 }
 \details{
 \subsection{Measurement convention}{
@@ -120,9 +120,15 @@ boundary, estimated as Jv_inner / 2).}
 \subsection{Sensorless annuli}{
 
 When an annulus has no direct sensor measurement (\code{measured = FALSE}),
-\code{\link{calc_sap_flux}} estimates its flux density as half that of the
-nearest measured sensor (\code{sensor_source}), following a linear decrease
-assumption.
+\code{\link{calc_sap_flux}} estimates its flux density from the nearest
+measured sensor (\code{sensor_source}) using one of two integration methods:
+\describe{
+\item{\code{"linear_decay"}}{Mean flux over the sensorless annulus is
+half the adjacent sensor value, assuming a linear decline from the
+sensor depth to zero at the heartwood (Pausch et al. 2000).}
+\item{\code{"constant_velocity"}}{Flux over the sensorless annulus equals
+the adjacent sensor value (nearest-neighbour assumption).}
+}
 }
 }
 \examples{

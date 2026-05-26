@@ -15,7 +15,9 @@ calc_flux_single_timestamp(sensor_positions, Jv_values, rings, method)
 Must contain \code{sensor_source} (character) and \code{measured} (logical)
 columns.}
 
-\item{method}{Integration method (currently unused; reserved for future methods).}
+\item{method}{Radial integration method for sensorless annuli:
+\code{"linear_decay"} (Pausch et al. 2000) halves the adjacent sensor's
+Jv; \code{"constant_velocity"} uses it unchanged.}
 }
 \value{
 Total flux (cm^3/hr) for this timestamp.
@@ -24,11 +26,15 @@ Total flux (cm^3/hr) for this timestamp.
 Calculate Flux for a Single Timestamp (Internal Helper)
 }
 \details{
-For each annulus, the flux contribution is:
+For each annulus, the flux contribution is \code{area * Jv_ring}, where
+\code{Jv_ring} depends on whether the annulus is directly measured and on
+the integration method:
 \itemize{
-\item \code{area * Jv_source} when \code{measured = TRUE}
-\item \code{area * (Jv_source / 2)} when \code{measured = FALSE} (sensorless
-annulus — assumes a linear velocity decrease to half the nearest sensor value)
+\item \code{measured = TRUE}: \code{Jv_ring = Jv_source}
+\item \code{measured = FALSE} and \code{method = "linear_decay"}:
+\code{Jv_ring = Jv_source / 2}
+\item \code{measured = FALSE} and \code{method = "constant_velocity"}:
+\code{Jv_ring = Jv_source}
 }
 The source sensor for each annulus is encoded in the \code{sensor_source} column
 of the rings data frame, set by \code{\link{calc_sapwood_areas}}.

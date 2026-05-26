@@ -4,7 +4,11 @@
 \alias{calc_sap_flux}
 \title{Calculate Sap Flux by Integrating Over Sapwood Rings}
 \usage{
-calc_sap_flux(flux_data, sapwood_areas, method = "weighted_average")
+calc_sap_flux(
+  flux_data,
+  sapwood_areas,
+  method = c("linear_decay", "constant_velocity")
+)
 }
 \arguments{
 \item{flux_data}{Data frame with sap flux density measurements. Must contain:
@@ -16,8 +20,14 @@ calc_sap_flux(flux_data, sapwood_areas, method = "weighted_average")
 
 \item{sapwood_areas}{Output from \code{\link{calc_sapwood_areas}}}
 
-\item{method}{Integration method. Options: "weighted_average" (default,
-Hatton 1990) or "simple" (uniform weighting)}
+\item{method}{Radial integration method for sensorless annuli. Options:
+\describe{
+\item{\code{"linear_decay"}}{(default) Pausch et al. (2000) — assumes
+sap flux declines linearly from the adjacent sensor value to zero
+across the unmeasured annulus, giving a mean of \eqn{J_v / 2}.}
+\item{\code{"constant_velocity"}}{Nearest-neighbour — the adjacent
+sensor value is applied unchanged across the unmeasured annulus.}
+}}
 }
 \value{
 Data frame with added columns:
@@ -30,7 +40,9 @@ Data frame with added columns:
 \description{
 Integrates sap flux density (Jv) measurements from multiple sensor depths
 over the sapwood cross-sectional area to calculate total sap flux (Q).
-Implements the weighted average method from Hatton et al. (1990).
+Follows the area-weighted summation of Hatton et al. (1990); the radial
+assumption applied to unmeasured (sensorless) annuli is controlled by
+\code{method}.
 }
 \details{
 \strong{Integration Formula (Hatton et al. 1990):}
@@ -45,8 +57,9 @@ Where \eqn{A_k} is the cross-sectional area of ring \eqn{k} (cm^2) and
 Annulus boundaries and sensor assignments are determined entirely by
 \code{\link{calc_sapwood_areas}}. Each annulus in the \code{rings} data frame
 carries a \code{sensor_source} (which sensor's Jv to use) and a \code{measured}
-flag. For sensorless annuli (\code{measured = FALSE}), Jv is estimated as half
-the adjacent sensor's value, assuming a linear velocity decrease with depth.
+flag. For sensorless annuli (\code{measured = FALSE}), the adjacent sensor's
+Jv is applied according to \code{method}: halved under \code{"linear_decay"}
+(Pausch et al. 2000), or used unchanged under \code{"constant_velocity"}.
 }
 \examples{
 \dontrun{
@@ -64,6 +77,10 @@ head(flux_data[, c("datetime", "Q_L_hr", "Q_L_day")])
 \references{
 Hatton, T.J., Catchpole, E.A., & Vertessy, R.A. (1990). Integration of
 sapflow velocity to estimate plant water use. Tree Physiology, 6, 201-209.
+
+Pausch, R.C., Grote, E.E., & Dawson, T.E. (2000). Estimating water use by
+sugar maple trees: considerations when using heat-pulse methods in trees
+with deep functional sapwood. Tree Physiology, 20, 217-227.
 }
 \seealso{
 \code{\link{calc_sapwood_areas}}

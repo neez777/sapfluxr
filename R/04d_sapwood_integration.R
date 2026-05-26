@@ -1,12 +1,14 @@
 # R/04d_sapwood_integration.R
 # Sapwood Area Integration and Sap Flux Calculation
-# Implements Hatton et al. (1990) weighted average method
+# Area-weighted summation after Hatton et al. (1990); radial assumption for
+# sensorless annuli selectable as linear decay (Pausch et al. 2000) or
+# constant velocity (nearest-neighbour).
 
 #' Calculate Sapwood Area for Concentric Rings
 #'
 #' Calculates the cross-sectional area of sapwood rings (annuli) based on tree
-#' dimensions, probe geometry, and sensor positions. Implements the Hatton et al.
-#' (1990) weighted average method with probe-derived annulus boundaries.
+#' dimensions, probe geometry, and sensor positions, following the area-weighted
+#' integration of Hatton et al. (1990) with probe-derived annulus boundaries.
 #'
 #' @param dbh Diameter at breast height (cm).
 #' @param bark_thickness_dbh Bark thickness at the DBH measurement site (cm).
@@ -101,9 +103,15 @@
 #' ## Sensorless annuli
 #'
 #' When an annulus has no direct sensor measurement (\code{measured = FALSE}),
-#' \code{\link{calc_sap_flux}} estimates its flux density as half that of the
-#' nearest measured sensor (\code{sensor_source}), following a linear decrease
-#' assumption.
+#' \code{\link{calc_sap_flux}} estimates its flux density from the nearest
+#' measured sensor (\code{sensor_source}) using one of two integration methods:
+#' \describe{
+#'   \item{\code{"linear_decay"}}{Mean flux over the sensorless annulus is
+#'     half the adjacent sensor value, assuming a linear decline from the
+#'     sensor depth to zero at the heartwood (Pausch et al. 2000).}
+#'   \item{\code{"constant_velocity"}}{Flux over the sensorless annulus equals
+#'     the adjacent sensor value (nearest-neighbour assumption).}
+#' }
 #'
 #' @examples
 #' \dontrun{
@@ -340,7 +348,9 @@ calc_sapwood_areas <- function(dbh,
 #'
 #' Integrates sap flux density (Jv) measurements from multiple sensor depths
 #' over the sapwood cross-sectional area to calculate total sap flux (Q).
-#' Implements the weighted average method from Hatton et al. (1990).
+#' Follows the area-weighted summation of Hatton et al. (1990); the radial
+#' assumption applied to unmeasured (sensorless) annuli is controlled by
+#' \code{method}.
 #'
 #' @param flux_data Data frame with sap flux density measurements. Must contain:
 #'   \describe{
@@ -349,8 +359,14 @@ calc_sapwood_areas <- function(dbh,
 #'     \item{Jv_cm3_cm2_hr}{Sap flux density (cm^3/cm^2/hr)}
 #'   }
 #' @param sapwood_areas Output from \code{\link{calc_sapwood_areas}}
-#' @param method Integration method. Options: "weighted_average" (default,
-#'   Hatton 1990) or "simple" (uniform weighting)
+#' @param method Radial integration method for sensorless annuli. Options:
+#'   \describe{
+#'     \item{\code{"linear_decay"}}{(default) Pausch et al. (2000) — assumes
+#'       sap flux declines linearly from the adjacent sensor value to zero
+#'       across the unmeasured annulus, giving a mean of \eqn{J_v / 2}.}
+#'     \item{\code{"constant_velocity"}}{Nearest-neighbour — the adjacent
+#'       sensor value is applied unchanged across the unmeasured annulus.}
+#'   }
 #'
 #' @return Data frame with added columns:
 #'   \describe{
@@ -372,8 +388,9 @@ calc_sapwood_areas <- function(dbh,
 #' Annulus boundaries and sensor assignments are determined entirely by
 #' \code{\link{calc_sapwood_areas}}. Each annulus in the \code{rings} data frame
 #' carries a \code{sensor_source} (which sensor's Jv to use) and a \code{measured}
-#' flag. For sensorless annuli (\code{measured = FALSE}), Jv is estimated as half
-#' the adjacent sensor's value, assuming a linear velocity decrease with depth.
+#' flag. For sensorless annuli (\code{measured = FALSE}), the adjacent sensor's
+#' Jv is applied according to \code{method}: halved under \code{"linear_decay"}
+#' (Pausch et al. 2000), or used unchanged under \code{"constant_velocity"}.
 #'
 #' @examples
 #' \dontrun{
@@ -391,13 +408,19 @@ calc_sapwood_areas <- function(dbh,
 #' Hatton, T.J., Catchpole, E.A., & Vertessy, R.A. (1990). Integration of
 #' sapflow velocity to estimate plant water use. Tree Physiology, 6, 201-209.
 #'
+#' Pausch, R.C., Grote, E.E., & Dawson, T.E. (2000). Estimating water use by
+#' sugar maple trees: considerations when using heat-pulse methods in trees
+#' with deep functional sapwood. Tree Physiology, 20, 217-227.
+#'
 #' @seealso \code{\link{calc_sapwood_areas}}
 #'
 #' @family sapwood integration functions
 #' @export
 calc_sap_flux <- function(flux_data,
                           sapwood_areas,
-                          method = "weighted_average") {
+                          method = c("linear_decay", "constant_velocity")) {
+
+  method <- match.arg(method)
 
   # Input validation
   if (!is.data.frame(flux_data)) {
@@ -455,16 +478,22 @@ calc_sap_flux <- function(flux_data,
 #' @param rings Sapwood rings data frame (output from \code{calc_sapwood_areas}).
 #'   Must contain \code{sensor_source} (character) and \code{measured} (logical)
 #'   columns.
-#' @param method Integration method (currently unused; reserved for future methods).
+#' @param method Radial integration method for sensorless annuli:
+#'   \code{"linear_decay"} (Pausch et al. 2000) halves the adjacent sensor's
+#'   Jv; \code{"constant_velocity"} uses it unchanged.
 #'
 #' @return Total flux (cm^3/hr) for this timestamp.
 #'
 #' @details
-#' For each annulus, the flux contribution is:
+#' For each annulus, the flux contribution is \code{area * Jv_ring}, where
+#' \code{Jv_ring} depends on whether the annulus is directly measured and on
+#' the integration method:
 #' \itemize{
-#'   \item \code{area * Jv_source} when \code{measured = TRUE}
-#'   \item \code{area * (Jv_source / 2)} when \code{measured = FALSE} (sensorless
-#'     annulus — assumes a linear velocity decrease to half the nearest sensor value)
+#'   \item \code{measured = TRUE}: \code{Jv_ring = Jv_source}
+#'   \item \code{measured = FALSE} and \code{method = "linear_decay"}:
+#'     \code{Jv_ring = Jv_source / 2}
+#'   \item \code{measured = FALSE} and \code{method = "constant_velocity"}:
+#'     \code{Jv_ring = Jv_source}
 #' }
 #' The source sensor for each annulus is encoded in the \code{sensor_source} column
 #' of the rings data frame, set by \code{\link{calc_sapwood_areas}}.
@@ -483,13 +512,17 @@ calc_flux_single_timestamp <- function(sensor_positions,
 
   Jv_lookup <- c(outer = Jv_outer, inner = Jv_inner)
 
+  sensorless_factor <- switch(method,
+                              linear_decay      = 0.5,
+                              constant_velocity = 1.0,
+                              stop("Unknown integration method: ", method))
+
   # Integrate over each annulus
   Q_total <- 0
   for (i in seq_len(nrow(rings))) {
     ring      <- rings[i, ]
     Jv_source <- Jv_lookup[ring$sensor_source]
-    # Sensorless rings use half the adjacent sensor's value (linear decrease)
-    Jv_ring   <- if (isTRUE(ring$measured)) Jv_source else Jv_source / 2
+    Jv_ring   <- if (isTRUE(ring$measured)) Jv_source else Jv_source * sensorless_factor
     Q_total   <- Q_total + ring$area_cm2 * Jv_ring
   }
 
@@ -508,7 +541,9 @@ calc_flux_single_timestamp <- function(sensor_positions,
 #'   heartwood). Default: "sapwood_thickness"
 #' @param bark_thickness_col Name of bark thickness column (cm).
 #'   Default: "bark_thickness". If NULL, assumes 0.
-#' @param method Integration method. Default: "weighted_average"
+#' @param method Radial integration method for sensorless annuli. One of
+#'   \code{"linear_decay"} (default, Pausch et al. 2000) or
+#'   \code{"constant_velocity"}. See \code{\link{calc_sap_flux}}.
 #'
 #' @return Data frame with added Q columns
 #'
@@ -530,7 +565,9 @@ apply_sap_flux_integration <- function(flux_data,
                                         sapwood_thickness_col = "sapwood_thickness",
                                         bark_thickness_dbh_col = "bark_thickness_dbh",
                                         bark_thickness_probe_col = "bark_thickness_probe",
-                                        method = "weighted_average") {
+                                        method = c("linear_decay", "constant_velocity")) {
+
+  method <- match.arg(method)
 
   # Validate columns exist
   if (!dbh_col %in% names(flux_data)) {
