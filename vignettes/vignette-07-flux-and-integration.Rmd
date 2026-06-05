@@ -1,0 +1,82 @@
+---
+title: "7. Flux Density & Sapwood Integration"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{7. Flux Density & Sapwood Integration}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+```{r setup}
+library(sapfluxr)
+```
+
+# Overview
+
+**Stage 7** transforms corrected heat pulse velocity into physically meaningful sap flux
+density ($J_v$) and scales point measurements up to whole-tree water use ($Q$).
+
+# Velocity to flux density
+
+Heat pulse velocity measures the speed of heat through the sapwood matrix, which includes both
+moving sap and stationary wood. The **sap-flux conversion factor ($Z$)** — derived from wood
+density and moisture content in Stage 2 — converts this to sap flux density:
+
+$$J_v = Z \cdot V_h$$
+
+```{r flux_density, eval=FALSE}
+flux_data <- vh_results
+flux_data$Jv_cm3_cm2_hr <- calc_sap_flux_density(
+  Vh              = flux_data$Vs_cm_hr,   # current best velocity
+  wood_properties = wood
+)
+```
+
+# Radial integration
+
+Sap flux varies with depth from the bark, so a sensor's flux density must be integrated over
+the annulus of sapwood it represents. `apply_sap_flux_integration()` implements the
+two-annulus scheme for SFM1x probes (outer sensor ≈ 7.5 mm, inner sensor ≈ 22.5 mm depth),
+weighting each by its sapwood area.
+
+The tree dimensions must be present as columns on the flux data:
+
+```{r dims, eval=FALSE}
+flux_data$dbh                  <- 52.08   # cm
+flux_data$sapwood_thickness    <- 2.0     # cm
+flux_data$bark_thickness_dbh   <- 1.2     # cm (full bark at DBH site)
+flux_data$bark_thickness_probe <- 0.5     # cm (remaining bark at probe site)
+
+tree_water_use <- apply_sap_flux_integration(
+  flux_data,
+  dbh_col                  = "dbh",
+  sapwood_thickness_col    = "sapwood_thickness",
+  bark_thickness_dbh_col   = "bark_thickness_dbh",
+  bark_thickness_probe_col = "bark_thickness_probe",
+  method                   = "linear_decay"
+)
+```
+
+## Integration methods
+
+* **`linear_decay`** — assumes flux density declines linearly between measured depths and toward
+  the sapwood–heartwood boundary.
+* **`constant_velocity`** — assigns each annulus the flux density of its nearest sensor.
+
+## Sapwood areas and heartwood
+
+`calc_sapwood_areas()` computes the cross-sectional ring areas from DBH, bark thickness, and
+sapwood depth. If the sapwood is shallow (e.g. < 22.5 mm), the inner sensor may sit in
+non-conducting heartwood; the integration detects this from `sapwood_thickness` and zeroes the
+contribution of any sensor beyond the sapwood boundary.
+
+The result carries the per-sensor and combined flux columns `Q_outer_cm3_hr`,
+`Q_inner_cm3_hr`, `Q_total_cm3_hr`, `Q_total_L_hr`, and `Q_total_L_day` for whole-tree water use.
+
+# Next step
+
+Continue to [Stage 8: Aggregation & Visualisation](vignette-08-aggregation-and-visualisation.html).

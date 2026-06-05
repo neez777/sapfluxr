@@ -468,62 +468,62 @@ test_that("Performance test: processing multiple pulses efficiently", {
 })
 
 # sDMA Processing Tests
-test_that("HRM calculates Peclet numbers", {
+test_that("HPV output does not contain early Peclet numbers", {
   heat_pulse_data <- create_mock_heat_pulse_data_for_vh()
 
-  # Calculate with HRM
+  # calc_heat_pulse_velocity() must NOT emit a peclet_number column;
+  # Pe is computed solely at the sDMA stage via recalculate_peclet().
   result <- calc_heat_pulse_velocity(heat_pulse_data, methods = "HRM")
-
-  # Check that Peclet numbers are present for HRM
-  hrm_results <- result[result$method == "HRM", ]
-  expect_true("peclet_number" %in% names(hrm_results))
-  expect_true(all(!is.na(hrm_results$peclet_number)))
-  expect_true(all(is.numeric(hrm_results$peclet_number)))
-  expect_true(all(is.finite(hrm_results$peclet_number)))
+  expect_false("peclet_number" %in% names(result))
 })
 
 test_that("apply_sdma_processing validates inputs correctly", {
   heat_pulse_data <- create_mock_heat_pulse_data_for_vh()
-  vh_results <- calc_heat_pulse_velocity(heat_pulse_data, methods = c("HRM", "MHR"))
+  probe <- get_default_probe_config()
+  wood  <- get_default_wood_properties()
+  vh_results <- calc_heat_pulse_velocity(heat_pulse_data, methods = c("HRM", "MHR"),
+                                         probe_config = probe, wood_properties = wood)
 
   # Test missing HRM
   vh_no_hrm <- vh_results[vh_results$method != "HRM", ]
   expect_error(
-    apply_sdma_processing(vh_no_hrm, "MHR"),
+    apply_sdma_processing(vh_no_hrm, "MHR", probe_config = probe, wood_properties = wood),
     "HRM results not found"
   )
 
-  # Test missing Peclet numbers (simulate by removing them)
-  vh_no_peclet <- vh_results
-  if ("hrm_peclet_number" %in% names(vh_no_peclet)) vh_no_peclet$hrm_peclet_number <- NA_real_
-  if ("peclet_number" %in% names(vh_no_peclet)) vh_no_peclet$peclet_number <- NA_real_
+  # Peclet column absent AND no config supplied → error with clear message
   expect_error(
-    apply_sdma_processing(vh_no_peclet, "MHR"),
-    "do not contain Peclet numbers"
+    apply_sdma_processing(vh_results, "MHR"),
+    "peclet_number.*absent"
   )
 
   # Test missing secondary method
   expect_error(
-    apply_sdma_processing(vh_results, "Tmax_Klu"),
+    apply_sdma_processing(vh_results, "Tmax_Klu", probe_config = probe, wood_properties = wood),
     "Secondary method.*not found"
   )
 
   # Test HRM as secondary method (should be rejected)
   expect_error(
-    apply_sdma_processing(vh_results, "HRM"),
+    apply_sdma_processing(vh_results, "HRM", probe_config = probe, wood_properties = wood),
     "Cannot use HRM as secondary method"
   )
 })
 
 test_that("apply_sdma_processing creates correct sDMA results", {
   heat_pulse_data <- create_mock_heat_pulse_data_for_vh()
+  probe <- get_default_probe_config()
+  wood  <- get_default_wood_properties()
 
   # Calculate with HRM and MHR
-  vh_results <- calc_heat_pulse_velocity(heat_pulse_data, methods = c("HRM", "MHR"))
+  vh_results <- calc_heat_pulse_velocity(heat_pulse_data, methods = c("HRM", "MHR"),
+                                         probe_config = probe, wood_properties = wood)
   original_rows <- nrow(vh_results)
 
-  # Apply sDMA processing (force calculation even if Pe low)
-  vh_sdma <- apply_sdma_processing(vh_results, "MHR", skip_low_peclet = FALSE, show_progress = FALSE)
+  # Apply sDMA processing — Pe auto-computed from probe_config / wood_properties
+  vh_sdma <- apply_sdma_processing(vh_results, "MHR",
+                                   probe_config = probe, wood_properties = wood,
+                                   skip_low_peclet = FALSE, show_progress = FALSE)
 
   # Check structure
   expect_s3_class(vh_sdma, "data.frame")
@@ -555,20 +555,25 @@ test_that("apply_sdma_processing creates correct sDMA results", {
 
 test_that("apply_sdma_processing handles multiple secondary methods", {
   heat_pulse_data <- create_mock_heat_pulse_data_for_vh()
+  probe <- get_default_probe_config()
+  wood  <- get_default_wood_properties()
 
   # Calculate with HRM, MHR, and Tmax_Klu
   vh_results <- calc_heat_pulse_velocity(
     heat_pulse_data,
-    methods = c("HRM", "MHR", "Tmax_Klu")
+    methods = c("HRM", "MHR", "Tmax_Klu"),
+    probe_config = probe, wood_properties = wood
   )
   original_rows <- nrow(vh_results)
 
-  # Apply sDMA processing with multiple secondary methods (force calculation)
+  # Apply sDMA processing with multiple secondary methods — Pe auto-computed
   vh_sdma <- apply_sdma_processing(
     vh_results,
     secondary_method = c("MHR", "Tmax_Klu"),
+    probe_config    = probe,
+    wood_properties = wood,
     skip_low_peclet = FALSE,
-    show_progress = FALSE
+    show_progress   = FALSE
   )
 
   # Check structure
@@ -593,16 +598,21 @@ test_that("apply_sdma_processing handles multiple secondary methods", {
 
 test_that("apply_sdma_processing preserves original results", {
   heat_pulse_data <- create_mock_heat_pulse_data_for_vh()
+  probe <- get_default_probe_config()
+  wood  <- get_default_wood_properties()
 
   # Calculate with HRM and MHR
-  vh_results <- calc_heat_pulse_velocity(heat_pulse_data, methods = c("HRM", "MHR"))
+  vh_results <- calc_heat_pulse_velocity(heat_pulse_data, methods = c("HRM", "MHR"),
+                                         probe_config = probe, wood_properties = wood)
 
   # Store original for comparison
   original_hrm <- vh_results[vh_results$method == "HRM", ]
   original_mhr <- vh_results[vh_results$method == "MHR", ]
 
   # Apply sDMA processing (force calculation)
-  vh_sdma <- apply_sdma_processing(vh_results, "MHR", skip_low_peclet = FALSE, show_progress = FALSE)
+  vh_sdma <- apply_sdma_processing(vh_results, "MHR",
+                                   probe_config = probe, wood_properties = wood,
+                                   skip_low_peclet = FALSE, show_progress = FALSE)
 
   # Check that original HRM and MHR results are still present and unchanged
   new_hrm <- vh_sdma[vh_sdma$method == "HRM", ]

@@ -8,82 +8,88 @@ apply_sdma_processing(
   vh_results,
   secondary_method,
   peclet_threshold = 1,
+  probe_config = NULL,
+  wood_properties = NULL,
   skip_low_peclet = NULL,
   show_progress = TRUE
 )
 }
 \arguments{
-\item{vh_results}{Results tibble from calc_heat_pulse_velocity() containing HRM
-and at least one secondary method. \strong{FUTURE:} Will accept corrected velocities
-(Vc) after spacing and wound corrections.}
+\item{vh_results}{Results tibble from \code{calc_heat_pulse_velocity()} (or the
+corrected output after spacing/wound corrections) containing HRM and at least
+one secondary method.}
 
 \item{secondary_method}{Character string or vector specifying secondary method(s).
-Options: "MHR", "Tmax_Coh", "Tmax_Klu".
-Can provide multiple methods to create multiple sDMA variants.}
+Options: \code{"MHR"}, \code{"Tmax_Coh"}, \code{"Tmax_Klu"}.
+Supply multiple methods to create multiple sDMA variants simultaneously.}
 
-\item{peclet_threshold}{Numeric threshold for switching between HRM and secondary
-method. Default: 1.0 (Pe < 1.0 uses HRM, Pe >= 1.0 uses secondary method).}
+\item{peclet_threshold}{Numeric threshold for switching. Default: \code{1.0}
+(Pe < 1.0 → HRM; Pe >= 1.0 → secondary method).}
 
-\item{skip_low_peclet}{Logical indicating whether to automatically skip sDMA when
-all Peclet numbers are <= threshold. If NULL (default), will prompt user interactively.
-Set to TRUE to skip without prompting, FALSE to always calculate.}
+\item{probe_config}{A \code{ProbeConfiguration} object (from \code{\link[=load_probe_config]{load_probe_config()}}) or
+named list containing \code{probe_spacing}. Required when \code{peclet_number} is absent
+from \code{vh_results}. The same object passed to \code{calc_heat_pulse_velocity()} is
+appropriate here.}
 
-\item{show_progress}{Logical indicating whether to show progress bar. Default: TRUE}
+\item{wood_properties}{A \code{WoodProperties} object (from \code{\link[=load_wood_properties]{load_wood_properties()}}) or
+named list containing \code{thermal_diffusivity}. Required when \code{peclet_number} is
+absent from \code{vh_results}.}
+
+\item{skip_low_peclet}{Logical. Whether to automatically skip sDMA when all Péclet
+numbers are <= threshold. \code{NULL} (default) prompts interactively; \code{TRUE} skips
+without prompting; \code{FALSE} always calculates.}
+
+\item{show_progress}{Logical. Show progress bar. Default: \code{TRUE}.}
 }
 \value{
-A vh_results tibble with additional rows for sDMA method(s).
-Each sDMA method is labeled as "sDMA:SecondaryMethod" (e.g., "sDMA:MHR").
-The selected_method column shows which method was actually used for each measurement.
+A vh_results tibble with additional rows for each sDMA method, labelled
+\code{"sDMA:SecondaryMethod"} (e.g., \code{"sDMA:MHR"}). The \code{selected_method} column
+records which method was used for each measurement.
 }
 \description{
-\strong{FUTURE FUNCTIONALITY} - Currently parked for later workflow implementation.
+Applies Péclet-number-based method switching to create sDMA results.
+Switches between HRM (Pe < threshold) and a user-specified secondary method (Pe >= threshold).
 }
 \details{
-Applies method switching based on Peclet number to create sDMA results.
-Switches between HRM (Pe < 1.0) and a user-specified secondary method (Pe >= 1.0).
-HRM results must already be calculated with Peclet numbers.
+The Péclet number is computed internally by this function using
+\code{\link[=recalculate_peclet]{recalculate_peclet()}}. If a \code{peclet_number} column already exists and contains
+non-NA values on the HRM rows it is used as-is; otherwise Pe is computed from
+the corrected velocities via \code{probe_config} and \code{wood_properties}.
+Pe is computed for \strong{all rows regardless of quality flag}, so interpolated
+measurements still contribute to the switching decision.
 
-This function requires:
-\itemize{
-\item HRM results with Peclet numbers (from calc_heat_pulse_velocity with methods including "HRM")
-\item At least one secondary method already calculated
-}
-
-The switching logic is:
-\itemize{
-\item Pe < 1.0: Use HRM (low flows, HRM is accurate)
-\item Pe >= 1.0: Use secondary method (high flows, secondary method more appropriate)
-}
-
-\strong{FUTURE WORKFLOW POSITION:}
-This will be applied AFTER wound correction and BEFORE flux density calculation:
+\strong{Workflow position:} apply after wound correction, before flux density:
 \enumerate{
 \item Calculate raw HPV (all methods)
 \item Apply spacing correction
-\item Apply wound correction -> Vc (corrected velocities)
-\item \strong{Apply sDMA method selection} <- THIS FUNCTION
+\item Apply wound correction
+\item \strong{Apply sDMA} \eqn{\leftarrow} this function
 \item Calculate flux density
-\item Calculate tree water use
+}
+
+\strong{Switching logic:}
+\itemize{
+\item Pe < threshold: use HRM (low sap flow, HRM is accurate)
+\item Pe >= threshold: use secondary method (high sap flow)
 }
 }
 \examples{
 \dontrun{
-# FUTURE EXAMPLE (not yet implemented in workflow):
+probe <- load_probe_config("symmetrical")
+wood  <- load_wood_properties("eucalyptus")
 
-# Calculate base methods
-heat_pulse_data <- read_heat_pulse_data("data.txt")
-vh <- calc_heat_pulse_velocity(heat_pulse_data,
-                                methods = c("HRM", "MHR", "Tmax_Klu"))
+vh <- calc_heat_pulse_velocity(heat_pulse_data, methods = c("HRM", "MHR"),
+                               probe_config = probe, wood_properties = wood)
+vh <- apply_spacing_correction(vh, ...)
+vh <- apply_wound_correction(vh, ...)
 
-# Apply corrections (spacing + wound)
-vh_corrected <- apply_spacing_correction(vh, ...)
-vh_corrected <- apply_wound_correction(vh_corrected, ...)  # NOT YET IMPLEMENTED
+# Pe is computed automatically from probe_config / wood_properties
+vh_sdma <- apply_sdma_processing(vh, secondary_method = "MHR",
+                                 probe_config = probe, wood_properties = wood)
 
-# THEN apply sDMA to corrected velocities
-vh_sdma <- apply_sdma_processing(vh_corrected, secondary_method = "MHR")
-
-# Continue to flux density calculations
-flux <- calc_sap_flux_density(vh_sdma, ...)  # NOT YET IMPLEMENTED
+# Or run recalculate_peclet() first and let apply_sdma_processing use the column
+vh <- recalculate_peclet(vh, probe, wood)
+vh_sdma <- apply_sdma_processing(vh, "MHR")
 }
 
 }

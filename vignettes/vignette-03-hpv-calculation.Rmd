@@ -1,0 +1,109 @@
+---
+title: "3. HPV Calculation & Quality Control"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{3. HPV Calculation & Quality Control}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+```{r setup}
+library(sapfluxr)
+```
+
+# Overview
+
+**Stage 3** computes heat pulse velocity ($V_h$) from raw temperatures and flags suspect
+values. Because no single method captures the full range of sap velocities, `sapfluxr`
+implements a suite of complementary algorithms behind one interface.
+
+# The unified interface
+
+`calc_heat_pulse_velocity()` runs one or more methods simultaneously, which makes comparison
+and the downstream Selectable Dual Method Approach (sDMA) straightforward.
+
+```{r hpv, eval=FALSE}
+vh_results <- calc_heat_pulse_velocity(
+  hp_data,
+  methods            = c("HRM", "MHR", "Tmax_Klu"),
+  probe_config       = probe,
+  wood_properties    = wood,
+  baseline_method    = NULL,        # use the configured default
+  confirm_parameters = FALSE,
+  show_progress      = FALSE
+)
+```
+
+The output is a tibble with `datetime`, `pulse_id`, `method`, `sensor_position`, the raw
+velocity `Vh_cm_hr`, and method-specific diagnostic columns.
+
+# Implemented methods
+
+## Heat Ratio Method (HRM)
+The standard for low and reverse flows. Velocity is computed from the logarithmic ratio of
+downstream to upstream temperature rise within a fixed window (typically 60–100 s post-pulse).
+
+* **Bidirectional**: yes (detects reverse flow).
+* **Reliable range**: ± 18 cm h⁻¹ (theoretical limit ± 54 cm h⁻¹).
+* **Reference**: Burgess et al. (2001).
+
+## Maximum Heat Ratio (MHR)
+Uses the peak temperature rise rather than a fixed-window average, extending the measurable
+range to higher flows.
+
+* **Bidirectional**: yes.
+* **Reliable range**: up to ~130 cm³ cm⁻² h⁻¹ flux density.
+* **Reference**: López-Bernal et al. (2021).
+
+## T-max methods (Cohen & Kluitenberg)
+Compute velocity from the **time to peak** temperature at the downstream sensor. Accurate at
+high flows but cannot detect reverse flow and are unreliable at low flows.
+
+* **`Tmax_Coh`** — Cohen formulation (instantaneous pulse).
+* **`Tmax_Klu`** — Kluitenberg formulation (finite pulse duration; corrects a 5–15% high-flow
+  underestimate).
+* **References**: Cohen et al. (1981); Kluitenberg & Ham (2004).
+
+> **Note:** The unpublished `HRMXa` / `HRMXb` variants are intentionally excluded from this
+> build and are not available.
+
+# Pre-pulse baseline methods
+
+Each velocity calculation subtracts a pre-pulse baseline temperature. The method is set
+globally through the analysis configuration:
+
+```{r baseline, eval=FALSE}
+# mean_30s (default) | mean_3s | slope_intercept
+set_analysis_param("baseline.method", "slope_intercept")
+```
+
+* **`mean_30s`** — mean of the full 30 s pre-pulse window (default).
+* **`mean_3s`** — mean of the final 3 s before the pulse.
+* **`slope_intercept`** — OLS line fitted to the pre-pulse data, evaluated at pulse onset.
+
+# Quality control
+
+`flag_vh_quality()` screens the results for illogical values, outliers, excessive
+rate-of-change, and missing pulses.
+
+```{r qc, eval=FALSE}
+vh_results <- flag_vh_quality(
+  vh_results,
+  check_illogical       = TRUE,
+  detect_outliers       = TRUE,
+  rolling_window        = 11,
+  rolling_threshold     = 3,
+  detect_rate_of_change = TRUE
+)
+```
+
+Every record receives a `quality_flag` of `"OK"`, `"WARNING"`, `"ERROR"`, or `"SUSPECT"`,
+with detail in `quality_issues`.
+
+# Next step
+
+Continue to [Stage 4: Baseline & Spacing Correction](vignette-04-spacing-correction.html).

@@ -1,0 +1,79 @@
+---
+title: "5. Wound Correction"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{5. Wound Correction}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+```{r setup}
+library(sapfluxr)
+```
+
+# Overview
+
+**Stage 5** corrects for the wound zone created when probes are inserted. The damaged,
+non-conducting tissue around each probe obstructs heat transport and causes a systematic
+**underestimation** of velocity (often 40–60%). The correction scales velocity by a coefficient
+$B$ indexed by wound diameter and probe spacing:
+
+$$V_c = B \cdot V_h$$
+
+# Applying the correction
+
+```{r wound, eval=FALSE}
+vh_results <- apply_wound_correction(
+  vh_results,
+  probe_spacing      = "5mm",      # or "6mm"
+  method             = "linear",   # or "polynomial"
+  wood_properties    = wood,
+  confirm_parameters = FALSE
+)
+```
+
+## Correction models
+
+* **`linear`** — a single linear coefficient. Robust and the most widely used.
+* **`polynomial`** — a higher-order ($B = b_0 + b_1 d + b_2 d^2 + \dots$) relationship between
+  wound diameter and the correction factor, following Burgess et al. (2001).
+
+The built-in coefficient sets are listed by `list_wound_coefficients()` and depend on
+`probe_spacing` (`"5mm"` or `"6mm"`).
+
+## Specifying the wound diameter
+
+If you know the wound diameter directly, pass it with `wound_diameter` (cm); otherwise the
+function derives it from the wood configuration's `wound_correction` block (drill-bit diameter
+plus healing allowance).
+
+# Temporal wound expansion
+
+Wound diameter is not static — callus growth changes the effective wound size over weeks to
+months, and each reinstallation resets it. `calc_wound_diameter()` implements a sawtooth growth
+model (linear growth from each installation date) so the correction tracks the true wound size
+through time.
+
+```{r wound_diam, eval=FALSE}
+calc_wound_diameter(
+  drill_bit_diameter_mm = 1.3,
+  days_since_drilling   = 120
+)
+```
+
+Provide installation and reinstallation dates (the sample wood configuration carries
+`initial_date` / `final_date` / `final_diameter_mm`) and the correction interpolates the
+diameter for every pulse.
+
+# Column tracking
+
+The wound-corrected velocity is written to `Vh_cm_hr_wc`, and `Vs_cm_hr` (the current best
+estimate) is updated to point to it.
+
+# Next step
+
+Continue to [Stage 6: Calibration & sDMA](vignette-06-calibration-and-sdma.html).

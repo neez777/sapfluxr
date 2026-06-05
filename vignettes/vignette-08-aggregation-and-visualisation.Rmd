@@ -1,0 +1,81 @@
+---
+title: "8. Aggregation, Metrics & Visualisation"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{8. Aggregation, Metrics & Visualisation}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+```{r setup}
+library(sapfluxr)
+```
+
+# Overview
+
+**Stage 8** summarises sub-daily flux into daily totals, derives normalised metrics, and
+produces the standard diagnostic plots. These are the primary outputs for seasonal water-use
+studies and environmental regressions.
+
+# Daily aggregation
+
+`aggregate_daily()` integrates sub-daily measurements (e.g. 15- or 30-minute pulses) into daily
+totals, accounting for the measurement interval automatically.
+
+```{r daily, eval=FALSE}
+daily_totals <- aggregate_daily(
+  tree_water_use,
+  datetime_col      = "datetime",
+  total_flux_col    = "Q_total_cm3_hr",
+  interval          = "auto",
+  require_complete_days = FALSE
+)
+```
+
+## Completeness tracking
+
+The output reports the number of measurements and the data completeness per day, so you can
+filter out days with significant gaps (e.g. battery failure) before downstream analysis. Set
+`require_complete_days = TRUE` (or `min_measurements_per_day`) to enforce a minimum.
+
+# Normalised metrics
+
+`apply_sapwood_metrics()` derives size-normalised and standardised flux metrics in one step:
+
+* **Mean flux density** — flux per unit sapwood area (`calc_mean_flux_density()`).
+* **Normalised flux density** — diurnal pattern standardised to its maximum
+  (`normalise_flux_density()`), useful for comparing trees of different sizes.
+* **Leaf-area-specific flux** — flux per unit leaf area (`calc_leaf_area_flux()`), if leaf area
+  is available.
+
+```{r metrics, eval=FALSE}
+metrics <- apply_sapwood_metrics(
+  tree_water_use,
+  flux_col     = "Q_total_cm3_hr",
+  normalise    = TRUE
+)
+```
+
+`normalise_daily()` provides daily-resolution normalisation for seasonal comparisons.
+
+# Visualisation
+
+All plotting functions use `ggplot2::theme_classic()` as their base. The most useful for this
+stage are:
+
+```{r plots, eval=FALSE}
+plot_sap_flux_timeseries(tree_water_use)   # sub-daily / hourly series
+plot_daily_timeseries(daily_totals)        # daily totals
+plot_diurnal_pattern(tree_water_use)       # average diurnal cycle
+plot_flux_proportion(flux_data)            # contribution by sensor depth
+```
+
+# End of pipeline
+
+You have now followed the full pipeline from raw logger data to daily tree water use. For the
+high-level tour, see the [Get Started](sapfluxr.html) guide; to revisit a stage, follow the
+links at the foot of each vignette.

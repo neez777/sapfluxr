@@ -58,7 +58,9 @@ List containing:
 \item{tree_dimensions}{List of tree geometry values, including
 \code{actual_sapwood_cm} (sapwood thickness from cambium).}
 \item{probe_landmarks}{List of probe geometry depths from cambium:
-outer and inner sensor positions, their midpoint, and the probe tip.}
+outer and inner sensor positions, their midpoint, the outer and inner
+detection limits (sensor + 0.5 cm), the probe tip, and which sensors are
+active.}
 }
 }
 \description{
@@ -87,32 +89,46 @@ the probe-site bark thickness, and the spacer thickness (from the probe config):
 \deqn{d_{sensor} = \frac{(\text{probe length} - \text{sensor from tip}) -
   (\text{bark\_probe} \times 10 + \text{spacer\_mm})}{10}}
 
-Three fixed probe landmarks (all from the cambium) determine the annulus
-boundaries:
+Each HRM needle represents flux reliably only within its \strong{detection
+radius} (\eqn{\pm}0.5 cm of the sensor). This gives an \emph{outer} and an
+\emph{inner} detection limit, each 0.5 cm radially inward of its sensor. How
+the annuli are bounded depends on whether the inner sensor falls within the
+sapwood:
 \describe{
-\item{Midpoint}{Mean depth of outer and inner sensors. Always the boundary
-between the outer annulus and the inner annulus (or sensorless zone).}
-\item{Inner sensor depth}{Determines whether the inner annulus is directly
-measured or estimated.}
-\item{Probe tip depth}{If sapwood extends beyond the probe tip, a sensorless
-annulus is added from the probe tip to the heartwood boundary.}
+\item{Inner sensor within sapwood (both sensors live)}{The midpoint between
+the sensors divides their zones of influence. Outer annulus = cambium to
+midpoint; inner annulus = midpoint to the inner detection limit; any
+sapwood beyond the inner detection limit is a sensorless annulus estimated
+by decay from the inner sensor.}
+\item{Inner sensor in heartwood (only the outer sensor is live)}{The
+midpoint is meaningless — there is no second measurement to share with.
+The outer annulus is bounded by the \emph{outer detection limit}
+(outer sensor + 0.5 cm); the remaining sapwood from there to the heartwood
+is a sensorless annulus estimated by decay from the outer sensor.
+Bounding the measured ring at the midpoint here would over-credit it and
+inflate whole-tree water use.}
 }
 
 \strong{Annulus allocation} (example: standard ICT probe, bark_probe = 0.5 cm, spacer = 0)
 
-Probe landmarks from cambium: outer sensor 0.75 cm, midpoint 1.50 cm,
-inner sensor 2.25 cm, probe tip 3.00 cm.
+Probe landmarks from cambium: outer sensor 0.75 cm, outer detection limit
+1.25 cm, midpoint 1.50 cm, inner sensor 2.25 cm, inner detection limit
+2.75 cm.
 
 \describe{
 \item{Actual sapwood < 0.75 cm}{Error — outer sensor is not within the sapwood.}
-\item{Actual sapwood 0.75-1.50 cm}{1 annulus: outer sensor measures the full
+\item{Actual sapwood 0.75-1.25 cm}{1 annulus: outer sensor measures the full
 sapwood depth (0 to sapwood boundary).}
-\item{Actual sapwood 1.50-2.25 cm}{2 annuli: outer sensor (0 to 1.50 cm);
-sensorless zone (1.50 cm to sapwood boundary, estimated as Jv_outer / 2).}
-\item{Actual sapwood 2.25-3.00 cm}{2 annuli: outer sensor (0 to 1.50 cm);
-inner sensor (1.50 cm to sapwood boundary).}
-\item{Actual sapwood over 3.00 cm}{3 annuli: outer sensor (0 to 1.50 cm);
-inner sensor (1.50 to 3.00 cm); sensorless zone (3.00 cm to sapwood
+\item{Actual sapwood 1.25 cm to just under 2.25 cm}{2 annuli: outer sensor
+(0 to 1.25 cm); sensorless zone (1.25 cm to sapwood boundary, estimated as
+Jv_outer / 2). The inner sensor is in heartwood, so the outer detection
+limit bounds the measured ring.}
+\item{Actual sapwood 2.25-2.75 cm}{2 annuli: outer sensor (0 to 1.50 cm);
+inner sensor (1.50 cm to sapwood boundary). The inner sensor at exactly
+2.25 cm (sapwood = inner-sensor depth) counts as measuring (inclusive
+boundary), so the midpoint divides the annuli.}
+\item{Actual sapwood over 2.75 cm}{3 annuli: outer sensor (0 to 1.50 cm);
+inner sensor (1.50 to 2.75 cm); sensorless zone (2.75 cm to sapwood
 boundary, estimated as Jv_inner / 2).}
 }
 }
@@ -165,6 +181,7 @@ sapflow velocity to estimate plant water use. Tree Physiology, 6, 201-209.
 \code{\link{calc_sap_flux}}, \code{\link{plot_radial_velocity_profile}}
 
 Other sapwood integration functions: 
+\code{\link{aggregate_daily_flux}()},
 \code{\link{apply_sap_flux_integration}()},
 \code{\link{calc_sap_flux}()}
 }

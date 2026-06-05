@@ -65,8 +65,6 @@ List calc_hrm_cpp(NumericVector dTratio_douo,
   double dTratio_HRM_diui_mean = NA_REAL;
   double window_start = NA_REAL;
   double window_end = NA_REAL;
-  double Pe_outer = NA_REAL;
-  double Pe_inner = NA_REAL;
 
   if (hrm_indices.size() == 0) {
     return List::create(
@@ -74,8 +72,6 @@ List calc_hrm_cpp(NumericVector dTratio_douo,
       Named("inner") = Vhi_HRM,
       Named("temp_ratio_outer") = dTratio_HRM_douo_mean,
       Named("temp_ratio_inner") = dTratio_HRM_diui_mean,
-      Named("peclet_outer") = Pe_outer,
-      Named("peclet_inner") = Pe_inner,
       Named("window_start_outer") = window_start,
       Named("window_end_outer") = window_end,
       Named("window_start_inner") = window_start,
@@ -126,20 +122,10 @@ List calc_hrm_cpp(NumericVector dTratio_douo,
   // Calculate velocities
   if (!NumericVector::is_na(dTratio_HRM_douo_mean) && dTratio_HRM_douo_mean > 0) {
     Vho_HRM = diffusivity / probe_spacing * std::log(dTratio_HRM_douo_mean) * 3600.0;
-
-    // Calculate Peclet number
-    if (std::isfinite(Vho_HRM)) {
-      Pe_outer = (Vho_HRM * probe_spacing) / (diffusivity * 3600.0);
-    }
   }
 
   if (!NumericVector::is_na(dTratio_HRM_diui_mean) && dTratio_HRM_diui_mean > 0) {
     Vhi_HRM = diffusivity / probe_spacing * std::log(dTratio_HRM_diui_mean) * 3600.0;
-
-    // Calculate Peclet number
-    if (std::isfinite(Vhi_HRM)) {
-      Pe_inner = (Vhi_HRM * probe_spacing) / (diffusivity * 3600.0);
-    }
   }
 
   return List::create(
@@ -147,8 +133,6 @@ List calc_hrm_cpp(NumericVector dTratio_douo,
     Named("inner") = Vhi_HRM,
     Named("temp_ratio_outer") = dTratio_HRM_douo_mean,
     Named("temp_ratio_inner") = dTratio_HRM_diui_mean,
-    Named("peclet_outer") = Pe_outer,
-    Named("peclet_inner") = Pe_inner,
     Named("window_start_outer") = window_start,
     Named("window_end_outer") = window_end,
     Named("window_start_inner") = window_start,

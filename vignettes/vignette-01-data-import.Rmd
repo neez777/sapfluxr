@@ -1,0 +1,119 @@
+---
+title: "1. Data Import"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{1. Data Import}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+```{r setup}
+library(sapfluxr)
+```
+
+# Overview
+
+This is **Stage 1** of the pipeline (see the [Get Started](sapfluxr.html) guide for the full
+tour). The goal is to read raw logger data into a validated structure and, optionally, to
+correct clock drift and attach weather data for downstream VPD-based corrections.
+
+# Reading heat pulse data
+
+`read_heat_pulse_data()` is the primary entry point. It auto-detects the format and validates
+the data on import.
+
+```{r import}
+hp_file <- system.file("extdata", "Sample_HeatPulse_Data.txt", package = "sapfluxr")
+hp_data <- read_heat_pulse_data(hp_file, show_progress = FALSE)
+
+names(hp_data)
+head(hp_data$measurements)
+```
+
+The returned object is a list:
+
+| Element | Contents |
+|---------|----------|
+| `measurements` | Raw temperature records: `datetime`, `pulse_id`, and the four sensor channels `do`, `di`, `uo`, `ui` |
+| `diagnostics` | Battery, current, and sensor diagnostics |
+| `metadata` | File information and detected format |
+| `validation` | Results of the automated quality checks |
+
+## Supported formats
+
+`read_heat_pulse_data()` detects three formats automatically:
+
+1. **ICT current (JSON/TXT)** — the modern SFM1x logger format, with nested temperature and
+   diagnostic arrays.
+2. **ICT legacy** — tab-delimited / fixed-width legacy exports.
+3. **CSV** — standard CSV exports from ICT's Sap Flow Tool.
+
+You can force a format with the `format` argument if auto-detection is ambiguous.
+
+## Validation and cleaning
+
+On import, `sapfluxr` runs several checks (controlled by `validate_data = TRUE`):
+
+* **Timestamp continuity** — detects and fills gaps in the measurement sequence.
+* **Incomplete days** — `trim_incomplete_days = TRUE` removes partial days at the start/end of
+  a file (those with fewer than ~23 h of data), which would otherwise bias daily-minima
+  baseline calculations.
+* **Range checks** — flags illogical temperatures.
+
+```{r cleaning, eval=FALSE}
+hp_data <- read_heat_pulse_data(
+  hp_file,
+  validate_data        = TRUE,
+  trim_incomplete_days = TRUE
+)
+```
+
+## Multiple files
+
+To import and combine several logger files (e.g. one per tree), use
+`read_multiple_heat_pulse_data()` with matching `tree_ids`.
+
+```{r multi, eval=FALSE}
+hp_multi <- read_multiple_heat_pulse_data(
+  file_paths = c("tree1.txt", "tree2.txt"),
+  tree_ids   = c("T1", "T2")
+)
+```
+
+# Clock-drift correction
+
+Logger clocks drift over long deployments. `fix_clock_drift()` linearly rescales the timeline
+from a known calibration point (the device time observed versus the true time).
+
+```{r clock, eval=FALSE}
+hp_data <- fix_clock_drift(
+  hp_data,
+  device_time_col       = "datetime",
+  observed_device_time  = "2024-12-01 10:05:00",
+  observed_actual_time  = "2024-12-01 10:00:00"
+)
+```
+
+# Weather data and VPD (optional)
+
+Several baseline-correction strategies (Stage 4) use vapour pressure deficit (VPD). Import
+weather with `read_weather_data()` and compute VPD with `calc_vpd()`.
+
+```{r weather, eval=FALSE}
+wx_file <- system.file("extdata", "Sample_Meteorological_Data.txt", package = "sapfluxr")
+weather <- read_weather_data(wx_file, confirm = FALSE)
+
+weather$vpd_kPa <- calc_vpd(
+  air_temp_c        = weather$air_temp_c,
+  relative_humidity = weather$relative_humidity
+)
+```
+
+# Next step
+
+With validated data in hand, continue to
+[Stage 2: Probe & Wood Configuration](vignette-02-configuration.html).

@@ -1,0 +1,242 @@
+---
+title: "Get Started with sapfluxr"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Get Started with sapfluxr}
+  %\VignetteEncoding{UTF-8}
+  %\VignetteEngine{knitr::rmarkdown}
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.path = "man/figures/vignette-",
+  out.width = "100%"
+)
+```
+
+# Introduction
+
+**sapfluxr** processes heat pulse velocity (HPV) data from sensors such
+as the ICT International SFM1 and SFM1x, taking you from raw logger
+temperatures all the way to tree-level water use. Its design philosophy
+is built on **transparency**, **non-destructive corrections**, and
+**reproducible research**: original measurements are never overwritten,
+and every correction adds a new, fully tracked column.
+
+This guide walks the **complete pipeline from start to finish** using
+the bundled sample dataset. Each stage is shown with a minimal, runnable
+example and a link to a detailed vignette that documents every available
+option.
+
+## The processing pipeline
+
+The pipeline mirrors the workflow of the companion `shiny-sapfluxr`
+application:
+
+| Stage | What happens | Detailed vignette |
+|----------------|------------------------|--------------------------------|
+| 1\. Data import | Read and validate raw logger data; optional clock-drift and weather/VPD | [Data Import](vignette-01-data-import.html) |
+| 2\. Configuration | Define probe geometry and wood thermal properties | [Probe & Wood Configuration](vignette-02-configuration.html) |
+| 3\. HPV calculation | Compute velocities (HRM, MHR, T-max) and flag quality | [HPV Calculation & QC](vignette-03-hpv-calculation.html) |
+| 4\. Spacing correction | Identify zero-flow anchors and correct baseline drift | [Baseline & Spacing Correction](vignette-04-spacing-correction.html) |
+| 5\. Wound correction | Scale for probe-insertion damage | [Wound Correction](vignette-05-wound-correction.html) |
+| 6\. Calibration & sDMA | Align secondary methods and switch on Péclet number | [Calibration & sDMA](vignette-06-calibration-and-sdma.html) |
+| 7\. Flux density | Convert to flux density and integrate over sapwood | [Flux Density & Integration](vignette-07-flux-and-integration.html) |
+| 8\. Aggregation | Summarise to daily totals and visualise | [Aggregation & Visualisation](vignette-08-aggregation-and-visualisation.html) |
+
+------------------------------------------------------------------------
+
+# A minimal end-to-end pipeline
+
+```{r setup}
+library(sapfluxr)
+```
+
+## Stage 1: Data import
+
+`read_heat_pulse_data()` auto-detects the sensor format and validates
+the data on import.
+
+```{r import}
+# Bundled sample dataset (ICT SFM1x format)
+hp_file <- system.file("extdata", "Sample_HeatPulse_Data.txt", package = "sapfluxr")
+hp_data <- read_heat_pulse_data(hp_file, show_progress = FALSE)
+
+head(hp_data$measurements)
+```
+
+→ See [Data Import](vignette-01-data-import.html) for formats,
+validation, clock-drift correction, and weather/VPD import.
+
+## Stage 2: Configuration
+
+Heat pulse velocity depends on probe geometry and the thermal properties
+of the sapwood. Both are managed through reproducible YAML
+configurations.
+
+```{r config}
+probe <- load_probe_config("symmetrical")
+
+# Sample wood configuration matching the bundled tree
+wood_file <- system.file("extdata", "Sample_Wood_Config.yml", package = "sapfluxr")
+wood <- load_wood_properties(wood_file)
+```
+
+→ See [Probe & Wood Configuration](vignette-02-configuration.html) for
+built-in configs, custom YAML, and deriving thermal properties from core
+measurements.
+
+## Stage 3: HPV calculation & quality control
+
+Calculate one or more methods through a single interface, then flag
+suspect values.
+
+```{r hpv}
+vh_results <- calc_heat_pulse_velocity(
+  hp_data,
+  methods            = c("HRM", "MHR"),
+  probe_config       = probe,
+  wood_properties    = wood,
+  confirm_parameters = FALSE,
+  show_progress      = FALSE
+)
+
+vh_results <- flag_vh_quality(vh_results)
+head(vh_results)
+```
+
+→ See [HPV Calculation & QC](vignette-03-hpv-calculation.html) for the
+method physics, baseline options, and quality flags.
+
+## Stage 4: Spacing correction
+
+Identify periods of genuine zero flow (here with the PELT changepoint
+detector), then correct baseline drift. `Vs_cm_hr` becomes the **current
+best estimate**.
+
+```{r spacing}
+anchors <- detect_changepoints(vh_results, sensor_position = "outer")
+
+vh_results <- apply_spacing_correction(
+  vh_data         = vh_results,
+  changepoints    = anchors$changepoints,
+  offset_model    = "segment",
+  correction_math = "burgess",
+  sensor_position = "both",
+  wood_properties = wood,
+  verbose         = FALSE
+)
+```
+
+→ See [Baseline & Spacing
+Correction](vignette-04-spacing-correction.html) for PELT, dual-stable,
+and VPD anchor detection, plus the offset-model × correction-math
+matrix.
+
+## Stage 5: Wound correction
+
+Scale velocities to account for the wound zone created by probe
+insertion.
+
+```{r wound}
+vh_results <- apply_wound_correction(
+  vh_results,
+  probe_spacing      = "5mm",
+  method             = "linear",
+  wood_properties    = wood,
+  confirm_parameters = FALSE,
+  verbose            = FALSE
+)
+```
+
+→ See [Wound Correction](vignette-05-wound-correction.html) for linear
+vs polynomial models and temporal wound tracking across reinstallations.
+
+## Stage 6: Calibration & sDMA
+
+Align secondary methods to the corrected HRM scale, then switch between
+methods based on the Péclet number to capture the full diurnal range.
+
+```{r sdma}
+# Calibrate the secondary method(s) to HRM and apply the transform
+calibrations <- calibrate_multiple_methods(
+  vh_results,
+  primary_method    = "HRM",
+  secondary_methods = "MHR"
+)
+vh_results <- transform_multiple_methods(vh_results, calibrations)
+
+# Switch between methods per pulse using the Péclet criterion.
+# Pe is computed automatically from probe_config / wood_properties.
+vh_results <- apply_sdma_processing(
+  vh_results,
+  secondary_method = "MHR",
+  probe_config     = probe,
+  wood_properties  = wood,
+  peclet_threshold = 1.0,
+  show_progress    = FALSE
+)
+```
+
+→ See [Calibration & sDMA](vignette-06-calibration-and-sdma.html) for
+regression options, switching modes, and the "current best" pointer
+column.
+
+## Stage 7: Flux density & integration
+
+Convert velocity to sap flux density ($J_v = Z \cdot V_h$) and integrate
+over the sapwood to obtain tree water use ($Q$).
+
+```{r flux}
+flux_data <- vh_results
+flux_data$Jv_cm3_cm2_hr <- calc_sap_flux_density(
+  Vh              = flux_data$Vs_cm_hr,
+  wood_properties = wood
+)
+
+# Tree dimensions (from the sample wood configuration)
+flux_data$dbh                  <- 52.08
+flux_data$sapwood_thickness    <- 2.0
+flux_data$bark_thickness_dbh   <- 1.2
+flux_data$bark_thickness_probe <- 0.5
+
+tree_water_use <- apply_sap_flux_integration(
+  flux_data,
+  method = "linear_decay"
+)
+```
+
+→ See [Flux Density &
+Integration](vignette-07-flux-and-integration.html) for the Z factor,
+sapwood-area calculation, and radial integration models.
+
+## Stage 8: Aggregation & visualisation
+
+Summarise sub-daily flux into daily totals for seasonal water-use
+analysis.
+
+```{r daily}
+daily_totals <- aggregate_daily(
+  tree_water_use,
+  total_flux_col = "Q_total_cm3_hr"
+)
+head(daily_totals)
+```
+
+→ See [Aggregation &
+Visualisation](vignette-08-aggregation-and-visualisation.html) for
+aggregation options, normalised metrics, and the plotting suite.
+
+------------------------------------------------------------------------
+
+# Next steps
+
+This guide is the high-level tour. Each stage links to a detailed
+vignette covering all available options, the underlying physics, and
+troubleshooting. Start with [Data Import](vignette-01-data-import.html)
+and work through the pipeline in order.

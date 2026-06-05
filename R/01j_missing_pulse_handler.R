@@ -230,7 +230,6 @@ create_missing_pulse_results <- function(diagnostics, methods) {
         # Method-specific window columns (all NA for missing pulses)
         hrm_window_start_sec = NA_real_,
         hrm_window_end_sec = NA_real_,
-        peclet_number = NA_real_,
 
         mhr_upstream_peak_sec = NA_real_,
         mhr_downstream_peak_sec = NA_real_,
@@ -263,7 +262,6 @@ create_missing_pulse_results <- function(diagnostics, methods) {
         # Method-specific window columns (all NA for missing pulses)
         hrm_window_start_sec = NA_real_,
         hrm_window_end_sec = NA_real_,
-        peclet_number = NA_real_,
 
         mhr_upstream_peak_sec = NA_real_,
         mhr_downstream_peak_sec = NA_real_,

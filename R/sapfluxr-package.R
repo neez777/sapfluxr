@@ -18,7 +18,7 @@ NULL
 utils::globalVariables(c(
   ".data", "datetime", "pulse_id", "sensor_position", "method", "Vh_cm_hr",
   "Vh_cm_hr_raw", "Vh_cm_hr_sc", "Vh_cm_hr_wc", "Vh_calibrated",
-  "method_used", "peclet_number", "quality_flag", "is_missing_pulse",
+  "method_used", "quality_flag", "is_missing_pulse",
   "old_pulse_id", "new_pulse_id", "Jv_cm3_cm2_hr", "primary_velocity",
   "secondary_velocity", "predicted", "import_time", "file_name", "date",
   "min_value", "segment_id", "Q_cm3_hr", "Qp_daily", "vpd_kpa", "min_predawn_vpd",

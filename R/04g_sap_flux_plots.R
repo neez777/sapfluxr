@@ -17,7 +17,7 @@
 #' or normalised values) with optional environmental overlays.
 #'
 #' @param data Data frame containing sap flux data with datetime column.
-#' @param y_col Character. Name of column to plot on y-axis. Default: "Q_cm3_hr".
+#' @param y_col Character. Name of column to plot on y-axis. Default: "Q_total_cm3_hr".
 #' @param datetime_col Character. Name of column containing datetime. Default: "datetime".
 #' @param y_label Character. Y-axis label. If NULL, will be auto-generated from
 #'   y_col. Default: NULL.
@@ -51,7 +51,7 @@
 #'
 #' @family sap flux plots
 #' @export
-plot_sap_flux_timeseries <- function(data, y_col = "Q_cm3_hr",
+plot_sap_flux_timeseries <- function(data, y_col = "Q_total_cm3_hr",
                                       datetime_col = "datetime",
                                       y_label = NULL,
                                       title = "Sap Flux Timeseries",

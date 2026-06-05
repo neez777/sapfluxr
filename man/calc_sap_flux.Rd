@@ -30,12 +30,25 @@ sensor value is applied unchanged across the unmeasured annulus.}
 }}
 }
 \value{
-Data frame with added columns:
+Data frame with \strong{one row per unique timestamp} (and per
+\code{method}/\code{method_label}/\code{pulse_id} group if present).
+The input \code{sensor_position} and \code{Jv_cm3_cm2_hr} columns are
+collapsed into the following radial component columns:
 \describe{
-\item{Q_cm3_hr}{Total sap flux (cm^3/hr) per timestamp}
-\item{Q_L_hr}{Total sap flux (L/hr) per timestamp}
-\item{Q_L_day}{Total sap flux (L/day) per timestamp}
+\item{Q_outer_cm3_hr}{Flux from directly-measured outer-sensor annuli (cm^3/hr)}
+\item{Q_inner_cm3_hr}{Flux from directly-measured inner-sensor annuli (cm^3/hr)}
+\item{Q_unmeasured_cm3_hr}{Flux from sensorless annuli, estimated via \code{method} (cm^3/hr)}
+\item{Q_total_cm3_hr}{Sum of all three components (cm^3/hr)}
+\item{Q_total_L_hr}{Total sap flux (L/hr)}
+\item{Q_total_L_day}{Instantaneous total expressed as L/day (= Q_total_L_hr × 24).
+This is \emph{not} a true daily integral; use \code{\link{aggregate_daily_flux}}
+to integrate correctly over a measurement period.}
 }
+
+\strong{Note:} because the output is one row per timestamp, individual
+sensor Jv values are no longer present. To retain tree-level metadata
+columns (e.g. \code{tree_id}, \code{dbh}), join the result back via
+\code{dplyr::left_join(q_result, flux_data \%>\% dplyr::distinct(datetime, tree_id, dbh))}.
 }
 \description{
 Integrates sap flux density (Jv) measurements from multiple sensor depths
@@ -63,14 +76,24 @@ Jv is applied according to \code{method}: halved under \code{"linear_decay"}
 }
 \examples{
 \dontrun{
-# Calculate sapwood areas (sapwood_depth is from bark surface)
-areas <- calc_sapwood_areas(dbh = 30, bark_thickness = 0.5, sapwood_depth = 3.0)
+areas <- calc_sapwood_areas(
+  dbh = 30, bark_thickness_dbh = 0.5,
+  bark_thickness_probe = 0.5, sapwood_thickness = 3.5
+)
 
-# Integrate flux density measurements
-flux_data <- calc_sap_flux(flux_data, areas)
+flux_data <- data.frame(
+  datetime        = rep(as.POSIXct("2024-01-01 12:00", tz = "UTC"), 2),
+  sensor_position = c("outer", "inner"),
+  Jv_cm3_cm2_hr   = c(10, 7)
+)
 
-# View total flux
-head(flux_data[, c("datetime", "Q_L_hr", "Q_L_day")])
+q <- calc_sap_flux(flux_data, areas)
+# One row per timestamp; Q broken into radial components
+q[, c("datetime", "Q_outer_cm3_hr", "Q_inner_cm3_hr",
+       "Q_unmeasured_cm3_hr", "Q_total_L_hr")]
+
+# True daily totals (accounts for measurement interval)
+daily <- aggregate_daily_flux(q)
 }
 
 }
@@ -83,9 +106,10 @@ sugar maple trees: considerations when using heat-pulse methods in trees
 with deep functional sapwood. Tree Physiology, 20, 217-227.
 }
 \seealso{
-\code{\link{calc_sapwood_areas}}
+\code{\link{calc_sapwood_areas}}, \code{\link{aggregate_daily_flux}}
 
 Other sapwood integration functions: 
+\code{\link{aggregate_daily_flux}()},
 \code{\link{apply_sap_flux_integration}()},
 \code{\link{calc_sapwood_areas}()}
 }

@@ -2,7 +2,7 @@
 % Please edit documentation in R/04d_sapwood_integration.R
 \name{calc_flux_single_timestamp}
 \alias{calc_flux_single_timestamp}
-\title{Calculate Flux for a Single Timestamp (Internal Helper)}
+\title{Calculate Flux Components for a Single Timestamp (Internal Helper)}
 \usage{
 calc_flux_single_timestamp(sensor_positions, Jv_values, rings, method)
 }
@@ -20,23 +20,10 @@ columns.}
 Jv; \code{"constant_velocity"} uses it unchanged.}
 }
 \value{
-Total flux (cm^3/hr) for this timestamp.
+Single-row tibble with columns \code{Q_outer_cm3_hr},
+\code{Q_inner_cm3_hr}, \code{Q_unmeasured_cm3_hr}, \code{Q_total_cm3_hr}.
 }
 \description{
-Calculate Flux for a Single Timestamp (Internal Helper)
-}
-\details{
-For each annulus, the flux contribution is \code{area * Jv_ring}, where
-\code{Jv_ring} depends on whether the annulus is directly measured and on
-the integration method:
-\itemize{
-\item \code{measured = TRUE}: \code{Jv_ring = Jv_source}
-\item \code{measured = FALSE} and \code{method = "linear_decay"}:
-\code{Jv_ring = Jv_source / 2}
-\item \code{measured = FALSE} and \code{method = "constant_velocity"}:
-\code{Jv_ring = Jv_source}
-}
-The source sensor for each annulus is encoded in the \code{sensor_source} column
-of the rings data frame, set by \code{\link{calc_sapwood_areas}}.
+Calculate Flux Components for a Single Timestamp (Internal Helper)
 }
 \keyword{internal}

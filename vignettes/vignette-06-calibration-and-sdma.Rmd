@@ -1,0 +1,138 @@
+---
+title: "6. Calibration & sDMA Switching"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{6. Calibration & sDMA Switching}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+```{r setup}
+library(sapfluxr)
+```
+
+# Overview
+
+**Stage 6** combines methods so that the full diurnal range of sap flow is captured
+accurately: low nocturnal flows with the precision of HRM, and midday peaks with the extended
+range of MHR or T-max. This is a two-part process — **calibrate** the secondary method(s) onto
+the corrected HRM scale, then **switch** between methods based on the Péclet number (the
+Selectable Dual Method Approach, sDMA).
+
+# Why calibration is needed
+
+When two methods are combined, a "junction artefact" (a step change) often appears at the
+switching boundary, because the baseline correction (Stage 4) is derived from HRM and does not
+perfectly align with the secondary method's raw scale. Calibration removes this by regressing
+the secondary method onto the corrected HRM over their overlapping valid range.
+
+## Comparing methods
+
+`compare_methods_enhanced()` and `compare_methods_segmented()` help you understand the
+relationship and find the handover threshold before committing to a calibration.
+
+```{r compare, eval=FALSE}
+cmp <- compare_methods_enhanced(
+  vh_corrected     = vh_results,
+  primary_method   = "HRM",
+  secondary_method = "MHR",
+  sensor_position  = "outer",
+  try_quadratic    = TRUE
+)
+```
+
+## Calibrating
+
+Calibrate a single method with `calibrate_method_to_primary()`, or all secondary methods at
+once with `calibrate_multiple_methods()`, then apply the transforms with
+`transform_multiple_methods()`.
+
+```{r calibrate, eval=FALSE}
+calibrations <- calibrate_multiple_methods(
+  vh_results,
+  primary_method    = "HRM",
+  secondary_methods = "MHR"
+)
+
+vh_results <- transform_multiple_methods(vh_results, calibrations)
+```
+
+Calibrated velocities are written to `Vh_cm_hr_<method>_cal` (HRM is left unchanged), with the
+fitted `slope`, `intercept`, and $R^2$ recorded as metadata.
+
+# The Péclet number
+
+The **Péclet number** is the dimensionless ratio that decides which method is most reliable
+for a given measurement:
+
+$$Pe = \frac{V_h \cdot x}{k}$$
+
+where $V_h$ is heat-pulse velocity (cm s⁻¹), $x$ is probe spacing (cm), and $k$ is thermal
+diffusivity (cm² s⁻¹). It quantifies advective versus diffusive heat transport:
+
+* **Pe < 1** — conduction dominates; HRM is most reliable.
+* **Pe ≥ 1** — convection dominates; secondary methods (MHR, T-max) capture the full dynamic
+  range more accurately.
+
+Péclet numbers are computed at this stage (after all corrections) from the calibrated
+velocities (`Vs_cm_hr`) using `recalculate_peclet()`. They are **not** computed at the earlier
+HPV stage because they should reflect corrected, post-calibration velocities.
+
+# sDMA switching
+
+With methods on a common scale, `apply_sdma_processing()` computes the Péclet number
+automatically and switches between HRM and the secondary method per pulse. Supply the same
+`probe_config` and `wood_properties` objects used throughout the pipeline:
+
+```{r sdma, eval=FALSE}
+vh_results <- apply_sdma_processing(
+  vh_results,
+  secondary_method = "MHR",
+  probe_config     = probe,
+  wood_properties  = wood,
+  peclet_threshold = 1.0,
+  show_progress    = FALSE
+)
+```
+
+If you need the Péclet numbers before calling `apply_sdma_processing()` — for instance to
+inspect them or plot the switching boundary — run `recalculate_peclet()` first and
+`apply_sdma_processing()` will reuse the column:
+
+```{r sdma_manual, eval=FALSE}
+vh_results <- recalculate_peclet(
+  vh_results,
+  probe_config    = probe,
+  wood_properties = wood,
+  velocity_col    = "Vs_cm_hr"   # uses current best estimate
+)
+
+vh_results <- apply_sdma_processing(
+  vh_results,
+  secondary_method = "MHR",
+  peclet_threshold = 1.0,
+  show_progress    = FALSE
+)
+```
+
+## Switching criterion
+
+* **Pe < `peclet_threshold`** (default 1.0) → HRM (low flow; advection negligible).
+* **Pe ≥ `peclet_threshold`** → secondary method (high flow; MHR or T-max more accurate).
+
+The switched result is written to `Vh_cm_hr_sdma`, and `method_used` records which method was
+selected for each measurement.
+
+# The "current best" pointer
+
+Throughout the corrections, `Vs_cm_hr` always points to the most accurate available estimate.
+After sDMA it reflects the switched series, so downstream flux functions automatically use the
+best velocity without any manual column bookkeeping.
+
+# Next step
+
+Continue to [Stage 7: Flux Density & Integration](vignette-07-flux-and-integration.html).

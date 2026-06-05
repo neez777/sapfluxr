@@ -1,0 +1,104 @@
+---
+title: "2. Probe & Wood Configuration"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{2. Probe & Wood Configuration}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+```{r setup}
+library(sapfluxr)
+```
+
+# Overview
+
+**Stage 2** establishes the physical context for every downstream calculation: the geometry of
+the probe and the thermal properties of the sapwood. Both are managed through reproducible
+YAML configurations so that an analysis is fully documented and repeatable.
+
+# Probe configuration
+
+Heat pulse velocity depends on the spacing and arrangement of the heater and temperature
+sensors. Most ICT SFM1x sensors use the symmetrical geometry (probe spacing $x = 0.5$ cm).
+
+```{r probe}
+probe <- load_probe_config("symmetrical")
+list_available_probe_configs()
+```
+
+Built-in options include `symmetrical`, `asymmetrical`, and `symmetrical_6mm`. To build a
+custom geometry:
+
+```{r probe_custom, eval=FALSE}
+probe <- create_custom_probe_config(
+  config_name      = "my_probe",
+  sensor_positions = c("outer", "inner"),
+  probe_diameter   = 1.3
+)
+```
+
+You can validate that a probe configuration is compatible with the methods you intend to run:
+
+```{r probe_validate, eval=FALSE}
+validate_probe_config(probe, methods = c("HRM", "MHR"))
+```
+
+# Wood properties
+
+Velocity-to-flux conversion and thermal corrections depend on wood density, moisture content,
+and thermal diffusivity.
+
+## Loading a configuration
+
+The package ships with built-in configurations, and you can load a custom YAML file by path.
+
+```{r wood_builtin}
+# Built-in (generic softwood / eucalyptus / pine)
+wood_builtin <- load_wood_properties("eucalyptus")
+
+# Custom YAML matching the bundled sample tree
+wood_file <- system.file("extdata", "Sample_Wood_Config.yml", package = "sapfluxr")
+wood <- load_wood_properties(wood_file)
+
+list_available_wood_properties()
+```
+
+## Deriving properties from core measurements
+
+If you have measurements from wood cores, `sapfluxr` derives the thermal diffusivity ($k$) and
+the sap-flux conversion factor ($Z$) for you. Two equivalent workflows are supported.
+
+**Workflow A — fresh weight & volume** (the standard gravimetric approach):
+
+```{r wood_calc_a, eval=FALSE}
+wood <- calculate_wood_properties(
+  fresh_weight = 12.5,   # g
+  dry_weight   = 8.2,    # g
+  fresh_volume = 15.1    # cm^3
+)
+```
+
+**Workflow B — dual density** (fresh and dry density; volume cancels out):
+
+```{r wood_calc_b, eval=FALSE}
+wood <- calculate_wood_properties(
+  fresh_density = 0.82,
+  dry_density   = 0.54
+)
+```
+
+## Tree dimensions
+
+Wood configurations can also carry the tree dimensions needed for sapwood integration
+(Stage 7) — `dbh`, `sapwood_thickness`, `bark_thickness_dbh`, and `bark_thickness_probe`. The
+sample configuration includes these alongside the thermal properties.
+
+# Next step
+
+With probe and wood configured, continue to
+[Stage 3: HPV Calculation & Quality Control](vignette-03-hpv-calculation.html).

@@ -13,6 +13,7 @@
 #' @return Numeric matrix where each row contains numbers from one record
 #'
 #' @keywords internal
+#' @export
 extract_numbers_from_records_cpp <- function(records, expected_numbers_per_record) {
     .Call(`_sapfluxr_extract_numbers_from_records_cpp`, records, expected_numbers_per_record)
 }
@@ -33,6 +34,7 @@ extract_numbers_from_records_cpp <- function(records, expected_numbers_per_recor
 #'   \item{measurements}{Data frame with temperature measurements}
 #'
 #' @keywords internal
+#' @export
 parse_ict_records_cpp <- function(records, pulse_times, measurement_interval, expected_diagnostics = 5L) {
     .Call(`_sapfluxr_parse_ict_records_cpp`, records, pulse_times, measurement_interval, expected_diagnostics)
 }
@@ -48,6 +50,7 @@ parse_ict_records_cpp <- function(records, pulse_times, measurement_interval, ex
 #' @return Character vector of datetime strings
 #'
 #' @keywords internal
+#' @export
 extract_datetimes_cpp <- function(records) {
     .Call(`_sapfluxr_extract_datetimes_cpp`, records)
 }
@@ -64,6 +67,7 @@ extract_datetimes_cpp <- function(records) {
 #' @return List containing HRM results for outer and inner sensors
 #'
 #' @keywords internal
+#' @export
 calc_hrm_cpp <- function(dTratio_douo, dTratio_diui, HRM_period, tp, diffusivity, probe_spacing) {
     .Call(`_sapfluxr_calc_hrm_cpp`, dTratio_douo, dTratio_diui, HRM_period, tp, diffusivity, probe_spacing)
 }
@@ -82,6 +86,7 @@ calc_hrm_cpp <- function(dTratio_douo, dTratio_diui, HRM_period, tp, diffusivity
 #' @return List containing MHR results for outer and inner sensors
 #'
 #' @keywords internal
+#' @export
 calc_mhr_cpp <- function(deltaT_do, deltaT_di, deltaT_uo, deltaT_ui, diffusivity, probe_spacing, pre_pulse_rows, sampling_interval) {
     .Call(`_sapfluxr_calc_mhr_cpp`, deltaT_do, deltaT_di, deltaT_uo, deltaT_ui, diffusivity, probe_spacing, pre_pulse_rows, sampling_interval)
 }
@@ -106,6 +111,7 @@ calc_mhr_cpp <- function(deltaT_do, deltaT_di, deltaT_uo, deltaT_ui, diffusivity
 #' @return List containing delta temps, ratios, and peak info
 #'
 #' @keywords internal
+#' @export
 preprocess_pulse_data_cpp <- function(do_vec, di_vec, uo_vec, ui_vec, baseline_values, pre_pulse_rows, sampling_interval) {
     .Call(`_sapfluxr_preprocess_pulse_data_cpp`, do_vec, di_vec, uo_vec, ui_vec, baseline_values, pre_pulse_rows, sampling_interval)
 }
@@ -122,6 +128,7 @@ preprocess_pulse_data_cpp <- function(do_vec, di_vec, uo_vec, ui_vec, baseline_v
 #' @return List containing Tmax_Coh results
 #'
 #' @keywords internal
+#' @export
 calc_tmax_coh_cpp <- function(deltaT_do, deltaT_di, diffusivity, probe_spacing, pre_pulse_rows, sampling_interval) {
     .Call(`_sapfluxr_calc_tmax_coh_cpp`, deltaT_do, deltaT_di, diffusivity, probe_spacing, pre_pulse_rows, sampling_interval)
 }
@@ -139,6 +146,7 @@ calc_tmax_coh_cpp <- function(deltaT_do, deltaT_di, diffusivity, probe_spacing, 
 #' @return List containing Tmax_Klu results
 #'
 #' @keywords internal
+#' @export
 calc_tmax_klu_cpp <- function(deltaT_do, deltaT_di, diffusivity, probe_spacing, tp_1, pre_pulse_rows, sampling_interval) {
     .Call(`_sapfluxr_calc_tmax_klu_cpp`, deltaT_do, deltaT_di, diffusivity, probe_spacing, tp_1, pre_pulse_rows, sampling_interval)
 }
@@ -163,6 +171,7 @@ calc_tmax_klu_cpp <- function(deltaT_do, deltaT_di, diffusivity, probe_spacing, 
 #' Typically 10-50x faster than pure R implementation for large datasets.
 #'
 #' @keywords internal
+#' @export
 detect_outliers_rolling_mean_cpp <- function(vh_values, window = 5L, threshold = 3.0) {
     .Call(`_sapfluxr_detect_outliers_rolling_mean_cpp`, vh_values, window, threshold)
 }
@@ -186,6 +195,7 @@ detect_outliers_rolling_mean_cpp <- function(vh_values, window = 5L, threshold =
 #' Typically 20-100x faster than pure R implementation.
 #'
 #' @keywords internal
+#' @export
 detect_rate_of_change_outliers_cpp <- function(vh_values, max_change = 4.0) {
     .Call(`_sapfluxr_detect_rate_of_change_outliers_cpp`, vh_values, max_change)
 }
@@ -207,6 +217,7 @@ detect_rate_of_change_outliers_cpp <- function(vh_values, max_change = 4.0) {
 #'   \item{duration_hours}{Numeric vector of gap durations in hours}
 #'
 #' @keywords internal
+#' @export
 identify_gaps_cpp <- function(datetimes, vh_values, is_na) {
     .Call(`_sapfluxr_identify_gaps_cpp`, datetimes, vh_values, is_na)
 }
@@ -225,6 +236,7 @@ identify_gaps_cpp <- function(datetimes, vh_values, is_na) {
 #' @return Numeric vector of interpolated values for the gap
 #'
 #' @keywords internal
+#' @export
 interpolate_linear_cpp <- function(vh_values, datetimes, gap_start, gap_end) {
     .Call(`_sapfluxr_interpolate_linear_cpp`, vh_values, datetimes, gap_start, gap_end)
 }
@@ -244,6 +256,7 @@ interpolate_linear_cpp <- function(vh_values, datetimes, gap_start, gap_end) {
 #' @return Numeric vector of interpolated values for the gap
 #'
 #' @keywords internal
+#' @export
 interpolate_weighted_cpp <- function(vh_values, datetimes, gap_start, gap_end, window_size) {
     .Call(`_sapfluxr_interpolate_weighted_cpp`, vh_values, datetimes, gap_start, gap_end, window_size)
 }
@@ -269,6 +282,7 @@ interpolate_weighted_cpp <- function(vh_values, datetimes, gap_start, gap_end, w
 #'   \item{large_gap_indices}{Integer vector of indices of gaps too large to fill (1-based)}
 #'
 #' @keywords internal
+#' @export
 interpolate_all_gaps_cpp <- function(vh_values, datetimes, gap_starts, gap_ends, gap_durations, max_gap_hours, method = "linear", window_size = 5L) {
     .Call(`_sapfluxr_interpolate_all_gaps_cpp`, vh_values, datetimes, gap_starts, gap_ends, gap_durations, max_gap_hours, method, window_size)
 }
@@ -290,6 +304,7 @@ interpolate_all_gaps_cpp <- function(vh_values, datetimes, gap_starts, gap_ends,
 #'   \item{prop_flagged}{Proportion of data that's flagged}
 #'
 #' @keywords internal
+#' @export
 prefilter_flagged_rows_cpp <- function(quality_flags, flags_to_interpolate, method_col = NULL, sensor_col = NULL) {
     .Call(`_sapfluxr_prefilter_flagged_rows_cpp`, quality_flags, flags_to_interpolate, method_col, sensor_col)
 }

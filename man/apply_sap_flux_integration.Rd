@@ -49,6 +49,7 @@ result <- apply_sap_flux_integration(flux_data)
 }
 \seealso{
 Other sapwood integration functions: 
+\code{\link{aggregate_daily_flux}()},
 \code{\link{calc_sap_flux}()},
 \code{\link{calc_sapwood_areas}()}
 }

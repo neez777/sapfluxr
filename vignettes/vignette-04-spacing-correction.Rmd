@@ -1,0 +1,116 @@
+---
+title: "4. Baseline & Spacing Correction"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{4. Baseline & Spacing Correction}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+```{r setup}
+library(sapfluxr)
+```
+
+# Overview
+
+**Stage 4** is the most critical per-sensor decision in the pipeline. Even a 1–2 mm probe
+misalignment can cause large velocity errors, and the apparent spacing drifts over time as the
+tree grows and the probes settle. Correction has two parts: **identify** when the zero-flow
+baseline shifted, then **apply** a correction between those anchor points.
+
+The architecture is non-destructive — corrections are written to new columns, and `Vs_cm_hr`
+becomes the **current best estimate** carried forward.
+
+# Step 1 — Identify zero-flow anchors
+
+`sapfluxr` offers three identification strategies.
+
+## PELT changepoints (statistical)
+
+When weather data is unavailable, use the **PELT** (Pruned Exact Linear Time) algorithm to find
+structural breaks in the daily-minimum velocities. Daily minima are computed internally.
+
+```{r pelt, eval=FALSE}
+anchors <- detect_changepoints(
+  vh_results,
+  sensor_position = "outer",
+  penalty         = "MBIC"
+)
+```
+
+You can inspect daily minima directly with `calculate_daily_minima()` and review detections
+with `plot_changepoints_interactive()`.
+
+## Dual-stable (physiological + atmospheric)
+
+When weather is available, the preferred approach requires **both** atmospheric demand (VPD)
+and the sap-flow signal to be low and stable simultaneously — the strongest evidence of genuine
+zero flow.
+
+```{r dual, eval=FALSE}
+dual <- find_dual_stable_periods(
+  vh_data        = vh_results,
+  weather_data   = weather,
+  vh_col         = "Vs_cm_hr",
+  predawn_window = c(2, 6),
+  vpd_threshold  = 0.5,
+  vh_threshold   = 2.0
+)
+```
+
+## VPD changepoints
+
+`detect_vpd_changepoints()` finds shifts in atmospheric demand alone, useful for identifying
+suitable correction windows.
+
+# Step 2 — Apply the correction
+
+Two independent choices control the correction.
+
+**Offset model (shape):**
+
+* `segment` — uses the segment minimum as a constant step offset. Best for sudden shifts.
+* `gradient` — interpolates a temporal ramp between anchors. Best for slow, monotonic drift.
+
+**Correction maths (physics):**
+
+* `linear` — subtracts the detected offset from all measurements.
+* `burgess` — derives the implied probe misalignment from the HRM equation and applies both a
+  sensitivity (slope) and geometric (intercept) correction.
+
+```{r apply, eval=FALSE}
+# Segmented Burgess correction
+vh_results <- apply_spacing_correction(
+  vh_data         = vh_results,
+  changepoints    = anchors$changepoints,
+  offset_model    = "segment",
+  correction_math = "burgess",
+  sensor_position = "both",
+  wood_properties = wood
+)
+
+# Alternative: gradient + linear from dual-stable anchors
+vh_results <- apply_spacing_correction(
+  vh_data         = vh_results,
+  changepoints    = dual$changepoints,
+  offset_model    = "gradient",
+  correction_math = "linear",
+  sensor_position = "both"
+)
+```
+
+# Non-destructive column tracking
+
+| Column | Meaning |
+|--------|---------|
+| `Vh_cm_hr` | Raw HPV (preserved, never overwritten) |
+| `Vh_cm_hr_sc` | Spacing-corrected diagnostic |
+| `Vs_cm_hr` | **Current best estimate** carried forward |
+
+# Next step
+
+Continue to [Stage 5: Wound Correction](vignette-05-wound-correction.html).

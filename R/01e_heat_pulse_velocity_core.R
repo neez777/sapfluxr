@@ -78,8 +78,7 @@
 #'   \item{quality_flag}{Data quality indicator}
 #'   \item{hrm_window_start_sec}{HRM: Start of averaging window (seconds after pulse). NA for other methods.}
 #'   \item{hrm_window_end_sec}{HRM: End of averaging window (seconds after pulse). NA for other methods.}
-#'   \item{peclet_number}{HRM: Peclet number (dimensionless). Pe = (Vh \* x) / (D \* 3600). Used for method switching. NA for other methods.}
-#'   \item{mhr_upstream_peak_sec}{MHR: Time when upstream sensor reaches maximum (seconds after pulse). NA for other methods.}
+#' #'   \item{mhr_upstream_peak_sec}{MHR: Time when upstream sensor reaches maximum (seconds after pulse). NA for other methods.}
 #'   \item{mhr_downstream_peak_sec}{MHR: Time when downstream sensor reaches maximum (seconds after pulse). NA for other methods.}
 #'   \item{tmax_peak_time_sec}{Tmax (Coh/Klu): Time to downstream temperature peak (seconds after pulse). NA for other methods.}
 #'
@@ -594,7 +593,6 @@ calc_vh_single_pulse <- function(pulse_data, pulse_id, parameters, methods, plot
   # Method-specific window columns (explicit naming)
   res_hrm_window_start <- rep(NA_real_, n_results)
   res_hrm_window_end <- rep(NA_real_, n_results)
-  res_peclet_number <- rep(NA_real_, n_results)
 
   res_mhr_upstream_peak <- rep(NA_real_, n_results)
   res_mhr_downstream_peak <- rep(NA_real_, n_results)
@@ -616,7 +614,6 @@ calc_vh_single_pulse <- function(pulse_data, pulse_id, parameters, methods, plot
     if (method_name == "HRM") {
       res_hrm_window_start[idx] <- method_result$window_start_outer
       res_hrm_window_end[idx] <- method_result$window_end_outer
-      res_peclet_number[idx] <- if (is.null(method_result$peclet_outer)) NA_real_ else method_result$peclet_outer
     } else if (method_name == "MHR") {
       res_mhr_upstream_peak[idx] <- method_result$window_start_outer
       res_mhr_downstream_peak[idx] <- method_result$window_end_outer
@@ -636,7 +633,6 @@ calc_vh_single_pulse <- function(pulse_data, pulse_id, parameters, methods, plot
     if (method_name == "HRM") {
       res_hrm_window_start[idx] <- method_result$window_start_inner
       res_hrm_window_end[idx] <- method_result$window_end_inner
-      res_peclet_number[idx] <- if (is.null(method_result$peclet_inner)) NA_real_ else method_result$peclet_inner
     } else if (method_name == "MHR") {
       res_mhr_upstream_peak[idx] <- method_result$window_start_inner
       res_mhr_downstream_peak[idx] <- method_result$window_end_inner
@@ -661,7 +657,6 @@ calc_vh_single_pulse <- function(pulse_data, pulse_id, parameters, methods, plot
     # Method-specific window columns (explicit naming eliminates ambiguity)
     hrm_window_start_sec = res_hrm_window_start,
     hrm_window_end_sec = res_hrm_window_end,
-    peclet_number = res_peclet_number,
 
     mhr_upstream_peak_sec = res_mhr_upstream_peak,
     mhr_downstream_peak_sec = res_mhr_downstream_peak,
@@ -1124,11 +1119,6 @@ recalc_vh_with_k <- function(vh_results, k_new, k_old = NULL, probe_spacing = NU
       # Ratio-based methods: Vh = (k/x) * ln(ratio) \* 3600
       if (!is.na(vh_new$temp_ratio[i]) && vh_new$temp_ratio[i] > 0) {
         vh_new$Vh_cm_hr[i] <- (k_new / probe_spacing) * log(vh_new$temp_ratio[i]) * 3600
-
-        # Recalculate Peclet number for HRM
-        if (method == "HRM" && !is.na(vh_new$Vh_cm_hr[i])) {
-          vh_new$peclet_number[i] <- (vh_new$Vh_cm_hr[i] * probe_spacing) / (k_new * 3600)
-        }
       }
 
     } else if (method == "Tmax_Coh") {

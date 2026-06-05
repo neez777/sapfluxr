@@ -6,7 +6,7 @@
 \alias{sapfluxr-package}
 \title{sapfluxr: Comprehensive Sap Flow Analysis from Heat Pulse Velocity Sensors}
 \description{
-A comprehensive R package for processing and analysing sap flow data from heat pulse velocity sensors. Provides complete pipeline from raw temperature measurements to tree-level sap flux calculations, including multiple HPV calculation methods (HRM, MHR, Tmax variants), data quality control, zero-flow corrections using novel heartwood reference method or changepoint-based approaches, wound corrections, method calibration, sDMA (Selectable Dual Method Approach) for automatic method switching, sapwood area integration, and temporal aggregation. Includes both programmatic API and interactive Shiny interface for analysis workflows.
+A comprehensive R package for processing and analysing sap flow data from heat pulse velocity (HPV) sensors such as the ICT International SFM1 and SFM1x. Provides a transparent, non-destructive pipeline from raw temperature measurements to tree-level water use, including multiple HPV calculation methods (HRM, MHR, and T-max), selectable pre-pulse baseline options, data quality control, baseline (spacing) correction via changepoint and dual-stability detection, wound correction, secondary-method calibration, sDMA (Selectable Dual Method Approach) for Peclet-based method switching, sapwood-area integration, and temporal aggregation. A companion Shiny application (shinysapfluxr) offers the same pipeline through an interactive interface.
 }
 \seealso{
 Useful links:
@@ -21,8 +21,12 @@ Useful links:
 
 Authors:
 \itemize{
-  \item Gavan McGrath (Original R script development)
   \item Tim Bleby (Scientific review and Excel workflow design)
+}
+
+Other contributors:
+\itemize{
+  \item Gavan McGrath (Authored an independent HPV analysis script that informed aspects of the methodology) [contributor]
 }
 
 }

@@ -6,7 +6,7 @@
 \usage{
 plot_sap_flux_timeseries(
   data,
-  y_col = "Q_cm3_hr",
+  y_col = "Q_total_cm3_hr",
   datetime_col = "datetime",
   y_label = NULL,
   title = "Sap Flux Timeseries",
@@ -19,7 +19,7 @@ plot_sap_flux_timeseries(
 \arguments{
 \item{data}{Data frame containing sap flux data with datetime column.}
 
-\item{y_col}{Character. Name of column to plot on y-axis. Default: "Q_cm3_hr".}
+\item{y_col}{Character. Name of column to plot on y-axis. Default: "Q_total_cm3_hr".}
 
 \item{datetime_col}{Character. Name of column containing datetime. Default: "datetime".}
 

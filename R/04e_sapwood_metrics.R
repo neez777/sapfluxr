@@ -50,7 +50,7 @@
 #'
 #' # Calculate mean flux density
 #' Qps <- calc_mean_flux_density(
-#'   Qp = flux_results$Q_cm3_hr,
+#'   Qp = flux_results$Q_total_cm3_hr,
 #'   As = sapwood_areas$total_sapwood_area_cm2
 #' )
 #' }

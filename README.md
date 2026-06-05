@@ -8,22 +8,20 @@
 
 ## Overview
 
-**sapfluxr** is a comprehensive R package for importing, processing, and analysing sap flow data from ICT SFM1x sensors. It provides a robust, non-destructive, and transparent 10-step pipeline from raw sensor measurements to tree-level water use estimates.
+**sapfluxr** is a comprehensive R package for importing, processing, and analysing sap flow data from ICT SFM1x sensors. It provides a robust, non-destructive, and transparent pipeline from raw sensor measurements to tree-level water use estimates.
 
-## The 10-Step Pipeline
+## The Processing Pipeline
 
-`sapfluxr` implements a physically grounded processing pipeline designed for scientific rigour and reproducibility:
+`sapfluxr` implements a physically grounded pipeline, mirrored by the companion `shiny-sapfluxr` application, designed for scientific rigour and reproducibility:
 
-1. **Data Import**: Automated multi-format detection (JSON, CSV, Legacy).
-2. **Wood Property Estimation**: Fresh weight/volume or Dual-Density characterisation.
-3. **HPV Calculation**: Multi-method engine (HRM, MHR, T-max Cohen & Kluitenberg).
-4. **Zero-Flow Identification**: Manual, PELT (statistical), or Dual-Stable (physiological) detection.
-5. **Baseline Correction**: Segmented Flat or Burgess Spacing models.
-6. **Wound Correction**: Linear or polynomial scaling with temporal tracking.
-7. **Method Calibration**: Aligning secondary methods to the corrected HRM scale.
-8. **Dual Method Switching (sDMA)**: PÃ©clet-based switching for full diurnal coverage.
-9. **Flux Density & Radial Integration**: Hatton (1990) two-annulus scaling.
-10. **Daily Aggregation**: Integration to daily L/day with completeness tracking.
+1. **Data Import**: Automated multi-format detection (JSON, CSV, legacy), validation, optional clock-drift and weather/VPD import.
+2. **Configuration**: Probe geometry and wood thermal properties (built-in, custom YAML, or derived from core measurements).
+3. **HPV Calculation & QC**: Multi-method engine (HRM, MHR, T-max Cohen & Kluitenberg) with quality flagging.
+4. **Spacing Correction**: Zero-flow identification (PELT, dual-stable, VPD) with segment/gradient × Burgess/linear correction.
+5. **Wound Correction**: Linear or polynomial scaling with temporal wound tracking.
+6. **Calibration & sDMA**: Aligning secondary methods to the corrected HRM scale, then Péclet-based switching (Pe computed at this stage from corrected velocities).
+7. **Flux Density & Integration**: $J_v = Z \cdot V_h$ and two-annulus radial integration to tree water use.
+8. **Aggregation & Visualisation**: Daily totals, normalised metrics, and diagnostic plots.
 
 ## Quick Start Example
 
@@ -33,47 +31,60 @@ library(sapfluxr)
 # 1. Import raw data
 hp_data <- read_heat_pulse_data("data.txt")
 
-# 2. Load wood properties (e.g., Eucalyptus)
-wood <- load_wood_properties("eucalyptus")
+# 2. Configure probe and wood properties
+probe <- load_probe_config("symmetrical")
+wood  <- load_wood_properties("eucalyptus")
 
-# 3. Calculate velocities
-vh <- calc_heat_pulse_velocity(hp_data, methods = c("HRM", "MHR"), wood_properties = wood)
+# 3. Calculate velocities and flag quality
+vh <- calc_heat_pulse_velocity(hp_data, methods = c("HRM", "MHR"),
+                               probe_config = probe, wood_properties = wood)
+vh <- flag_vh_quality(vh)
 
-# 4. Detect baseline shifts
-vh <- detect_changepoints(vh, method = "pelt")
+# 4. Spacing correction (PELT anchors + Burgess)
+anchors <- detect_changepoints(vh, sensor_position = "outer")
+vh <- apply_spacing_correction(vh, changepoints = anchors$changepoints,
+                               offset_model = "segment", correction_math = "burgess",
+                               sensor_position = "both", wood_properties = wood)
 
-# 5. Apply zero-flow correction
-vh <- apply_zero_flow_offset(vh, correction_model = "flat")
+# 5. Wound correction
+vh <- apply_wound_correction(vh, probe_spacing = "5mm", method = "linear",
+                             wood_properties = wood)
 
-# 6. Apply wound correction
-vh <- apply_wound_correction(vh, wound_diameter = 2.0)
+# 6. Calibrate secondary methods and switch (sDMA — Pe auto-computed)
+calibs <- calibrate_multiple_methods(vh, primary_method = "HRM", secondary_methods = "MHR")
+vh <- transform_multiple_methods(vh, calibs)
+vh <- apply_sdma_processing(vh, secondary_method = "MHR",
+                            probe_config = probe, wood_properties = wood,
+                            peclet_threshold = 1.0)
 
-# 7 & 8. Calibrate and switch (sDMA)
-vh <- calibrate_secondary_method(vh, primary = "HRM", secondary = "MHR")
-vh <- apply_sdma_switching(vh, primary = "HRM", secondary = "MHR", mode = "peclet")
+# 7. Flux density and tree water use
+flux <- vh
+flux$Jv_cm3_cm2_hr <- calc_sap_flux_density(Vh = flux$Vs_cm_hr, wood_properties = wood)
+flux$dbh <- 35; flux$sapwood_thickness <- 2; flux$bark_thickness_dbh <- 1.2; flux$bark_thickness_probe <- 0.5
+q <- apply_sap_flux_integration(flux, method = "linear_decay")
 
-# 9. Scale to tree-level flux (Q)
-sap_flux <- calc_sap_flux(vh, wood_properties = wood, dbh = 35, sapwood_depth_mm = 40)
-
-# 10. Aggregate to daily totals
-daily <- aggregate_daily(sap_flux)
+# 8. Aggregate to daily totals
+daily <- aggregate_daily(q)
 ```
 
 ## Documentation
 
-For detailed guides on each step of the pipeline, see the package vignettes:
+Start with the **Get Started** guide for an end-to-end tour, then dive into the per-stage vignettes:
 
-* [**Quick Start Guide**](vignettes/sapfluxr-quickstart.Rmd): A high-level overview of the 10-step pipeline.
-* [**01. Data Import & Configuration**](vignettes/vignette-01-import-and-config.Rmd): Getting data in and setting up physical properties.
-* [**02. HPV Calculation Methods**](vignettes/vignette-02-hpv-calculation.Rmd): The physics of HRM, MHR, and T-max.
-* [**03. Baseline & Zero-Flow Correction**](vignettes/vignette-03-baseline-and-zero-flow.Rmd): Addressing probe drift and misalignment.
-* [**04. Advanced Corrections & Switching**](vignettes/vignette-04-wound-and-method-correction.Rmd): Wound correction, calibration, and sDMA.
-* [**05. Flux Scaling & Daily Totals**](vignettes/vignette-05-flux-scaling-and-aggregation.Rmd): From velocity to L/day.
+* [**Get Started with sapfluxr**](vignettes/sapfluxr.Rmd): The full pipeline from start to finish.
+* [**1. Data Import**](vignettes/vignette-01-data-import.Rmd): Formats, validation, clock drift, weather/VPD.
+* [**2. Probe & Wood Configuration**](vignettes/vignette-02-configuration.Rmd): Geometry and thermal properties.
+* [**3. HPV Calculation & QC**](vignettes/vignette-03-hpv-calculation.Rmd): HRM, MHR, T-max, baseline methods, quality flags.
+* [**4. Baseline & Spacing Correction**](vignettes/vignette-04-spacing-correction.Rmd): Zero-flow anchors and correction models.
+* [**5. Wound Correction**](vignettes/vignette-05-wound-correction.Rmd): Linear/polynomial scaling and temporal tracking.
+* [**6. Calibration & sDMA**](vignettes/vignette-06-calibration-and-sdma.Rmd): Method alignment and Péclet switching.
+* [**7. Flux Density & Integration**](vignettes/vignette-07-flux-and-integration.Rmd): From velocity to tree water use.
+* [**8. Aggregation & Visualisation**](vignettes/vignette-08-aggregation-and-visualisation.Rmd): Daily totals, metrics, plots.
 
 ## Key Features
 
 * **Non-Destructive Architecture**: Original measurements are preserved; each correction creates a new tracked column.
-* **Physics-Led Switching**: Automatically selects the most accurate method based on the **PÃ©clet Number (Pe)**.
+* **Physics-Led Switching**: Automatically selects the most accurate method based on the **Péclet Number (Pe)**.
 * **Optimised Performance**: Core calculation engines implemented in C++ for handling large, multi-year datasets.
 * **Reproducible Design**: All parameters and correction histories are tracked in metadata attributes.
 
@@ -94,4 +105,4 @@ This project is licensed under the GPL-3 License.
 
 **Authors**: Grant Joyce, Gavan McGrath, Tim Bleby
 **Maintainer**: Grant Joyce, <neez1977@gmail.com>
-**Version**: 0.5.0 (Experimental)
+**Version**: 0.6.6 (Experimental)

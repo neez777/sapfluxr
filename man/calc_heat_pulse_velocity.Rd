@@ -100,8 +100,7 @@ A tibble containing calculated heat pulse velocities with columns:
 \item{quality_flag}{Data quality indicator}
 \item{hrm_window_start_sec}{HRM: Start of averaging window (seconds after pulse). NA for other methods.}
 \item{hrm_window_end_sec}{HRM: End of averaging window (seconds after pulse). NA for other methods.}
-\item{peclet_number}{HRM: Peclet number (dimensionless). Pe = (Vh \* x) / (D \* 3600). Used for method switching. NA for other methods.}
-\item{mhr_upstream_peak_sec}{MHR: Time when upstream sensor reaches maximum (seconds after pulse). NA for other methods.}
+#'   \item{mhr_upstream_peak_sec}{MHR: Time when upstream sensor reaches maximum (seconds after pulse). NA for other methods.}
 \item{mhr_downstream_peak_sec}{MHR: Time when downstream sensor reaches maximum (seconds after pulse). NA for other methods.}
 \item{tmax_peak_time_sec}{Tmax (Coh/Klu): Time to downstream temperature peak (seconds after pulse). NA for other methods.}
 }
