@@ -522,90 +522,71 @@ calc_sap_flux <- function(flux_data,
 
   rings <- sapwood_areas$rings
 
+  # ── Collapse the constant ring geometry into scalar area coefficients ───────
+  # Ring areas never vary with time, so Q at every timestamp is simply a fixed
+  # linear combination of the outer and inner sensor Jv values. Precomputing
+  # these four area coefficients once turns the entire radial integration into
+  # vectorised column arithmetic — no per-timestamp loop or grouped apply.
+  sensorless_factor <- switch(.radial_method,
+                              linear_decay      = 0.5,
+                              constant_velocity = 1.0,
+                              stop("Unknown integration method: ", .radial_method))
+
+  is_outer_src <- rings$sensor_source == "outer"
+  is_measured  <- as.logical(rings$measured)
+
+  A_outer_measured   <- sum(rings$area_cm2[ is_measured &  is_outer_src])
+  A_inner_measured   <- sum(rings$area_cm2[ is_measured & !is_outer_src])
+  A_sensorless_outer <- sum(rings$area_cm2[!is_measured &  is_outer_src])
+  A_sensorless_inner <- sum(rings$area_cm2[!is_measured & !is_outer_src])
+
   # Grouping cols: datetime + any of method/method_label/pulse_id present
   potential_group_cols <- c("method", "method_label", "pulse_id")
   group_cols <- c("datetime", intersect(potential_group_cols, names(flux_data)))
 
-  # One row per timestamp (× group_cols): call helper and unpack components
-  results <- flux_data %>%
-    dplyr::group_by(dplyr::across(dplyr::all_of(group_cols))) %>%
-    dplyr::reframe(
-      calc_flux_single_timestamp(
-        sensor_positions = sensor_position,
-        Jv_values        = Jv_cm3_cm2_hr,
-        rings            = rings,
-        method           = .radial_method
-      )
-    )
-
-  results$Q_total_L_hr  <- results$Q_total_cm3_hr / 1000
-  results$Q_total_L_day <- results$Q_total_L_hr * 24
-
-  return(results)
-}
-
-
-#' Calculate Flux Components for a Single Timestamp (Internal Helper)
-#'
-#' @param sensor_positions Vector of sensor positions at this timestamp.
-#' @param Jv_values Vector of Jv values corresponding to each sensor.
-#' @param rings Sapwood rings data frame (output from \code{calc_sapwood_areas}).
-#'   Must contain \code{sensor_source} (character) and \code{measured} (logical)
-#'   columns.
-#' @param method Radial integration method for sensorless annuli:
-#'   \code{"linear_decay"} (Pausch et al. 2000) halves the adjacent sensor's
-#'   Jv; \code{"constant_velocity"} uses it unchanged.
-#'
-#' @return Single-row tibble with columns \code{Q_outer_cm3_hr},
-#'   \code{Q_inner_cm3_hr}, \code{Q_unmeasured_cm3_hr}, \code{Q_total_cm3_hr}.
-#'
-#' @keywords internal
-calc_flux_single_timestamp <- function(sensor_positions,
-                                        Jv_values,
-                                        rings,
-                                        method) {
-
-  Jv_outer <- Jv_values[sensor_positions == "outer"][1]
-  Jv_inner <- Jv_values[sensor_positions == "inner"][1]
-  if (is.na(Jv_outer)) Jv_outer <- 0
-  if (is.na(Jv_inner)) Jv_inner <- 0
-
-  Jv_lookup <- c(outer = Jv_outer, inner = Jv_inner)
-
-  sensorless_factor <- switch(method,
-                              linear_decay      = 0.5,
-                              constant_velocity = 1.0,
-                              stop("Unknown integration method: ", method))
-
-  Q_outer      <- 0
-  Q_inner      <- 0
-  Q_unmeasured <- 0
-
-  for (i in seq_len(nrow(rings))) {
-    ring      <- rings[i, ]
-    Jv_source <- Jv_lookup[ring$sensor_source]
-    contrib   <- ring$area_cm2 * if (isTRUE(ring$measured)) {
-      Jv_source
-    } else {
-      Jv_source * sensorless_factor
-    }
-
-    if (!isTRUE(ring$measured)) {
-      Q_unmeasured <- Q_unmeasured + contrib
-    } else if (ring$sensor_source == "outer") {
-      Q_outer <- Q_outer + contrib
-    } else {
-      Q_inner <- Q_inner + contrib
-    }
-  }
-
-  # unname() strips the "outer"/"inner" attribute inherited from Jv_lookup subsetting
-  tibble::tibble(
-    Q_outer_cm3_hr      = unname(Q_outer),
-    Q_inner_cm3_hr      = unname(Q_inner),
-    Q_unmeasured_cm3_hr = unname(Q_unmeasured),
-    Q_total_cm3_hr      = unname(Q_outer + Q_inner + Q_unmeasured)
+  # Reshape so each timestamp (× group) carries one outer and one inner Jv in
+  # its own column. Where a sensor is duplicated within a group the first value
+  # is kept (matching the previous one-row-per-timestamp behaviour); a missing
+  # or NA sensor is treated as zero flux.
+  wide <- tidyr::pivot_wider(
+    flux_data[, c(group_cols, "sensor_position", "Jv_cm3_cm2_hr"), drop = FALSE],
+    id_cols      = dplyr::all_of(group_cols),
+    names_from   = "sensor_position",
+    values_from  = "Jv_cm3_cm2_hr",
+    values_fn    = function(x) x[1],
+    names_prefix = "Jv_"
   )
+
+  if (!"Jv_outer" %in% names(wide)) wide[["Jv_outer"]] <- NA_real_
+  if (!"Jv_inner" %in% names(wide)) wide[["Jv_inner"]] <- NA_real_
+
+  Jv_outer <- wide[["Jv_outer"]]
+  Jv_inner <- wide[["Jv_inner"]]
+  Jv_outer[is.na(Jv_outer)] <- 0
+  Jv_inner[is.na(Jv_inner)] <- 0
+
+  # Vectorised radial integration: Q = A · Jv across all timestamps at once
+  Q_outer      <- A_outer_measured * Jv_outer
+  Q_inner      <- A_inner_measured * Jv_inner
+  Q_unmeasured <- sensorless_factor *
+    (A_sensorless_outer * Jv_outer + A_sensorless_inner * Jv_inner)
+  Q_total      <- Q_outer + Q_inner + Q_unmeasured
+
+  results <- wide[, group_cols, drop = FALSE]
+  results$Q_outer_cm3_hr      <- Q_outer
+  results$Q_inner_cm3_hr      <- Q_inner
+  results$Q_unmeasured_cm3_hr <- Q_unmeasured
+  results$Q_total_cm3_hr      <- Q_total
+  results$Q_total_L_hr        <- Q_total / 1000
+  results$Q_total_L_day       <- results$Q_total_L_hr * 24
+
+  # Deterministic ordering by group key (datetime ascending), matching the
+  # previous group_by()-based output order.
+  # unname() so a group column called "method" cannot collide with order()'s
+  # own `method` argument.
+  results <- results[do.call(order, unname(as.list(results[group_cols]))), , drop = FALSE]
+
+  return(tibble::as_tibble(results))
 }
 
 

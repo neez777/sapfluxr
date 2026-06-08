@@ -90,11 +90,37 @@ Start with the **Get Started** guide for an end-to-end tour, then dive into the 
 
 ## Installation
 
-Install the development version from GitHub:
+### Prerequisites
+
+`sapfluxr` uses compiled C++ code (Rcpp). Before installing, make sure you have a working C++ toolchain:
+
+| Platform | Requirement |
+|---|---|
+| **Windows** | [Rtools](https://cran.r-project.org/bin/windows/Rtools/) — install the version matching your R version |
+| **macOS** | Xcode Command Line Tools: `xcode-select --install` |
+| **Linux** | `gcc` / `g++` — usually already present; install via your package manager if not |
+
+### Install sapfluxr
 
 ```r
-if (!require(devtools)) install.packages("devtools")
-devtools::install_github("neez777/sapfluxr")
+if (!require(remotes)) install.packages("remotes")
+remotes::install_github("neez777/sapfluxr")
+```
+
+### Companion Shiny application
+
+The interactive `shiny-sapfluxr` app mirrors the full package pipeline. To run it locally:
+
+```r
+# 1. Install sapfluxr (above), then install the additional Shiny dependencies
+install.packages(c(
+  "shiny", "shinydashboard", "shinyWidgets", "shinyjs",
+  "fresh", "plotly", "DT", "waiter", "leaflet", "webshot2"
+))
+
+# 2. Clone the companion repository and run
+# git clone https://github.com/neez777/sapfluxr
+shiny::runApp("path/to/shiny-sapfluxr")
 ```
 
 ## License

@@ -1,6 +1,6 @@
 Package: sapfluxr
 Title: Comprehensive Sap Flow Analysis from Heat Pulse Velocity Sensors
-Version: 0.6.9.2
+Version: 0.7.0
 Authors@R: c(
     person("Grant", "Joyce", email = "neez1977@gmail.com",
            role = c("aut", "cre"), comment = "Developer"),
@@ -16,7 +16,7 @@ Description: A comprehensive R package for processing and analysing sap flow dat
     methods (HRM, MHR, and T-max), selectable pre-pulse baseline options, data
     quality control, baseline (spacing) correction via changepoint and
     dual-stability detection, wound correction, secondary-method calibration,
-    sDMA (Selectable Dual Method Approach) for Peclet-based method switching,
+    sDMA (Selectable Dual Method Approach) for Péclet-based method switching,
     sapwood-area integration, and temporal aggregation. A companion Shiny
     application (shinysapfluxr) offers the same pipeline through an interactive
     interface.
