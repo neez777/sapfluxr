@@ -36,6 +36,51 @@ flux_data$Jv_cm3_cm2_hr <- calc_sap_flux_density(
 )
 ```
 
+## Temperature-dependent heat capacity
+
+Wood heat capacity varies with temperature, so a constant $Z$ introduces a systematic bias that
+is worst at night and in cold conditions. Becker & Edwards (1999) give a temperature-dependent
+heat-capacity coefficient
+
+$$k(T) = 0.400 + 0.00214\,T - 0.000006\,T^2 \quad (T \text{ in } ^\circ\mathrm{C}),$$
+
+which refines the heat-capacity term of the conversion factor to $Z(T) = (\rho_{dw}/\rho_s)\,(k(T) + mc)$.
+
+`temperature_mode` selects how $T$ is supplied to that coefficient:
+
+| `temperature_mode` | $T$ | Name used |
+|---|---|---|
+| `"constant"` (default) | not used — fixed $Z$ | Constant |
+| `"static"` | one fixed value | Static |
+| `"dynamic"` | one value per measurement | Becker & Edwards |
+
+The per-measurement mode is the one named after Becker & Edwards, since it is where the
+temperature dependence is actually exercised; the static mode evaluates the same $k(T)$ at a
+single temperature.
+
+```{r temperature_modes, eval=FALSE}
+# Static: a single representative wood temperature
+flux_data$Jv_cm3_cm2_hr <- calc_sap_flux_density(
+  Vh               = flux_data$Vs_cm_hr,
+  wood_properties  = wood,
+  temperature_mode = "static",
+  temperature      = 20
+)
+
+# Becker & Edwards: each pulse's pre-pulse temperature (stored by
+# calc_heat_pulse_velocity() as the prepulse_temp_c column)
+flux_data$Jv_cm3_cm2_hr <- calc_sap_flux_density(
+  vh_data          = flux_data,
+  wood_properties  = wood,
+  temperature_mode = "dynamic"        # uses prepulse_temp_c
+)
+
+# The coefficient itself is available directly
+calc_becker_edwards_k(c(5, 20, 35))
+```
+
+The default `temperature_mode = "constant"` reproduces the fixed-$Z$ behaviour of earlier versions.
+
 # Radial integration
 
 Sap flux varies with depth from the bark, so a sensor's flux density must be integrated over

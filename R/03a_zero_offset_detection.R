@@ -91,7 +91,7 @@ NULL
 #'   *Tree Physiology*, 21(9), 589-598.
 #'
 #' @family spacing correction functions
-#' @export
+#' @keywords internal
 calculate_zero_offset <- function(vh_data,
                                    zero_periods,
                                    sensor_position,

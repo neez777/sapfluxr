@@ -18,3 +18,4 @@ List with validation results
 Validate that a probe configuration is complete and sensible
 for the intended calculations.
 }
+\keyword{internal}

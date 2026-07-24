@@ -178,7 +178,7 @@ Hatton, T.J., Catchpole, E.A., & Vertessy, R.A. (1990). Integration of
 sapflow velocity to estimate plant water use. Tree Physiology, 6, 201-209.
 }
 \seealso{
-\code{\link{calc_sap_flux}}, \code{\link{plot_radial_velocity_profile}}
+\code{\link{calc_sap_flux}}
 
 Other sapwood integration functions: 
 \code{\link{aggregate_daily_flux}()},

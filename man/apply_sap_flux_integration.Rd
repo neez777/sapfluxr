@@ -21,12 +21,15 @@ apply_sap_flux_integration(
 \item{sapwood_thickness_col}{Name of sapwood thickness column (cm, cambium to
 heartwood). Default: "sapwood_thickness"}
 
+\item{bark_thickness_dbh_col}{Name of full bark thickness column at DBH
+measurement site (cm). Default: "bark_thickness_dbh".}
+
+\item{bark_thickness_probe_col}{Name of bark thickness column at probe
+installation site after shaving (cm). Default: "bark_thickness_probe".}
+
 \item{method}{Radial integration method for sensorless annuli. One of
 \code{"linear_decay"} (default, Pausch et al. 2000) or
 \code{"constant_velocity"}. See \code{\link{calc_sap_flux}}.}
-
-\item{bark_thickness_col}{Name of bark thickness column (cm).
-Default: "bark_thickness". If NULL, assumes 0.}
 }
 \value{
 Data frame with added Q columns

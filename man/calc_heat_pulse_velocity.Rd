@@ -96,7 +96,8 @@ A tibble containing calculated heat pulse velocities with columns:
 \item{method}{Calculation method used (e.g., "HRM", "MHR")}
 \item{sensor_position}{Inner or outer sensor position}
 \item{Vh_cm_hr}{Heat pulse velocity in cm/hr}
-\item{temp_ratio}{Temperature ratio used in calculation. For HRM/MHR/HRMX: v1/v2 ratio. NA for Tmax methods. Enables efficient recalculation with different thermal diffusivity values.}
+\item{temp_ratio}{Temperature ratio used in calculation. For HRM/MHR: v1/v2 ratio. NA for Tmax methods. Enables efficient recalculation with different thermal diffusivity values.}
+\item{prepulse_temp_c}{Representative pre-pulse baseline temperature (degrees Celsius) for the sensor's radial position. Used by the Becker & Edwards sap-flux conversion.}
 \item{quality_flag}{Data quality indicator}
 \item{hrm_window_start_sec}{HRM: Start of averaging window (seconds after pulse). NA for other methods.}
 \item{hrm_window_end_sec}{HRM: End of averaging window (seconds after pulse). NA for other methods.}
@@ -116,8 +117,6 @@ The parameters list should contain:
 \describe{
 \item{diffusivity}{Thermal diffusivity of sapwood (cm^2/s), default: 0.0025}
 \item{probe_spacing}{Distance from heat source (cm), default: 0.5}
-\item{L}{Lower proportion of deltaTmax for HRMX sampling window, default: 0.5}
-\item{H}{Higher proportion of deltaTmax for HRMX sampling window, default: 0.8}
 \item{tp_1}{Heat pulse duration (sec) for Tmax_Klu, default: 2}
 \item{HRM_start}{Start of sampling window for HRM (sec after pulse), default: 60}
 \item{HRM_end}{End of sampling window for HRM (sec after pulse), default: 100}

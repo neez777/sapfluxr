@@ -133,7 +133,7 @@ apply_spacing_correction <- function(vh_data,
         correction_type = correction_math,
         k_assumed = k_assumed,
         probe_spacing = probe_spacing,
-        measurement_time = dots$measurement_time %||% 80,
+        measurement_time = dots$measurement_time %||% get_analysis_param("burgess.default_midpoint_time_s"),
         create_new_col = TRUE,
         verbose = FALSE
       )
@@ -152,7 +152,7 @@ apply_spacing_correction <- function(vh_data,
         lookup <- calculate_burgess_coefficients(
           k = k_assumed,
           x = probe_spacing,
-          t = dots$measurement_time %||% 80
+          t = dots$measurement_time %||% get_analysis_param("burgess.default_midpoint_time_s")
         )
       }
 

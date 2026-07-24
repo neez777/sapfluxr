@@ -1,6 +1,6 @@
 Package: sapfluxr
 Title: Comprehensive Sap Flow Analysis from Heat Pulse Velocity Sensors
-Version: 0.7.0
+Version: 0.9.0
 Authors@R: c(
     person("Grant", "Joyce", email = "neez1977@gmail.com",
            role = c("aut", "cre"), comment = "Developer"),
@@ -9,25 +9,23 @@ Authors@R: c(
     person("Tim", "Bleby", role = "aut",
            comment = "Scientific review and Excel workflow design")
     )
-Description: A comprehensive R package for processing and analysing sap flow data
-    from heat pulse velocity (HPV) sensors such as the ICT International SFM1 and
-    SFM1x. Provides a transparent, non-destructive pipeline from raw temperature
+Description: Tools for processing and analysing sap flow data from heat pulse
+    velocity (HPV) sensors such as the 'ICT International' 'SFM1' and 'SFM1x'.
+    Provides a transparent, non-destructive pipeline from raw temperature
     measurements to tree-level water use, including multiple HPV calculation
-    methods (HRM, MHR, and T-max), selectable pre-pulse baseline options, data
-    quality control, baseline (spacing) correction via changepoint and
+    methods ('HRM', 'MHR', and T-max), multiple baseline calculation options,
+    data quality control, baseline (spacing) correction via changepoint and
     dual-stability detection, wound correction, secondary-method calibration,
-    sDMA (Selectable Dual Method Approach) for Péclet-based method switching,
-    sapwood-area integration, and temporal aggregation. A companion Shiny
-    application (shinysapfluxr) offers the same pipeline through an interactive
-    interface.
-License: GPL-3 + file LICENSE
-License_file: LICENSE
+    'sDMA' (dual-method 'Peclet'-based switching),
+    sapwood-area integration, and temporal aggregation. A companion 'Shiny'
+    application is available for interactive use.
+License: GPL-3
 Encoding: UTF-8
 LazyData: true
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
 Depends:
-    R (>= 4.0.0)
+    R (>= 4.1.0)
 Imports:
     dplyr (>= 1.0.0),
     readr (>= 2.0.0),

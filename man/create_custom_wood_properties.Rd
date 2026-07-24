@@ -63,6 +63,10 @@ create_custom_wood_properties(
 
 \item{dbh}{Diameter at breast height (cm). Optional.}
 
+\item{bark_thickness_dbh}{Full bark thickness at DBH measurement site (cm). Optional.}
+
+\item{bark_thickness_probe}{Bark thickness at probe installation site after shaving (cm). Optional.}
+
 \item{sapwood_thickness}{Sapwood depth (cm). Optional.}
 
 \item{sapwood_area}{Sapwood area (cm^2). Optional.}
@@ -81,8 +85,6 @@ fresh_density and dry_density alone. Default: TRUE.}
 
 \item{verbose}{Logical. If TRUE, prints information about derived properties.
 Default: TRUE.}
-
-\item{bark_thickness}{Bark thickness (cm). Optional.}
 }
 \value{
 WoodProperties R6 object with automatically derived missing properties

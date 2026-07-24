@@ -56,7 +56,7 @@
 #' }
 #'
 #' @family sapwood metrics
-#' @export
+#' @keywords internal
 calc_mean_flux_density <- function(Qp, As) {
   # Input validation
   if (!is.numeric(Qp)) {
@@ -281,7 +281,7 @@ normalise_flux_density <- function(Qps, period = "global", datetime = NULL,
 #' }
 #'
 #' @family sapwood metrics
-#' @export
+#' @keywords internal
 calc_leaf_area_flux <- function(Qp, Al, Al_units = "m2") {
   # Input validation
   if (!is.numeric(Qp)) {

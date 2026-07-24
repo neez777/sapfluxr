@@ -20,3 +20,4 @@ List with validation results
 Validate that the measurement data is suitable for the probe configuration
 and specified calculation methods.
 }
+\keyword{internal}

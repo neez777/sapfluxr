@@ -60,3 +60,4 @@ Other method calibration functions:
 \code{\link{transform_multiple_methods}()}
 }
 \concept{method calibration functions}
+\keyword{internal}

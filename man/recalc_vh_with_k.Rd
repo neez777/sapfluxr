@@ -28,7 +28,7 @@ particularly useful for Phase 3 corrections when estimated k differs from assume
 \details{
 This function uses stored temperature ratios and times to recalculate velocities:
 
-\strong{For ratio-based methods (HRM, MHR, HRMX):}
+\strong{For ratio-based methods (HRM, MHR):}
 \code{Vh_new = (k_new / x) \* ln(temp_ratio) \* 3600}
 
 \strong{For Tmax_Coh:}

@@ -17,8 +17,6 @@ Default parameters are:
 \describe{
 \item{diffusivity}{Thermal diffusivity of sapwood (0.0025 cm^2/s)}
 \item{probe_spacing}{Distance from heat source (0.5 cm)}
-\item{L}{Lower proportion of deltaTmax for HRMX sampling window (0.5)}
-\item{H}{Higher proportion of deltaTmax for HRMX sampling window (0.8)}
 \item{tp_1}{Heat pulse duration for Tmax_Klu (2 sec)}
 \item{HRM_start}{Start of sampling window for HRM (60 sec after pulse)}
 \item{HRM_end}{End of sampling window for HRM (100 sec after pulse)}

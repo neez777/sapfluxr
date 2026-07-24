@@ -781,3 +781,54 @@ test_that("aggregate_daily_flux components sum to total", {
     tolerance = 1e-9
   )
 })
+
+
+test_that("aggregate_daily_flux detects interval from shared timestamps across methods", {
+  # Regression: when two methods share the same time grid, the datetime column
+  # carries each timestamp twice. Detecting the interval from the duplicated
+  # column collapses it toward zero and zeroes every daily total. The interval
+  # is a property of the grid, not the grouping, so multi-method daily totals
+  # must match the equivalent single-method totals.
+  areas <- calc_sapwood_areas(
+    dbh = 30, bark_thickness_dbh = 0.5, bark_thickness_probe = 0.5, sapwood_thickness = 2.5
+  )
+  n <- 48  # 48 half-hourly records over one day
+  base <- data.frame(
+    datetime        = seq(as.POSIXct("2024-01-01 00:00:00", tz = "UTC"),
+                          by = "30 min", length.out = n),
+    sensor_position = rep("outer", n),
+    Jv_cm3_cm2_hr   = rep(10.0, n)
+  )
+
+  single <- aggregate_daily_flux(
+    calc_sap_flux(transform(base, method_label = "HRM"), areas),
+    group_cols = "method_label"
+  )
+
+  two_methods <- dplyr::bind_rows(
+    transform(base, method_label = "HRM"),
+    transform(base, method_label = "sDMA: MHR")
+  )
+  multi <- aggregate_daily_flux(calc_sap_flux(two_methods, areas), group_cols = "method_label")
+
+  # Two distinct method rows, full completeness, non-zero totals
+  expect_equal(nrow(multi), 2)
+  expect_true(all(multi$Q_total_L_day > 0))
+  expect_equal(multi$data_completeness, c(1, 1))
+
+  # The HRM total must be identical whether or not sDMA shares the grid
+  hrm_multi  <- multi$Q_total_L_day[multi$method_label == "HRM"]
+  expect_equal(hrm_multi, single$Q_total_L_day, tolerance = 1e-9)
+})
+
+
+test_that("aggregate_daily_flux errors rather than silently zeroing when no interval can be found", {
+  # A single repeated timestamp cannot yield a positive interval. The function
+  # must stop (either from the deduplicated < 2-value check or the non-positive
+  # guard) rather than silently returning zero daily totals.
+  q <- data.frame(
+    datetime      = rep(as.POSIXct("2024-01-01 00:00:00", tz = "UTC"), 3),
+    Q_total_L_hr  = c(1, 1, 1)
+  )
+  expect_error(aggregate_daily_flux(q))
+})

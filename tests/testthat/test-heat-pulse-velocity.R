@@ -270,7 +270,7 @@ test_that("add_quality_flags correctly identifies issues", {
 test_that("all methods produce results", {
   heat_pulse_data <- create_mock_heat_pulse_data_for_vh()
 
-  all_methods <- c("HRM", "MHR", "HRMXa", "HRMXb", "Tmax_Coh", "Tmax_Klu")
+  all_methods <- c("HRM", "MHR", "Tmax_Coh", "Tmax_Klu")
 
   # This might produce warnings due to mathematical constraints, but should not error
   result <- calc_heat_pulse_velocity(heat_pulse_data, methods = all_methods)

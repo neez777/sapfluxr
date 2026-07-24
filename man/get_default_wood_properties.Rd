@@ -40,3 +40,4 @@ Other wood property functions:
 \code{\link{load_wood_properties}()}
 }
 \concept{wood property functions}
+\keyword{internal}

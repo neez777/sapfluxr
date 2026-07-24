@@ -24,7 +24,7 @@ Options: \code{"MHR"}, \code{"Tmax_Coh"}, \code{"Tmax_Klu"}.
 Supply multiple methods to create multiple sDMA variants simultaneously.}
 
 \item{peclet_threshold}{Numeric threshold for switching. Default: \code{1.0}
-(Pe < 1.0 → HRM; Pe >= 1.0 → secondary method).}
+(Pe < 1.0 -> HRM; Pe >= 1.0 -> secondary method).}
 
 \item{probe_config}{A \code{ProbeConfiguration} object (from \code{\link[=load_probe_config]{load_probe_config()}}) or
 named list containing \code{probe_spacing}. Required when \code{peclet_number} is absent
@@ -35,7 +35,7 @@ appropriate here.}
 named list containing \code{thermal_diffusivity}. Required when \code{peclet_number} is
 absent from \code{vh_results}.}
 
-\item{skip_low_peclet}{Logical. Whether to automatically skip sDMA when all Péclet
+\item{skip_low_peclet}{Logical. Whether to automatically skip sDMA when all Peclet
 numbers are <= threshold. \code{NULL} (default) prompts interactively; \code{TRUE} skips
 without prompting; \code{FALSE} always calculates.}
 
@@ -47,11 +47,11 @@ A vh_results tibble with additional rows for each sDMA method, labelled
 records which method was used for each measurement.
 }
 \description{
-Applies Péclet-number-based method switching to create sDMA results.
+Applies Peclet-number-based method switching to create sDMA results.
 Switches between HRM (Pe < threshold) and a user-specified secondary method (Pe >= threshold).
 }
 \details{
-The Péclet number is computed internally by this function using
+The Peclet number is computed internally by this function using
 \code{\link[=recalculate_peclet]{recalculate_peclet()}}. If a \code{peclet_number} column already exists and contains
 non-NA values on the HRM rows it is used as-is; otherwise Pe is computed from
 the corrected velocities via \code{probe_config} and \code{wood_properties}.

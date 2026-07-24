@@ -33,7 +33,7 @@ NULL
 #' @param verbose Print messages (default: TRUE).
 #'
 #' @return A list containing corrected data frame and correction statistics.
-#' @export
+#' @keywords internal
 apply_spacing_correction_per_segment <- function(vh_data,
                                                   changepoints,
                                                   sensor_position,
@@ -435,7 +435,7 @@ apply_spacing_correction_per_segment <- function(vh_data,
 #'   *Tree Physiology*, 21(9), 589-598.
 #'
 #' @family spacing correction functions
-#' @export
+#' @keywords internal
 apply_manual_spacing_correction <- function(vh_data,
                                              manual_changepoints,
                                              baseline_overrides = NULL,

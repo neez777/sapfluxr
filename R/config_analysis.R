@@ -116,8 +116,8 @@ get_analysis_config <- function() {
 #'
 #' @return The parameter value (scalar or list, depending on the key).
 #'
-#' @keywords internal
 #' @family config functions
+#' @export
 get_analysis_param <- function(key) {
   config <- get_analysis_config()
   parts  <- strsplit(key, ".", fixed = TRUE)[[1]]

@@ -50,3 +50,4 @@ alignment <- validate_probe_alignment_advanced(sap_data, config)
 
 }
 \concept{probe_configuration}
+\keyword{internal}

@@ -57,7 +57,7 @@
 #'
 #' **Alternative:**
 #'
-#' For HRM/HRMX methods, consider \code{\link{apply_spacing_correction_workflow}}
+#' For HRM methods, consider \code{\link{apply_spacing_correction_workflow}}
 #' which uses Burgess et al. (2001) physics-based correction. Burgess correction
 #' is more accurate but only validated for offsets <= +/-5 cm/hr.
 #'

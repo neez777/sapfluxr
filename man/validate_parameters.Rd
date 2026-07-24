@@ -18,3 +18,4 @@ Validates that calculation parameters are appropriate for heat pulse velocity ca
 \details{
 Checks that all required parameters are present and within reasonable ranges.
 }
+\keyword{internal}

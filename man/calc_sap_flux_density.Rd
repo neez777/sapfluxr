@@ -9,6 +9,8 @@ calc_sap_flux_density(
   wood_properties,
   vh_data = NULL,
   velocity_col = NULL,
+  temperature_mode = c("constant", "static", "dynamic"),
+  temperature = NULL,
   ...
 )
 }
@@ -24,6 +26,18 @@ wound-corrected velocity. Use the most corrected version available.}
 \item{velocity_col}{Name of velocity column to convert. Default: "Vc_cm_hr"
 (wound-corrected velocity). Use "Vh_cm_hr_sc" for spacing-corrected,
 or "Vh_cm_hr" for raw velocity.}
+
+\item{temperature_mode}{How the heat-capacity term of \eqn{Z} is evaluated.
+\code{"constant"} (default) uses the fixed \eqn{Z} from
+\code{calculate_wood_properties()}, with no temperature dependence.
+\code{"static"} evaluates the temperature-dependent coefficient at a single
+fixed \code{temperature}. \code{"dynamic"} -- the Becker & Edwards
+conversion -- evaluates it per measurement from a temperature vector,
+typically each pulse's pre-pulse temperature (\code{prepulse_temp_c}).}
+
+\item{temperature}{Wood temperature in degrees Celsius. A single value when
+\code{temperature_mode = "static"}; a vector the same length as \code{Vh}
+when \code{temperature_mode = "dynamic"}.}
 
 \item{...}{Additional arguments passed to methods.}
 }
@@ -78,6 +92,8 @@ Barrett, D.J., et al. (1995). Plant Cell Environ 18: 463-469.
 \seealso{
 Other flux density functions: 
 \code{\link{apply_flux_conversion}()},
-\code{\link{get_sap_flux_conversion_factor}()}
+\code{\link{calc_becker_edwards_k}()},
+\code{\link{get_sap_flux_conversion_factor}()},
+\code{\link{sap_flux_conversion_factor_at_temp}()}
 }
 \concept{flux density functions}

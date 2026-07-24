@@ -72,3 +72,4 @@ Other spacing correction functions:
 \code{\link{validate_zero_offset}()}
 }
 \concept{spacing correction functions}
+\keyword{internal}

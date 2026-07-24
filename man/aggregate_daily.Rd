@@ -107,6 +107,7 @@ daily_data <- aggregate_daily(
 }
 \seealso{
 Other daily aggregation: 
+\code{\link{aggregate_flux}()},
 \code{\link{normalise_daily}()}
 }
 \concept{daily aggregation}

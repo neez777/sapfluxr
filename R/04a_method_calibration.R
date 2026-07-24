@@ -321,8 +321,10 @@ find_optimal_calibration_threshold <- function(vh_corrected,
         r2_linear <- summary(linear_fit)$r.squared
         r2_quad <- summary(quad_fit)$r.squared
 
-        # Use quadratic if it improves R^2 by more than 0.02
-        if (r2_quad - r2_linear > 0.02) {
+        # Use quadratic only when it improves R^2 by > 0.02 AND is concave-up.
+        # Concave-down (coef[3] < 0) creates a vertex ceiling on extrapolation.
+        quad_concave_down <- coef(quad_fit)[3] < 0
+        if (r2_quad - r2_linear > 0.02 && !quad_concave_down) {
           final_fit <- quad_fit
           fit_used <- "quadratic"
           r2 <- r2_quad
@@ -643,8 +645,12 @@ calibrate_method_to_primary <- function(vh_corrected,
     r2_linear <- summary(linear_fit)$r.squared
     r2_quad <- summary(quad_fit)$r.squared
 
-    # Use quadratic if it improves R^2 by more than 0.02
-    if (r2_quad - r2_linear > 0.02) {
+    # Use quadratic if it improves R^2 by more than 0.02 AND is concave-up.
+    # A concave-down quadratic (coef[3] < 0) has a vertex maximum: applying it to
+    # secondary values beyond the training range would DECREASE the output, creating
+    # an artificial ceiling in the calibrated velocity. Always fall back to linear.
+    quad_concave_down <- coef(quad_fit)[3] < 0
+    if (r2_quad - r2_linear > 0.02 && !quad_concave_down) {
       fit_type <- "quadratic"
       final_fit <- quad_fit
       r_squared <- r2_quad
@@ -652,6 +658,9 @@ calibrate_method_to_primary <- function(vh_corrected,
       fit_type <- "linear"
       final_fit <- linear_fit
       r_squared <- r2_linear
+      if (verbose && r2_quad - r2_linear > 0.02 && quad_concave_down) {
+        cat("  Note: quadratic fit rejected (concave-down) -- using linear to avoid extrapolation ceiling.\n")
+      }
     }
   } else if (fit_type == "linear") {
     formula_linear <- as.formula(paste(primary_col, "~", secondary_col))
@@ -769,7 +778,7 @@ calibrate_method_to_primary <- function(vh_corrected,
 #' }
 #'
 #' @family method calibration functions
-#' @export
+#' @keywords internal
 transform_secondary_method <- function(vh_corrected, calibration, velocity_col = "Vs_cm_hr") {
 
   # Input validation
@@ -1373,6 +1382,79 @@ print.method_calibration <- function(x, ...) {
 }
 
 
+#' Seed the Starting Value for a Segmented Breakpoint Search
+#'
+#' Internal helper. Derives a starting value for \code{segmented::segmented()}
+#' by running the R^2 threshold sweep of
+#' \code{\link{find_optimal_calibration_threshold}} over the observed range of
+#' the primary method.
+#'
+#' The sweep grid is derived from the data rather than fixed, so the seed adapts
+#' to species, tree, sensor position and units instead of assuming a particular
+#' velocity ceiling. Any failure falls back to the median primary velocity,
+#' which reproduces the previous behaviour.
+#'
+#' @param vh_corrected Data frame of corrected velocity data.
+#' @param primary_method,secondary_method,sensor_position,velocity_col Passed
+#'   through to \code{find_optimal_calibration_threshold()}.
+#' @param primary_values Numeric vector of paired primary-method velocities,
+#'   used to derive the sweep grid and the fallback.
+#' @param min_points Minimum points required for a valid sweep step.
+#' @param n_grid Number of sweep steps across the observed range (default: 40).
+#'
+#' @return A single numeric starting value in the units of \code{velocity_col}.
+#'
+#' @keywords internal
+#' @noRd
+seed_segmented_breakpoint <- function(vh_corrected,
+                                      primary_method,
+                                      secondary_method,
+                                      sensor_position,
+                                      velocity_col,
+                                      primary_values,
+                                      min_points = 50,
+                                      n_grid = 40) {
+
+  fallback <- stats::median(primary_values, na.rm = TRUE)
+
+  finite_values <- primary_values[is.finite(primary_values)]
+  if (length(finite_values) < min_points) {
+    return(fallback)
+  }
+
+  # Upper bound of the sweep comes from the data itself. The 99th percentile
+  # trims outliers without truncating the genuine high-flow tail where the
+  # handover sits.
+  search_max <- as.numeric(stats::quantile(finite_values, 0.99, na.rm = TRUE))
+
+  if (!is.finite(search_max) || search_max <= 0) {
+    return(fallback)
+  }
+
+  seed <- tryCatch({
+    find_optimal_calibration_threshold(
+      vh_corrected = vh_corrected,
+      primary_method = primary_method,
+      secondary_method = secondary_method,
+      sensor_position = sensor_position,
+      threshold_start = 0,
+      threshold_max = search_max,
+      threshold_step = search_max / n_grid,
+      min_points = min_points,
+      create_plots = FALSE,
+      verbose = FALSE,
+      velocity_col = velocity_col
+    )$optimal_threshold
+  }, error = function(e) NULL)
+
+  if (is.null(seed) || length(seed) != 1L || !is.finite(seed)) {
+    return(fallback)
+  }
+
+  seed
+}
+
+
 #' Compare Methods Using Segmented Regression
 #'
 #' Identifies the velocity breakpoint where two methods diverge using segmented
@@ -1387,7 +1469,9 @@ print.method_calibration <- function(x, ...) {
 #' @param secondary_method Secondary method name to compare (e.g., "MHR").
 #' @param sensor_position Sensor position to analyse ("outer" or "inner").
 #' @param initial_breakpoint Initial guess for breakpoint location (cm/hr).
-#'   If NULL, uses midpoint of data range. Default: NULL.
+#'   If NULL (default), the starting value is seeded automatically by an R^2
+#'   threshold sweep over the observed primary-method range (see Details).
+#'   Supply a value to override the automatic seed.
 #' @param min_points Minimum number of points required for valid analysis (default: 50).
 #' @param create_plots Logical indicating whether to create diagnostic plots (default: TRUE).
 #' @param verbose Logical indicating whether to print progress (default: TRUE).
@@ -1430,6 +1514,21 @@ print.method_calibration <- function(x, ...) {
 #'   \item The velocity where method switching (sDMA) should occur
 #'   \item The calibration region for aligning methods
 #' }
+#'
+#' **Breakpoint Seeding:**
+#'
+#' \code{segmented::segmented()} refines the breakpoint by a local search around
+#' its starting value, so a poor start converges to a local optimum rather than
+#' the true divergence point. In a high-frequency record most pulses are
+#' low-flow, so any start drawn from the centre of the velocity distribution
+#' lands inside the low-flow cloud and settles there.
+#'
+#' When \code{initial_breakpoint} is NULL, the start is therefore seeded with the
+#' optimal threshold from \code{\link{find_optimal_calibration_threshold}}, swept
+#' across a grid derived from the observed primary-method range. The seed only
+#' has to place the search in the correct basin; \code{segmented()} then refines
+#' it, and the returned breakpoint is free to fall above or below the seed. If
+#' the sweep cannot run, the median primary velocity is used as a fallback.
 #'
 #' **Advantages over R^2 Optimization:**
 #'
@@ -1624,13 +1723,30 @@ compare_methods_segmented <- function(vh_corrected,
   }
 
   # Determine initial breakpoint guess
-  if (is.null(initial_breakpoint)) {
-    # Use midpoint of primary method range as initial guess
-    initial_breakpoint <- median(merged_data[[primary_col]], na.rm = TRUE)
+  #
+  # segmented() performs a local search around the starting value, so the seed
+  # decides which optimum it converges to. The former default -- the median
+  # primary velocity -- sits inside the low-flow cloud that dominates a
+  # high-frequency record, which parked the fit on a spurious local minimum well
+  # below the true method-handover point. Seeding from the R^2 threshold sweep
+  # places the start in the correct basin instead.
+  seeded_breakpoint <- is.null(initial_breakpoint)
+
+  if (seeded_breakpoint) {
+    initial_breakpoint <- seed_segmented_breakpoint(
+      vh_corrected = vh_corrected,
+      primary_method = primary_method,
+      secondary_method = secondary_method,
+      sensor_position = sensor_position,
+      velocity_col = velocity_col,
+      primary_values = merged_data[[primary_col]],
+      min_points = min_points
+    )
   }
 
   if (verbose) {
-    cat("Initial breakpoint guess:", round(initial_breakpoint, 2), "cm/hr\n")
+    cat("Initial breakpoint guess:", round(initial_breakpoint, 2), "cm/hr",
+        if (seeded_breakpoint) "(seeded from threshold sweep)" else "(user supplied)", "\n")
     cat("\n")
     cat("Fitting segmented regression model...\n")
   }

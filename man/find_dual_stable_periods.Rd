@@ -59,9 +59,13 @@ data. Required when \code{mode = "dynamic"}. Obtain via
 
 \item{timezone}{IANA timezone string (e.g., \code{"Australia/Perth"}) used to
 interpret predawn hours. Logger data stored in UTC must be converted to local
-time before hour-based filtering — supply the site timezone here and the
+time before hour-based filtering -- supply the site timezone here and the
 function handles the conversion internally. Defaults to \code{NULL} (no
 conversion; hours are extracted in whatever timezone the POSIXct columns carry).}
+
+\item{site_location}{Named numeric vector with \code{lat} and \code{lon} (decimal
+degrees). Required when \code{mode = "dynamic"} and \code{dawn_times} is
+\code{NULL}; used to compute astronomical dawn via \code{suncalc}.}
 
 \item{vpd_threshold}{Maximum mean predawn VPD (kPa). A day is VPD-stable only if its
 predawn mean VPD is at or below this value. Default: \code{0.5}. This matches the

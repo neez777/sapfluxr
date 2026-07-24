@@ -60,8 +60,6 @@
 #' \describe{
 #'   \item{diffusivity}{Thermal diffusivity of sapwood (cm^2/s), default: 0.0025}
 #'   \item{probe_spacing}{Distance from heat source (cm), default: 0.5}
-#'   \item{L}{Lower proportion of deltaTmax for HRMX sampling window, default: 0.5}
-#'   \item{H}{Higher proportion of deltaTmax for HRMX sampling window, default: 0.8}
 #'   \item{tp_1}{Heat pulse duration (sec) for Tmax_Klu, default: 2}
 #'   \item{HRM_start}{Start of sampling window for HRM (sec after pulse), default: 60}
 #'   \item{HRM_end}{End of sampling window for HRM (sec after pulse), default: 100}
@@ -74,7 +72,8 @@
 #'   \item{method}{Calculation method used (e.g., "HRM", "MHR")}
 #'   \item{sensor_position}{Inner or outer sensor position}
 #'   \item{Vh_cm_hr}{Heat pulse velocity in cm/hr}
-#'   \item{temp_ratio}{Temperature ratio used in calculation. For HRM/MHR/HRMX: v1/v2 ratio. NA for Tmax methods. Enables efficient recalculation with different thermal diffusivity values.}
+#'   \item{temp_ratio}{Temperature ratio used in calculation. For HRM/MHR: v1/v2 ratio. NA for Tmax methods. Enables efficient recalculation with different thermal diffusivity values.}
+#'   \item{prepulse_temp_c}{Representative pre-pulse baseline temperature (degrees Celsius) for the sensor's radial position. Used by the Becker & Edwards sap-flux conversion.}
 #'   \item{quality_flag}{Data quality indicator}
 #'   \item{hrm_window_start_sec}{HRM: Start of averaging window (seconds after pulse). NA for other methods.}
 #'   \item{hrm_window_end_sec}{HRM: End of averaging window (seconds after pulse). NA for other methods.}
@@ -168,8 +167,8 @@ calc_heat_pulse_velocity <- function(heat_pulse_data,
     diffusivity = k_value,  # Prefer actual k from measurements, or use default
     probe_spacing = probe_config$required_parameters$x,  # From probe config
     tp_1 = probe_config$heat_pulse_duration,            # From probe config (NEW!)
-    L = 0.5,               # Lower proportion of deltaTmax for HRMX
-    H = 0.8,               # Higher proportion of deltaTmax for HRMX
+    L = 0.5,               # Internal sampling window parameter (lower bound)
+    H = 0.8,               # Internal sampling window parameter (upper bound)
     HRM_start = 60,        # Start of sampling window for HRM (sec after pulse)
     HRM_end = 100,         # End of sampling window for HRM (sec after pulse)
     pre_pulse = 30         # Pre-pulse period (sec)
@@ -448,6 +447,7 @@ calc_heat_pulse_velocity_internal <- function(measurements_by_pulse, pulse_ids, 
   attr(combined_results, "diffusivity") <- params$diffusivity
   attr(combined_results, "probe_spacing") <- params$probe_spacing
   attr(combined_results, "baseline_method") <- baseline_method
+  attr(combined_results, "pre_pulse") <- params$pre_pulse
 
   # Track correction history (starts with none applied)
   attr(combined_results, "current_vh_column") <- "Vh_cm_hr_raw"
@@ -582,6 +582,12 @@ calc_vh_single_pulse <- function(pulse_data, pulse_id, parameters, methods, plot
   datetime_pulse <- pulse_data$datetime[1]
   n_results <- length(method_results) * 2  # 2 sensors per method
 
+  # Representative pre-pulse temperatures per radial position (from the baselines
+  # computed above). Used downstream for the Becker & Edwards sap-flux
+  # conversion. Outer = mean(downstream-outer, upstream-outer); inner likewise.
+  prepulse_temp_outer <- mean(c(baselines$do, baselines$uo), na.rm = TRUE)
+  prepulse_temp_inner <- mean(c(baselines$di, baselines$ui), na.rm = TRUE)
+
   # Preallocate result vectors
   res_datetime <- rep(datetime_pulse, n_results)
   res_pulse_id <- rep(pulse_id, n_results)
@@ -589,6 +595,7 @@ calc_vh_single_pulse <- function(pulse_data, pulse_id, parameters, methods, plot
   res_sensor_position <- character(n_results)
   res_Vh_cm_hr <- numeric(n_results)
   res_temp_ratio <- numeric(n_results)
+  res_prepulse_temp <- numeric(n_results)
 
   # Method-specific window columns (explicit naming)
   res_hrm_window_start <- rep(NA_real_, n_results)
@@ -609,6 +616,7 @@ calc_vh_single_pulse <- function(pulse_data, pulse_id, parameters, methods, plot
     res_sensor_position[idx] <- "outer"
     res_Vh_cm_hr[idx] <- method_result$outer
     res_temp_ratio[idx] <- if (is.null(method_result$temp_ratio_outer)) NA_real_ else method_result$temp_ratio_outer
+    res_prepulse_temp[idx] <- prepulse_temp_outer
 
     # Populate method-specific window columns
     if (method_name == "HRM") {
@@ -628,6 +636,7 @@ calc_vh_single_pulse <- function(pulse_data, pulse_id, parameters, methods, plot
     res_sensor_position[idx] <- "inner"
     res_Vh_cm_hr[idx] <- method_result$inner
     res_temp_ratio[idx] <- if (is.null(method_result$temp_ratio_inner)) NA_real_ else method_result$temp_ratio_inner
+    res_prepulse_temp[idx] <- prepulse_temp_inner
 
     # Populate method-specific window columns
     if (method_name == "HRM") {
@@ -653,6 +662,7 @@ calc_vh_single_pulse <- function(pulse_data, pulse_id, parameters, methods, plot
     Vh_cm_hr = res_Vh_cm_hr,      # "Current" pointer (starts as copy of raw)
     Vs_cm_hr = res_Vh_cm_hr,      # Best available estimate (updated by each correction step)
     temp_ratio = res_temp_ratio,
+    prepulse_temp_c = res_prepulse_temp,  # Representative pre-pulse temperature (Becker & Edwards)
 
     # Method-specific window columns (explicit naming eliminates ambiguity)
     hrm_window_start_sec = res_hrm_window_start,
@@ -1038,7 +1048,7 @@ calc_tmax_klu <- function(deltaT_do, deltaT_di, diffusivity, probe_spacing, tp_1
 #' @details
 #' This function uses stored temperature ratios and times to recalculate velocities:
 #'
-#' **For ratio-based methods (HRM, MHR, HRMX):**
+#' **For ratio-based methods (HRM, MHR):**
 #' \code{Vh_new = (k_new / x) \* ln(temp_ratio) \* 3600}
 #'
 #' **For Tmax_Coh:**
@@ -1211,8 +1221,6 @@ add_quality_flags <- function(results) {
 #' \describe{
 #'   \item{diffusivity}{Thermal diffusivity of sapwood (0.0025 cm^2/s)}
 #'   \item{probe_spacing}{Distance from heat source (0.5 cm)}
-#'   \item{L}{Lower proportion of deltaTmax for HRMX sampling window (0.5)}
-#'   \item{H}{Higher proportion of deltaTmax for HRMX sampling window (0.8)}
 #'   \item{tp_1}{Heat pulse duration for Tmax_Klu (2 sec)}
 #'   \item{HRM_start}{Start of sampling window for HRM (60 sec after pulse)}
 #'   \item{HRM_end}{End of sampling window for HRM (100 sec after pulse)}
@@ -1224,8 +1232,8 @@ get_default_parameters <- function() {
   list(
     diffusivity = 0.0025,  # Thermal diffusivity of sapwood (cm^2/s)
     probe_spacing = 0.5,   # Distance from heat source (cm)
-    L = 0.5,               # Lower proportion of deltaTmax for HRMX sampling window
-    H = 0.8,               # Higher proportion of deltaTmax for HRMX sampling window
+    L = 0.5,               # Internal sampling window parameter (lower bound)
+    H = 0.8,               # Internal sampling window parameter (upper bound)
     tp_1 = 2,              # Heat pulse duration (sec) for Tmax_Klu
     HRM_start = 60,        # Start of sampling window for HRM (sec after pulse)
     HRM_end = 100,         # End of sampling window for HRM (sec after pulse)
@@ -1245,7 +1253,7 @@ get_default_parameters <- function() {
 #' @details
 #' Checks that all required parameters are present and within reasonable ranges.
 #'
-#' @export
+#' @keywords internal
 validate_parameters <- function(parameters) {
 
   required_params <- c("diffusivity", "probe_spacing", "pre_pulse", "HRM_start", "HRM_end")

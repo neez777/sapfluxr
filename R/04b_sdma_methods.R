@@ -1,4 +1,4 @@
-# R/04b_sdma_methods.R
+﻿# R/04b_sdma_methods.R
 # R/04j_sdma_methods.R
 #
 # PARKED FOR FUTURE IMPLEMENTATION
@@ -38,10 +38,10 @@
 
 #' Apply Selectable Dual Method Approach (sDMA) Processing
 #'
-#' Applies Péclet-number-based method switching to create sDMA results.
+#' Applies Peclet-number-based method switching to create sDMA results.
 #' Switches between HRM (Pe < threshold) and a user-specified secondary method (Pe >= threshold).
 #'
-#' The Péclet number is computed internally by this function using
+#' The Peclet number is computed internally by this function using
 #' [recalculate_peclet()]. If a `peclet_number` column already exists and contains
 #' non-NA values on the HRM rows it is used as-is; otherwise Pe is computed from
 #' the corrected velocities via `probe_config` and `wood_properties`.
@@ -55,7 +55,7 @@
 #'   Options: `"MHR"`, `"Tmax_Coh"`, `"Tmax_Klu"`.
 #'   Supply multiple methods to create multiple sDMA variants simultaneously.
 #' @param peclet_threshold Numeric threshold for switching. Default: `1.0`
-#'   (Pe < 1.0 → HRM; Pe >= 1.0 → secondary method).
+#'   (Pe < 1.0 -> HRM; Pe >= 1.0 -> secondary method).
 #' @param probe_config A `ProbeConfiguration` object (from [load_probe_config()]) or
 #'   named list containing `probe_spacing`. Required when `peclet_number` is absent
 #'   from `vh_results`. The same object passed to `calc_heat_pulse_velocity()` is
@@ -63,7 +63,7 @@
 #' @param wood_properties A `WoodProperties` object (from [load_wood_properties()]) or
 #'   named list containing `thermal_diffusivity`. Required when `peclet_number` is
 #'   absent from `vh_results`.
-#' @param skip_low_peclet Logical. Whether to automatically skip sDMA when all Péclet
+#' @param skip_low_peclet Logical. Whether to automatically skip sDMA when all Peclet
 #'   numbers are <= threshold. `NULL` (default) prompts interactively; `TRUE` skips
 #'   without prompting; `FALSE` always calculates.
 #' @param show_progress Logical. Show progress bar. Default: `TRUE`.
@@ -136,7 +136,7 @@ apply_sdma_processing <- function(vh_results,
 
   peclet_col <- "peclet_number"
 
-  # Auto-compute Péclet numbers if the column is absent or all-NA on HRM rows.
+  # Auto-compute Peclet numbers if the column is absent or all-NA on HRM rows.
   # recalculate_peclet() uses all rows regardless of quality_flag, so interpolated
   # measurements still contribute to the switching decision.
   peclet_present <- peclet_col %in% names(hrm_data) && !all(is.na(hrm_data[[peclet_col]]))
@@ -150,7 +150,7 @@ apply_sdma_processing <- function(vh_results,
         "  on vh_results before calling this function."
       )
     }
-    message("apply_sdma_processing: 'peclet_number' not found — computing via recalculate_peclet().")
+    message("apply_sdma_processing: 'peclet_number' not found -- computing via recalculate_peclet().")
     vh_results <- recalculate_peclet(
       vh_results,
       probe_config    = probe_config,
@@ -698,7 +698,7 @@ recalculate_peclet <- function(vh_results,
     stop("vh_results must be a data frame or tibble.")
   }
 
-  # Auto-detect velocity column — Vs_cm_hr is highest priority as the current best estimate
+  # Auto-detect velocity column -- Vs_cm_hr is highest priority as the current best estimate
   if (is.null(velocity_col)) {
     velocity_col <- if ("Vs_cm_hr" %in% names(vh_results)) {
       "Vs_cm_hr"

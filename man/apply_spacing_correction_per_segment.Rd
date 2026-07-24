@@ -59,3 +59,4 @@ Applies Burgess spacing correction to each segment of data identified by
 changepoints. For each segment, a zero flow reference (offset) is determined
 and used to correct the readings.
 }
+\keyword{internal}

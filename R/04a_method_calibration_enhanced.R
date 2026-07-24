@@ -10,6 +10,7 @@
 #' @param try_quadratic If TRUE, attempts quadratic fit for second segment
 #'   when U-shaped residuals are detected (default: TRUE)
 #' @param velocity_col Character. Name of velocity column to use (default: "Vh_cm_hr").
+#' @param create_plots Logical. Whether to create diagnostic plots (default: TRUE).
 #' @param ... Additional arguments passed to compare_methods_segmented()
 #'
 #' @return Enhanced segmented comparison result with additional diagnostics
@@ -295,7 +296,7 @@ create_quadratic_plot <- function(quad_result, primary_method, secondary_method)
 
     # Labels and theme
     ggplot2::labs(
-      title = paste("Piecewise Linear-Quadratic:", secondary_method, "→", primary_method),
+      title = paste("Piecewise Linear-Quadratic:", secondary_method, "->", primary_method),
       subtitle = sprintf("R^2 = %.4f | Linear before BP, Quadratic after BP (Calibration mapping)",
                         quad_result$r_squared),
       x = paste(secondary_method, "Velocity (cm/hr)"),

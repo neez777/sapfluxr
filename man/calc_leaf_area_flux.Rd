@@ -67,3 +67,4 @@ Other sapwood metrics:
 \code{\link{normalise_flux_density}()}
 }
 \concept{sapwood metrics}
+\keyword{internal}

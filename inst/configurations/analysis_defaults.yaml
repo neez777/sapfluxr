@@ -35,6 +35,14 @@ burgess:
   fallback_threshold_cm_hr: 5   # |zero_vh| above this reverts to simple offset
   default_midpoint_time_s: 80
 
+# Becker & Edwards (1999) temperature-dependent heat-capacity coefficient
+# k(T) = a0 + a1*T + a2*T^2  (T in degrees Celsius). Used to make the
+# heat-capacity term of the sap-flux conversion (Z) temperature-dependent.
+becker_edwards:
+  a0: 0.400
+  a1: 0.00214
+  a2: -0.000006
+
 # Predawn window  - used by detect_stable_vpd_periods, find_stable_vh_dates, find_dual_stable_periods
 predawn:
   mode: static             # "static" (fixed clock hours) or "dynamic" (dawn-relative)

@@ -29,6 +29,8 @@ when U-shaped residuals are detected (default: TRUE)}
 
 \item{velocity_col}{Character. Name of velocity column to use (default: "Vh_cm_hr").}
 
+\item{create_plots}{Logical. Whether to create diagnostic plots (default: TRUE).}
+
 \item{...}{Additional arguments passed to compare_methods_segmented()}
 }
 \value{

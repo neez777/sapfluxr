@@ -26,4 +26,3 @@ Other config functions:
 \code{\link{validate_analysis_config}()}
 }
 \concept{config functions}
-\keyword{internal}

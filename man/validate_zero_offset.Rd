@@ -72,3 +72,4 @@ Other spacing correction functions:
 \code{\link{smooth_segment_junctions}()}
 }
 \concept{spacing correction functions}
+\keyword{internal}

@@ -39,7 +39,10 @@ vh_results <- calc_heat_pulse_velocity(
 ```
 
 The output is a tibble with `datetime`, `pulse_id`, `method`, `sensor_position`, the raw
-velocity `Vh_cm_hr`, and method-specific diagnostic columns.
+velocity `Vh_cm_hr`, and method-specific diagnostic columns. It also carries `prepulse_temp_c`,
+the representative pre-pulse baseline temperature per sensor position, which the
+Becker & Edwards sap-flux conversion uses downstream (see
+[Stage 7](vignette-07-flux-and-integration.html)).
 
 # Implemented methods
 
@@ -67,9 +70,6 @@ high flows but cannot detect reverse flow and are unreliable at low flows.
 * **`Tmax_Klu`** — Kluitenberg formulation (finite pulse duration; corrects a 5–15% high-flow
   underestimate).
 * **References**: Cohen et al. (1981); Kluitenberg & Ham (2004).
-
-> **Note:** The unpublished `HRMXa` / `HRMXb` variants are intentionally excluded from this
-> build and are not available.
 
 # Pre-pulse baseline methods
 

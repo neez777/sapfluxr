@@ -212,7 +212,8 @@ tree_water_use <- apply_sap_flux_integration(
 ```
 
 → See [Flux Density &
-Integration](vignette-07-flux-and-integration.html) for the Z factor,
+Integration](vignette-07-flux-and-integration.html) for the Z factor, the
+optional temperature-dependent conversion modes (`temperature_mode`),
 sapwood-area calculation, and radial integration models.
 
 ## Stage 8: Aggregation & visualisation

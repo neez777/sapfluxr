@@ -203,3 +203,111 @@ test_that("edge case: all data below threshold", {
   expect_true(nrow(calib_result$calibration_data) > 0)
   expect_true(calib_result$r_squared > 0.95)
 })
+
+
+# Helper: hockey-stick relationship in which low-flow pulses dominate the record,
+# mimicking a high-frequency field dataset where the median primary velocity sits
+# far below the true breakpoint.
+#
+# NOTE: on synthetic data this clean, segmented() converges to the true
+# breakpoint from either the median or the seeded start, so these tests verify
+# the seeding plumbing and overall correctness -- they do NOT reproduce the
+# local-minimum failure seen on real field data.
+create_low_flow_dominated_data <- function(n_low = 900, n_high = 300,
+                                           breakpoint = 18) {
+  set.seed(42)
+
+  # Most pulses sit well below the breakpoint; a minority span the handover.
+  primary <- c(
+    runif(n_low, 0, breakpoint * 0.25),
+    runif(n_high, breakpoint * 0.25, breakpoint * 2)
+  )
+  primary <- sort(primary)
+
+  # Below the breakpoint the methods agree; above it the primary method
+  # progressively underestimates, so the secondary climbs more steeply.
+  secondary <- ifelse(
+    primary <= breakpoint,
+    primary,
+    breakpoint + (primary - breakpoint) * 3
+  )
+
+  n <- length(primary)
+  primary <- primary + rnorm(n, 0, 0.15)
+  secondary <- secondary + rnorm(n, 0, 0.15)
+
+  data.frame(
+    pulse_id = rep(seq_len(n), 2),
+    method = rep(c("HRM", "MHR"), each = n),
+    sensor_position = "outer",
+    Vh_cm_hr = c(primary, secondary),
+    stringsAsFactors = FALSE
+  )
+}
+
+test_that("compare_methods_segmented() recovers the breakpoint with an auto seed", {
+  skip_if_not_installed("segmented")
+
+  true_breakpoint <- 18
+  vh_data <- create_low_flow_dominated_data(breakpoint = true_breakpoint)
+
+  # Confirm the premise: the median primary velocity -- the former default seed
+  # -- lies far below the true breakpoint.
+  primary_median <- median(
+    vh_data$Vh_cm_hr[vh_data$method == "HRM"],
+    na.rm = TRUE
+  )
+  expect_lt(primary_median, true_breakpoint / 2)
+
+  result <- compare_methods_segmented(
+    vh_data,
+    primary_method = "HRM",
+    secondary_method = "MHR",
+    sensor_position = "outer",
+    min_points = 20,
+    create_plots = FALSE,
+    verbose = FALSE
+  )
+
+  expect_true(result$converged)
+  expect_equal(result$breakpoint, true_breakpoint, tolerance = 0.15)
+  expect_gt(result$r_squared, 0.95)
+})
+
+test_that("compare_methods_segmented() honours an explicit initial_breakpoint", {
+  skip_if_not_installed("segmented")
+
+  vh_data <- create_low_flow_dominated_data(breakpoint = 18)
+
+  result <- compare_methods_segmented(
+    vh_data,
+    primary_method = "HRM",
+    secondary_method = "MHR",
+    sensor_position = "outer",
+    initial_breakpoint = 16,
+    min_points = 20,
+    create_plots = FALSE,
+    verbose = FALSE
+  )
+
+  expect_true(result$converged)
+  expect_equal(result$breakpoint, 18, tolerance = 0.15)
+})
+
+test_that("seed_segmented_breakpoint() falls back to the median when the sweep cannot run", {
+  vh_data <- create_low_flow_dominated_data(breakpoint = 18)
+  primary_values <- vh_data$Vh_cm_hr[vh_data$method == "HRM"]
+
+  # Fewer paired points than min_points forces the fallback path.
+  seed <- sapfluxr:::seed_segmented_breakpoint(
+    vh_corrected = vh_data,
+    primary_method = "HRM",
+    secondary_method = "MHR",
+    sensor_position = "outer",
+    velocity_col = "Vh_cm_hr",
+    primary_values = primary_values[1:10],
+    min_points = 50
+  )
+
+  expect_equal(seed, median(primary_values[1:10], na.rm = TRUE))
+})

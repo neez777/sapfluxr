@@ -39,3 +39,4 @@ Other probe configuration functions:
 \code{\link{load_probe_config}()}
 }
 \concept{probe configuration functions}
+\keyword{internal}

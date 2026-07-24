@@ -66,7 +66,7 @@ NULL
 #'   *Tree Physiology*, 21(9), 589-598.
 #'
 #' @family spacing correction functions
-#' @export
+#' @keywords internal
 calculate_burgess_coefficients <- function(zero_vh_range = seq(-10, 10, by = 0.1),
                                            k = 0.0025,
                                            x = 0.5,
@@ -263,7 +263,7 @@ calculate_burgess_coefficients <- function(zero_vh_range = seq(-10, 10, by = 0.1
 #' }
 #'
 #' @family spacing correction functions
-#' @export
+#' @keywords internal
 get_correction_coefficients <- function(zero_vh, lookup_table, zero_offset = NULL, verbose = TRUE) {
 
   # Handle alias arguments
@@ -418,7 +418,7 @@ get_correction_coefficients <- function(zero_vh, lookup_table, zero_offset = NUL
 #' }
 #'
 #' @family spacing correction functions
-#' @export
+#' @keywords internal
 apply_burgess_spacing_correction <- function(vh_data,
                                      correction_params,
                                      method = "HRM",
@@ -546,7 +546,7 @@ apply_burgess_spacing_correction <- function(vh_data,
 #'   *Tree Physiology*, 21(9), 589-598.
 #'
 #' @family spacing correction functions
-#' @export
+#' @keywords internal
 validate_zero_offset <- function(offset,
                                   probe_spacing = 0.5,
                                   measurement_time = 80) {
@@ -640,7 +640,7 @@ validate_zero_offset <- function(offset,
 #'   *Tree Physiology*, 21(9), 589-598.
 #'
 #' @family spacing correction functions
-#' @export
+#' @keywords internal
 apply_spacing_correction_workflow <- function(vh_data,
                                                zero_periods,
                                                sensors = c("outer", "inner"),

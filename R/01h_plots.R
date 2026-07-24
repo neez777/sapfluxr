@@ -998,7 +998,6 @@ plot_pulse_temps <- function(pulse_data, deltaT_do, deltaT_di, deltaT_uo, deltaT
 #'
 #' @family plotting functions
 #' @keywords internal
-#' @export
 build_correction_status_label <- function(vh_data) {
 
   # Extract metadata

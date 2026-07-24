@@ -28,6 +28,9 @@ print(Z)
 \seealso{
 Other flux density functions: 
 \code{\link{apply_flux_conversion}()},
-\code{\link{calc_sap_flux_density}()}
+\code{\link{calc_becker_edwards_k}()},
+\code{\link{calc_sap_flux_density}()},
+\code{\link{sap_flux_conversion_factor_at_temp}()}
 }
 \concept{flux density functions}
+\keyword{internal}

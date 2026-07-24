@@ -114,3 +114,4 @@ Other sapwood integration functions:
 \code{\link{calc_sapwood_areas}()}
 }
 \concept{sapwood integration functions}
+\keyword{internal}

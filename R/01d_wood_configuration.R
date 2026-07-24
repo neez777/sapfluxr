@@ -246,8 +246,8 @@ WoodProperties <- R6::R6Class(
             !all(c("bark_thickness_dbh", "bark_thickness_probe") %in% names(tree_measurements))) {
           stop(
             "Legacy 'bark_thickness' field detected. Migrate to two separate fields:\n",
-            "  bark_thickness_dbh   — full bark at DBH measurement site (cm)\n",
-            "  bark_thickness_probe — remaining bark at probe site after shaving (cm)\n",
+            "  bark_thickness_dbh   -- full bark at DBH measurement site (cm)\n",
+            "  bark_thickness_probe -- remaining bark at probe site after shaving (cm)\n",
             "See knowledge_docs/function_reasoning/bark_thickness_split.md for details."
           )
         }
@@ -816,7 +816,7 @@ load_wood_properties <- function(config_name = NULL,
 #' }
 #'
 #' @family wood property functions
-#' @export
+#' @keywords internal
 get_default_wood_properties <- function(overrides = NULL,
                                         tree_overrides = NULL) {
   load_wood_properties("generic_sw",
@@ -952,7 +952,8 @@ list_available_wood_properties <- function() {
 #' @param wood_type Wood type ("softwood"/"hardwood"). Default: "softwood"
 #' @param temperature Typical wood temperature (degC). Default: 20
 #' @param dbh Diameter at breast height (cm). Optional.
-#' @param bark_thickness Bark thickness (cm). Optional.
+#' @param bark_thickness_dbh Full bark thickness at DBH measurement site (cm). Optional.
+#' @param bark_thickness_probe Bark thickness at probe installation site after shaving (cm). Optional.
 #' @param sapwood_thickness Sapwood depth (cm). Optional.
 #' @param sapwood_area Sapwood area (cm^2). Optional.
 #' @param heartwood_radius Heartwood radius (cm). Optional.

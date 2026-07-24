@@ -501,6 +501,127 @@ normalise_daily <- function(data, normalise_col = "Jvm_daily_cm3_cm2_day",
 }
 
 
+#' Aggregate flux data to arbitrary time periods
+#'
+#' Aggregates sap flux density or tree water use to hourly, daily, weekly, or
+#' monthly totals. The sum aggregation scales each observation by the
+#' measurement interval so that rates (per hour) become true period totals.
+#'
+#' @param flux_data Data frame containing flux measurements. Must have a
+#'   POSIXct datetime column and at least one numeric value column.
+#' @param period Character. Aggregation period: `"hourly"`, `"daily"`,
+#'   `"weekly"`, or `"monthly"`. Default: `"daily"`.
+#' @param agg_fun Character. Aggregation function: `"sum"` (integrated total,
+#'   scales by measurement interval) or `"mean"`. Default: `"sum"`.
+#' @param value_col Character. Name of the column to aggregate. If `NULL`,
+#'   auto-detected from common names (`"Jv_cm3_cm2_hr"`, `"Q_total_L_hr"`)
+#'   or the first non-datetime numeric column. Default: `NULL`.
+#' @param datetime_col Character. Name of the POSIXct datetime column.
+#'   Default: `"datetime"`.
+#'
+#' @return A tibble with columns:
+#'   \describe{
+#'     \item{period}{POSIXct floor-date for each aggregation window.}
+#'     \item{method_label}{Method label, only present if `flux_data` contains
+#'       a `method_label` column.}
+#'     \item{aggregated_value}{Aggregated flux for the period.}
+#'     \item{n_points}{Number of observations in the window.}
+#'   }
+#'
+#' @details
+#' For `agg_fun = "sum"`, each observation is multiplied by the measurement
+#' interval in hours before summing, converting a rate (units/hr) into a
+#' period total (units * hr). The interval is estimated from the median of
+#' consecutive timestamp differences.
+#'
+#' @examples
+#' \dontrun{
+#' # After calculating sap flux density
+#' daily <- aggregate_flux(flux_density_data, period = "daily", agg_fun = "sum")
+#' hourly <- aggregate_flux(flux_density_data, period = "hourly", agg_fun = "sum")
+#' monthly <- aggregate_flux(flux_density_data, period = "monthly", agg_fun = "sum")
+#' }
+#'
+#' @family daily aggregation
+#' @export
+aggregate_flux <- function(flux_data,
+                           period = "daily",
+                           agg_fun = "sum",
+                           value_col = NULL,
+                           datetime_col = "datetime") {
+
+  if (!is.data.frame(flux_data)) stop("flux_data must be a data frame")
+  if (!datetime_col %in% names(flux_data)) {
+    stop("datetime column '", datetime_col, "' not found in flux_data")
+  }
+  if (!inherits(flux_data[[datetime_col]], "POSIXct")) {
+    stop("datetime column must be POSIXct")
+  }
+
+  period <- match.arg(period, c("hourly", "daily", "weekly", "monthly"))
+  agg_fun <- match.arg(agg_fun, c("sum", "mean"))
+
+  # Map period label to lubridate unit
+  floor_unit <- switch(period,
+    hourly  = "hour",
+    daily   = "day",
+    weekly  = "week",
+    monthly = "month"
+  )
+
+  # Auto-detect value column
+  if (is.null(value_col)) {
+    candidates <- c("Jv_cm3_cm2_hr", "Q_total_L_hr", "Vs_cm_hr", "Vh_cm_hr")
+    found <- intersect(candidates, names(flux_data))
+    if (length(found) > 0) {
+      value_col <- found[1]
+    } else {
+      numeric_cols <- names(flux_data)[
+        vapply(flux_data, is.numeric, logical(1)) &
+        names(flux_data) != datetime_col
+      ]
+      if (length(numeric_cols) == 0) stop("No numeric columns found in flux_data")
+      value_col <- numeric_cols[1]
+    }
+  }
+
+  if (!value_col %in% names(flux_data)) {
+    stop("value_col '", value_col, "' not found in flux_data")
+  }
+
+  # Estimate measurement interval (hours)
+  unique_dts <- sort(unique(flux_data[[datetime_col]]))
+  delta_t <- 1.0
+  if (length(unique_dts) > 1) {
+    diffs <- as.numeric(difftime(unique_dts[-1], unique_dts[-length(unique_dts)], units = "hours"))
+    delta_t <- stats::median(diffs[diffs > 0], na.rm = TRUE)
+    if (is.na(delta_t) || delta_t <= 0) delta_t <- 1.0
+  }
+
+  flux_data[[".__period__"]] <- lubridate::floor_date(flux_data[[datetime_col]], floor_unit)
+
+  group_cols <- ".__period__"
+  if ("method_label" %in% names(flux_data)) group_cols <- c(group_cols, "method_label")
+
+  agg_expr <- if (agg_fun == "sum") {
+    function(x) sum(x, na.rm = TRUE) * delta_t
+  } else {
+    function(x) mean(x, na.rm = TRUE)
+  }
+
+  result <- flux_data |>
+    dplyr::group_by(dplyr::across(dplyr::all_of(group_cols))) |>
+    dplyr::summarise(
+      aggregated_value = agg_expr(.data[[value_col]]),
+      n_points = dplyr::n(),
+      .groups = "drop"
+    ) |>
+    dplyr::rename(period = ".__period__")
+
+  result
+}
+
+
 # ============================================================================
 # Internal helper functions
 # ============================================================================

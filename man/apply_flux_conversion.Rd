@@ -8,7 +8,10 @@ apply_flux_conversion(
   data,
   wood_properties,
   velocity_col = NULL,
-  output_col = "Jv_cm3_cm2_hr"
+  output_col = "Jv_cm3_cm2_hr",
+  temperature_mode = c("constant", "static", "dynamic"),
+  temperature = NULL,
+  temperature_col = "prepulse_temp_c"
 )
 }
 \arguments{
@@ -21,6 +24,19 @@ apply_flux_conversion(
 \code{Vh_cm_hr_sc}, \code{Vh_cm_hr}).}
 
 \item{output_col}{Name for output column. Default: "Jv_cm3_cm2_hr"}
+
+\item{temperature_mode}{Conversion factor mode. \code{"constant"} (default)
+uses the fixed \eqn{Z} from \code{calculate_wood_properties()}, with no
+temperature dependence; \code{"static"} evaluates the temperature-dependent
+\eqn{Z(T)} at a single \code{temperature}; \code{"dynamic"} -- the
+Becker & Edwards conversion -- evaluates \eqn{Z(T)} per row from
+\code{temperature_col}.}
+
+\item{temperature}{Single numeric wood temperature (degrees Celsius) used when
+\code{temperature_mode = "static"}.}
+
+\item{temperature_col}{Name of the per-row temperature column used when
+\code{temperature_mode = "dynamic"}. Default: \code{"prepulse_temp_c"}.}
 }
 \value{
 Data frame with added Jv column
@@ -62,7 +78,10 @@ head(vh_corrected[, c("datetime", "Vs_cm_hr", "Jv_cm3_cm2_hr")])
 }
 \seealso{
 Other flux density functions: 
+\code{\link{calc_becker_edwards_k}()},
 \code{\link{calc_sap_flux_density}()},
-\code{\link{get_sap_flux_conversion_factor}()}
+\code{\link{get_sap_flux_conversion_factor}()},
+\code{\link{sap_flux_conversion_factor_at_temp}()}
 }
 \concept{flux density functions}
+\keyword{internal}

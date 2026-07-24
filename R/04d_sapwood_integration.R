@@ -158,7 +158,7 @@
 #' Hatton, T.J., Catchpole, E.A., & Vertessy, R.A. (1990). Integration of
 #' sapflow velocity to estimate plant water use. Tree Physiology, 6, 201-209.
 #'
-#' @seealso \code{\link{calc_sap_flux}}, \code{\link{plot_radial_velocity_profile}}
+#' @seealso \code{\link{calc_sap_flux}}
 #'
 #' @family sapwood integration functions
 #' @export
@@ -494,7 +494,7 @@ calc_sapwood_areas <- function(dbh,
 #' @seealso \code{\link{calc_sapwood_areas}}, \code{\link{aggregate_daily_flux}}
 #'
 #' @family sapwood integration functions
-#' @export
+#' @keywords internal
 calc_sap_flux <- function(flux_data,
                           sapwood_areas,
                           method = c("linear_decay", "constant_velocity")) {
@@ -599,8 +599,10 @@ calc_sap_flux <- function(flux_data,
 #' @param dbh_col Name of DBH column (cm). Default: "dbh"
 #' @param sapwood_thickness_col Name of sapwood thickness column (cm, cambium to
 #'   heartwood). Default: "sapwood_thickness"
-#' @param bark_thickness_col Name of bark thickness column (cm).
-#'   Default: "bark_thickness". If NULL, assumes 0.
+#' @param bark_thickness_dbh_col Name of full bark thickness column at DBH
+#'   measurement site (cm). Default: "bark_thickness_dbh".
+#' @param bark_thickness_probe_col Name of bark thickness column at probe
+#'   installation site after shaving (cm). Default: "bark_thickness_probe".
 #' @param method Radial integration method for sensorless annuli. One of
 #'   \code{"linear_decay"} (default, Pausch et al. 2000) or
 #'   \code{"constant_velocity"}. See \code{\link{calc_sap_flux}}.
@@ -780,9 +782,21 @@ aggregate_daily_flux <- function(q_data,
     group_cols <- intersect(potential, names(q_data))
   }
 
-  # Detect interval
+  # Detect interval from the UNIQUE timestamps. When q_data carries more than
+  # one method/group, every timestamp is repeated once per group, so the raw
+  # datetime column is littered with zero-length gaps. Feeding those duplicates
+  # to detect_interval() collapses the detected interval toward zero, which in
+  # turn zeroes every daily total (sum * interval) and reports 0% completeness.
+  # The sampling interval is a property of the time grid, not the grouping, so
+  # deduplicate before detecting.
   if (is.null(interval_hours)) {
-    interval_hours <- detect_interval(q_data[[datetime_col]])
+    interval_hours <- detect_interval(unique(q_data[[datetime_col]]))
+  }
+  if (!is.finite(interval_hours) || interval_hours <= 0) {
+    stop(
+      "Could not determine a positive measurement interval from '", datetime_col,
+      "'. Pass interval_hours explicitly."
+    )
   }
   expected_per_day <- round(24 / interval_hours)
 

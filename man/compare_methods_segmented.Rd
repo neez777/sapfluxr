@@ -29,7 +29,9 @@ the method that plateaus at higher velocities.}
 \item{sensor_position}{Sensor position to analyse ("outer" or "inner").}
 
 \item{initial_breakpoint}{Initial guess for breakpoint location (cm/hr).
-If NULL, uses midpoint of data range. Default: NULL.}
+If NULL (default), the starting value is seeded automatically by an R^2
+threshold sweep over the observed primary-method range (see Details).
+Supply a value to override the automatic seed.}
 
 \item{min_points}{Minimum number of points required for valid analysis (default: 50).}
 
@@ -84,6 +86,21 @@ begins to underestimate compared to the secondary method. This identifies:
 \item The velocity where method switching (sDMA) should occur
 \item The calibration region for aligning methods
 }
+
+\strong{Breakpoint Seeding:}
+
+\code{segmented::segmented()} refines the breakpoint by a local search around
+its starting value, so a poor start converges to a local optimum rather than
+the true divergence point. In a high-frequency record most pulses are
+low-flow, so any start drawn from the centre of the velocity distribution
+lands inside the low-flow cloud and settles there.
+
+When \code{initial_breakpoint} is NULL, the start is therefore seeded with the
+optimal threshold from \code{\link{find_optimal_calibration_threshold}}, swept
+across a grid derived from the observed primary-method range. The seed only
+has to place the search in the correct basin; \code{segmented()} then refines
+it, and the returned breakpoint is free to fall above or below the seed. If
+the sweep cannot run, the median primary velocity is used as a fallback.
 
 \strong{Advantages over R^2 Optimization:}
 

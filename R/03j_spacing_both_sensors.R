@@ -87,7 +87,7 @@ NULL
 #' }
 #'
 #' @family spacing correction functions
-#' @export
+#' @keywords internal
 apply_spacing_correction_both_sensors <- function(vh_data,
                                                    changepoints,
                                                    method = "HRM",
@@ -282,7 +282,7 @@ apply_spacing_correction_both_sensors <- function(vh_data,
 #' }
 #'
 #' @family spacing correction functions
-#' @export
+#' @keywords internal
 smooth_segment_junctions <- function(vh_data,
                                       changepoints,
                                       method = "HRM",
