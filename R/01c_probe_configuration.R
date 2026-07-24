@@ -316,7 +316,7 @@ ProbeConfiguration <- R6::R6Class(
 #' @param config ProbeConfiguration object or list
 #' @param methods Character vector of methods to validate for
 #' @return List with validation results
-#' @export
+#' @keywords internal
 validate_probe_config <- function(config, methods = NULL) {
 
   if (!inherits(config, "ProbeConfiguration") && !is.list(config)) {
@@ -454,7 +454,7 @@ validate_method_requirements <- function(method_name, method_params, config) {
 #' @param config ProbeConfiguration object
 #' @param methods Character vector of methods to validate for
 #' @return List with validation results
-#' @export
+#' @keywords internal
 validate_data_for_config <- function(sap_data, config, methods = NULL) {
 
   if (!inherits(sap_data, "sap_data")) {
@@ -810,7 +810,7 @@ print_compatibility_matrix <- function() {
 #' }
 #'
 #' @family probe_configuration
-#' @export
+#' @keywords internal
 validate_probe_alignment_advanced <- function(sap_data, config = NULL,
                                               alignment_tolerance = 1.0,
                                               symmetry_check = TRUE,
@@ -1145,7 +1145,7 @@ load_probe_config <- function(config_name = NULL, custom_params = NULL) {
 #' @seealso \code{\link{load_probe_config}}
 #'
 #' @family probe configuration functions
-#' @export
+#' @keywords internal
 get_default_probe_config <- function(custom_params = NULL) {
   load_probe_config("symmetrical", custom_params = custom_params)
 }
