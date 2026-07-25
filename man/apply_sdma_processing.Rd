@@ -44,7 +44,10 @@ without prompting; \code{FALSE} always calculates.}
 \value{
 A vh_results tibble with additional rows for each sDMA method, labelled
 \code{"sDMA:SecondaryMethod"} (e.g., \code{"sDMA:MHR"}). The \code{selected_method} column
-records which method was used for each measurement.
+records which method was used for each measurement. Where the source velocity
+data carries \code{prepulse_temp_c}, that per-pulse temperature is preserved on the
+sDMA rows so the temperature-dependent (Becker & Edwards) sap-flux conversion
+can be applied to them downstream.
 }
 \description{
 Applies Peclet-number-based method switching to create sDMA results.

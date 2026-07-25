@@ -86,7 +86,10 @@
 #'
 #' @return A vh_results tibble with additional rows for each sDMA method, labelled
 #'   `"sDMA:SecondaryMethod"` (e.g., `"sDMA:MHR"`). The `selected_method` column
-#'   records which method was used for each measurement.
+#'   records which method was used for each measurement. Where the source velocity
+#'   data carries `prepulse_temp_c`, that per-pulse temperature is preserved on the
+#'   sDMA rows so the temperature-dependent (Becker & Edwards) sap-flux conversion
+#'   can be applied to them downstream.
 #'
 #' @examples
 #' \dontrun{
@@ -353,6 +356,13 @@ apply_sdma_processing_internal <- function(vh_results, results_by_pulse, pulse_i
       if (peclet_col %in% names(hrm_outer)) {
         sdma_outer[[peclet_col]] <- hrm_outer[[peclet_col]]
       }
+      # Pre-pulse temperature is a per-pulse/per-sensor measurement, identical
+      # across velocity methods for the same pulse, so the HRM value is correct
+      # regardless of which method sDMA selected. Carrying it lets the downstream
+      # Becker & Edwards (dynamic) sap-flux conversion work for sDMA rows.
+      if ("prepulse_temp_c" %in% names(hrm_outer)) {
+        sdma_outer$prepulse_temp_c <- hrm_outer$prepulse_temp_c
+      }
 
       # Add required columns
       sdma_outer$selected_method <- ifelse(use_hrm_outer, "HRM", sec_method)
@@ -387,6 +397,11 @@ apply_sdma_processing_internal <- function(vh_results, results_by_pulse, pulse_i
       }
       if (peclet_col %in% names(hrm_inner)) {
         sdma_inner[[peclet_col]] <- hrm_inner[[peclet_col]]
+      }
+      # See outer-sensor note: carry the per-pulse pre-pulse temperature so the
+      # Becker & Edwards (dynamic) sap-flux conversion works for sDMA rows.
+      if ("prepulse_temp_c" %in% names(hrm_inner)) {
+        sdma_inner$prepulse_temp_c <- hrm_inner$prepulse_temp_c
       }
 
       # Add required columns

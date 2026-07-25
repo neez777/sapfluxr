@@ -139,4 +139,4 @@ This project is licensed under the GPL-3 License.
 
 **Authors**: Grant Joyce, Gavan McGrath, Tim Bleby
 **Maintainer**: Grant Joyce, <neez1977@gmail.com>
-**Version**: 0.9.0
+**Version**: 0.9.1
