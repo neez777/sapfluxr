@@ -956,6 +956,15 @@ filter_stable_by_spacing <- function(dates, values, min_spacing_days) {
     # Select candidate with lowest value
     values_remaining <- values[candidates_remaining]
     best_local_idx <- which.min(values_remaining)[1]
+
+    # which.min() returns integer(0) when every value is NA, so best_local_idx
+    # becomes NA and nothing below can remove anything. Left unhandled this
+    # spins forever, pinning a core and growing selected_indices without bound:
+    # a hang with no error, which is far harder to diagnose than a failure.
+    if (is.na(best_local_idx)) {
+      break
+    }
+
     best_idx <- candidates_remaining[best_local_idx]
 
     # Add to selected
@@ -965,7 +974,12 @@ filter_stable_by_spacing <- function(dates, values, min_spacing_days) {
     best_date <- dates[best_idx]
     date_diffs <- abs(as.numeric(difftime(dates[candidates_remaining], best_date, units = "days")))
 
-    candidates_remaining <- candidates_remaining[date_diffs >= min_spacing_days]
+    # Always drop the candidate just selected. Testing the distance alone keeps
+    # it whenever min_spacing_days <= 0 (its own distance is 0), and keeps any
+    # NA distance as NA, either of which stops the loop from terminating.
+    keep <- !is.na(date_diffs) & date_diffs >= min_spacing_days
+    keep[best_local_idx] <- FALSE
+    candidates_remaining <- candidates_remaining[keep]
   }
 
   # Sort by date order

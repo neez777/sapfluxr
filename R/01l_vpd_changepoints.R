@@ -476,7 +476,15 @@ filter_by_minimum_spacing <- function(indices, dates, vpd_values, min_spacing_da
   while (length(candidates_remaining) > 0) {
     # Select candidate with lowest VPD
     vpd_remaining <- vpd_values[candidates_remaining]
-    best_idx <- candidates_remaining[which.min(vpd_remaining)[1]]
+    best_local_idx <- which.min(vpd_remaining)[1]
+
+    # See filter_stable_by_spacing(): an all-NA window makes this NA, after
+    # which nothing is removed and the loop never terminates.
+    if (is.na(best_local_idx)) {
+      break
+    }
+
+    best_idx <- candidates_remaining[best_local_idx]
 
     # Add to selected
     selected <- c(selected, best_idx)
@@ -485,7 +493,10 @@ filter_by_minimum_spacing <- function(indices, dates, vpd_values, min_spacing_da
     best_date <- dates[best_idx]
     date_diffs <- abs(as.numeric(difftime(dates[candidates_remaining], best_date, units = "days")))
 
-    candidates_remaining <- candidates_remaining[date_diffs >= min_spacing_days]
+    # Always drop the candidate just selected, so the set shrinks every pass.
+    keep <- !is.na(date_diffs) & date_diffs >= min_spacing_days
+    keep[best_local_idx] <- FALSE
+    candidates_remaining <- candidates_remaining[keep]
   }
 
   # Sort by date
@@ -975,6 +986,13 @@ filter_stable_vpd_by_spacing <- function(dates, vpd_values, min_spacing_days) {
     # Select candidate with lowest VPD
     vpd_remaining <- vpd_values[candidates_remaining]
     best_local_idx <- which.min(vpd_remaining)[1]
+
+    # See filter_stable_by_spacing(): an all-NA window makes this NA, after
+    # which nothing is removed and the loop never terminates.
+    if (is.na(best_local_idx)) {
+      break
+    }
+
     best_idx <- candidates_remaining[best_local_idx]
 
     # Add to selected
@@ -984,7 +1002,10 @@ filter_stable_vpd_by_spacing <- function(dates, vpd_values, min_spacing_days) {
     best_date <- dates[best_idx]
     date_diffs <- abs(as.numeric(difftime(dates[candidates_remaining], best_date, units = "days")))
 
-    candidates_remaining <- candidates_remaining[date_diffs >= min_spacing_days]
+    # Always drop the candidate just selected, so the set shrinks every pass.
+    keep <- !is.na(date_diffs) & date_diffs >= min_spacing_days
+    keep[best_local_idx] <- FALSE
+    candidates_remaining <- candidates_remaining[keep]
   }
 
   # Sort by date order
