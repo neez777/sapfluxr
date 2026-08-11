@@ -117,18 +117,47 @@ remotes::install_github("neez777/sapfluxr")
 
 ### Companion Shiny application
 
-The interactive `shiny-sapfluxr` app mirrors the full package pipeline. To run it locally:
+The interactive `shiny-sapfluxr` app mirrors the full package pipeline. It lives in
+its own repository, [neez777/shiny-sapfluxr](https://github.com/neez777/shiny-sapfluxr),
+and needs **R >= 4.4.0**.
+
+**1. Get the app.** Clone it rather than downloading a ZIP, so you can pull fixes
+later with `git pull`:
+
+```
+git clone https://github.com/neez777/shiny-sapfluxr.git
+```
+
+**2. Install the dependencies.** These are in addition to `sapfluxr` itself:
 
 ```r
-# 1. Install sapfluxr (above), then install the additional Shiny dependencies
 install.packages(c(
-  "shiny", "shinydashboard", "shinyWidgets", "shinyjs",
-  "fresh", "plotly", "DT", "waiter", "leaflet", "webshot2"
+  "shiny", "shinydashboard", "shinyWidgets", "shinyjs", "shinycssloaders",
+  "fresh", "plotly", "DT", "waiter", "leaflet", "htmlwidgets",
+  "dplyr", "tidyr", "purrr", "readr", "yaml", "lubridate", "ggplot2",
+  "scales", "rlang", "progressr", "suncalc", "R6", "lutz", "zip"
 ))
+```
 
-# 2. Clone the companion repository and run
-# git clone https://github.com/neez777/sapfluxr
+You do not have to get this list right by hand — the app checks every package at
+startup and, if any are missing, stops with a single `install.packages()` line
+naming exactly what to install.
+
+**3. Run it** from the cloned directory:
+
+```r
 shiny::runApp("path/to/shiny-sapfluxr")
+```
+
+The app loads `sapfluxr` from your library, so after updating the package with
+`remotes::install_github("neez777/sapfluxr")`, restart R before relaunching.
+
+If the app misbehaves on a machine where it has not run before, this prints a full
+environment report (R version, library paths, every dependency version) to paste
+into a bug report:
+
+```
+Rscript inst/diagnostics/env_report.R
 ```
 
 ## License
@@ -139,4 +168,4 @@ This project is licensed under the GPL-3 License.
 
 **Authors**: Grant Joyce, Gavan McGrath, Tim Bleby
 **Maintainer**: Grant Joyce, <neez1977@gmail.com>
-**Version**: 0.9.1
+**Version**: 0.9.2
