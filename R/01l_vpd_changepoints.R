@@ -758,12 +758,13 @@ print.vpd_changepoints <- function(x, ...) {
 #' daily_vpd <- calculate_daily_vpd_minima(weather_vpd)
 #' minima_cpts <- detect_vpd_changepoints(daily_vpd, vpd_threshold = 0.5)
 #'
-#' # Compare selected dates
+#' # Compare selected dates. Subset rather than using intersect()/setdiff():
+#' # before R 4.5.0 those strip the Date class and return bare numbers.
 #' stable_dates <- stable_periods$valid_dates
 #' minima_dates <- minima_cpts$changepoints
-#' both <- intersect(stable_dates, minima_dates)
-#' stability_only <- setdiff(stable_dates, minima_dates)
-#' minima_only <- setdiff(minima_dates, stable_dates)
+#' both <- stable_dates[stable_dates %in% minima_dates]
+#' stability_only <- stable_dates[!stable_dates %in% minima_dates]
+#' minima_only <- minima_dates[!minima_dates %in% stable_dates]
 #' }
 #'
 #' @family VPD changepoint functions

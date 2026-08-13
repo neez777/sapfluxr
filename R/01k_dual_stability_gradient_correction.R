@@ -506,7 +506,17 @@ find_dual_stable_periods <- function(vh_data,
   )
 
   # 3. Find intersection of dates
-  dual_stable_dates <- intersect(vpd_results$valid_dates, vh_results$valid_dates)
+  #
+  # Subset rather than intersect(). Before R 4.5.0 the set operations applied
+  # as.vector() to their arguments, which strips the Date class and returns bare
+  # numbers ("The set operations now avoid the as.vector() transformation for
+  # same-kind apparently vector-like operands" -- R 4.5.0 NEWS). The match()
+  # below then compared "20028" against "2024-11-01", matched nothing, and every
+  # vh lookup came back NA. Subsetting the original vector keeps the class on
+  # every R version.
+  dual_stable_dates <- vpd_results$valid_dates[
+    vpd_results$valid_dates %in% vh_results$valid_dates
+  ]
 
   if (length(dual_stable_dates) == 0) {
     warning("No dates passed both VPD and sap flow stability criteria. ",
@@ -519,24 +529,35 @@ find_dual_stable_periods <- function(vh_data,
     ))
   }
 
+  # Look up the mean predawn vh for a set of dates. Every dual-stable date came
+  # from daily_stats$date, so an unmatched entry is always an internal
+  # inconsistency -- most likely the two sides no longer share a class. Failing
+  # loudly here matters: an all-NA result silently yields zero changepoints,
+  # which reads as "no stable periods found" and sends the user off adjusting
+  # thresholds that were never the problem.
+  lookup_mean_vh <- function(dates) {
+    idx <- match(dates, vh_results$daily_stats$date)
+    if (anyNA(idx)) {
+      stop("Could not match dual-stable dates to daily statistics: ",
+           sum(is.na(idx)), " of ", length(idx), " unmatched. ",
+           "dates are ", paste(class(dates), collapse = "/"),
+           ", daily_stats$date is ",
+           paste(class(vh_results$daily_stats$date), collapse = "/"), ".")
+    }
+    vh_results$daily_stats$mean_predawn_vh[idx]
+  }
+
   # 4. Apply spacing filter to dual-stable dates
   if (min_segment_days > 0 && length(dual_stable_dates) > 1) {
-    # Get mean vh values for these dates
-    vh_values <- vh_results$daily_stats$mean_predawn_vh[
-      match(dual_stable_dates, vh_results$daily_stats$date)
-    ]
-
     selected_indices <- filter_stable_by_spacing(
-      dual_stable_dates, vh_values, min_segment_days
+      dual_stable_dates, lookup_mean_vh(dual_stable_dates), min_segment_days
     )
     dual_stable_dates <- dual_stable_dates[selected_indices]
   }
 
   # 5. Limit to max_changepoints
   if (!is.null(max_changepoints) && length(dual_stable_dates) > max_changepoints) {
-    vh_values <- vh_results$daily_stats$mean_predawn_vh[
-      match(dual_stable_dates, vh_results$daily_stats$date)
-    ]
+    vh_values <- lookup_mean_vh(dual_stable_dates)
     keep_indices <- order(vh_values)[1:max_changepoints]
     dual_stable_dates <- dual_stable_dates[keep_indices]
     dual_stable_dates <- sort(dual_stable_dates)
